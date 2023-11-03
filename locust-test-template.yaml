@@ -1,0 +1,15 @@
+apiVersion: locust.io/v1
+kind: LocustTest
+metadata:
+  name: ${SCENARIO}.test
+spec:
+  image: locustio/locust:latest
+  imagePullPolicy: IfNotPresent
+  masterCommandSeed: --locustfile /lotest/src/${SCENARIO}.py
+    --host ${HOST}
+    --users ${USERS}
+    --spawn-rate ${SPAWN_RATE}
+    --run-time ${DURATION}
+  workerCommandSeed: --locustfile /lotest/src/${SCENARIO}.py
+  workerReplicas: ${WORKERS}
+  configMap: locust.${SCENARIO}
