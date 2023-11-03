@@ -89,6 +89,12 @@ test:
 	kubectl wait --namespace $(LOCUST_NAMESPACE) --for=condition=Ready=true $$(kubectl get --namespace $(LOCUST_NAMESPACE) pod -l performance-test-pod-name=$(SCENARIO)-test-master -o name)
 	kubectl logs --namespace $(LOCUST_NAMESPACE) -f -l performance-test-pod-name=$(SCENARIO)-test-master
 
+##	=== CI ===
+
+## Run the load test in CI end to end
+.PHONY: ci-run
+ci-run: setup-venv deploy-locust add-dockerio test
+
 ##	=== Help ===
 
 ## Print help message for all Makefile targets
