@@ -3,7 +3,7 @@ from locust.exception import LocustError
 import random
 
 
-class RandomTest(User):
+class BaselineTest(User):
     @task
     def tick(self) -> None:
         w = random.random()*1000.0

@@ -1,5 +1,5 @@
 # Scenario to run. It correlates with the locust file at scenarios/<SCENARIO>.py
-export SCENARIO ?= random-test
+export SCENARIO ?= baseline-test
 
 # Used to set --host option of locust CLI (base URL to load test). See https://docs.locust.io/en/stable/configuration.html#command-line-options for details
 export HOST ?= http://localhost
