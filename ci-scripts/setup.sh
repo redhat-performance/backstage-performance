@@ -14,4 +14,5 @@ QUAY_TOKEN=$(cat /usr/local/ci-secrets/backstage-performance/quay.token)
 
 cd ./ci-scripts/rhdh-setup
 
+echo "$(date --utc -Ins) Running deployment script"
 ./deploy.sh
