@@ -1,0 +1,18 @@
+app:
+  title: Red Hat Developer Hub
+integrations:
+  github:
+    - host: github.com
+      token: ${GITHUB_TOKEN}
+catalog:
+  providers:
+    keycloakOrg:
+      default:
+        baseUrl: https://keycloak-${NAMESPACE}.${OPENSHIFT_APP_DOMAIN}/auth
+        realm: backstage
+        loginRealm: backstage
+        clientId: backstage
+        clientSecret: ${KEYCLOAK_CLIENT_SECRET}
+enabled:
+  github: true
+  keycloak: true

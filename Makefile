@@ -78,7 +78,7 @@ add-dockerio: namespace
 .PHONY: clean
 clean:
 	kubectl delete --namespace $(LOCUST_NAMESPACE) cm locust.$(SCENARIO) --ignore-not-found --wait
-	kubectl delete --namespace $(LOCUST_NAMESPACE) locusttest $(SCENARIO).test --ignore-not-found --wait
+	kubectl delete --namespace $(LOCUST_NAMESPACE) locusttests.locust.io $(SCENARIO).test --ignore-not-found --wait || true
 
 ## Deploy and run the locust test
 ## Run `make test SCENARIO=...` to run a specific scenario
