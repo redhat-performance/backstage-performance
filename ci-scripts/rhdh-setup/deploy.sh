@@ -33,7 +33,6 @@ keycloak_install() {
     cat template/keycloak/keycloakRealm.yaml | envsubst | $clin apply -f -
     cat template/keycloak/keycloakClient.yaml | envsubst | $clin apply -f -
     cat template/keycloak/keycloakUser.yaml | envsubst | $clin apply -f -
-    $clin get secret credential-example-sso -o template --template='{{.data.ADMIN_PASSWORD}}' | base64 -d
 }
 
 backstage_install() {

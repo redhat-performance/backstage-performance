@@ -3,3 +3,4 @@
 .rhdh-setup.git*
 benchmark-before
 benchmark-after
+load-test.log
