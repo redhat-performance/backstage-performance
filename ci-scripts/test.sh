@@ -17,4 +17,5 @@ export SCENARIO="list-catalog"
 export HOST="https://$(oc get routes rhdh-developer-hub -n rhdh-performance -o jsonpath='{.spec.host}')"
 # end-of testing env
 
+echo "$(date --utc -Ins) Running the test"
 make clean ci-run
