@@ -152,15 +152,15 @@
 
 
 # Results
-- name: results.locurt-operator.locust_requests_avg_response_time_Aggregated
+- name: results.locust-operator.locust_requests_avg_response_time_Aggregated
   monitoring_query: sum(locust_requests_avg_response_time{name="Aggregated"})
   monitoring_step: 15
-- name: results.locurt-operator.locust_requests_avg_content_length_Aggregated
+- name: results.locust-operator.locust_requests_avg_content_length_Aggregated
   monitoring_query: sum(locust_requests_avg_content_length{name="Aggregated"})
   monitoring_step: 15
-- name: results.locurt-operator.locust_requests_current_rps_Aggregated
+- name: results.locust-operator.locust_requests_current_rps_Aggregated
   monitoring_query: sum(locust_requests_current_rps{name="Aggregated"})
   monitoring_step: 15
-- name: results.locurt-operator.locust_requests_fail_ratio_Aggregated
+- name: results.locust-operator.locust_requests_fail_ratio_Aggregated
   monitoring_query: sum(locust_requests_fail_ratio)
   monitoring_step: 15
