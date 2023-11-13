@@ -52,10 +52,11 @@ setup_monitoring() {
     rm -f config.yaml
     if oc -n openshift-monitoring get cm cluster-monitoring-config; then
         oc -n openshift-monitoring extract configmap/cluster-monitoring-config --to=. --keys=config.yaml
-        sed -i 's/enableUserWorkload:.*/enableUserWorkload: true/g' config.yaml
+        sed -i '/^enableUserWorkload:/d' config.yaml
+        echo -e "\nenableUserWorkload: true" >>config.yaml
         oc -n openshift-monitoring set data configmap/cluster-monitoring-config --from-file=config.yaml
     else
-        cat <<EOD > config.yaml
+        cat <<EOD >config.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -65,15 +66,15 @@ data:
   config.yaml: |
     enableUserWorkload: true
 EOD
-    oc -n openshift-monitoring apply -f config.yaml
+        oc -n openshift-monitoring apply -f config.yaml
     fi
     cat config.yaml
     before=$(date --utc +%s)
     while true; do
-        count=$( kubectl -n "openshift-user-workload-monitoring" get StatefulSet -l operator.prometheus.io/name=user-workload -o name 2>/dev/null | wc -l )
+        count=$(kubectl -n "openshift-user-workload-monitoring" get StatefulSet -l operator.prometheus.io/name=user-workload -o name 2>/dev/null | wc -l)
         [ "$count" -gt 0 ] && break
         now=$(date --utc +%s)
-        if [[ $(( now - before )) -ge "300" ]]; then
+        if [[ $((now - before)) -ge "300" ]]; then
             echo "Required StatefulSet did not appeared before timeout"
             exit 1
         fi
