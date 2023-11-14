@@ -1,5 +1,6 @@
 .venv
 .vscode
 .rhdh-setup.git*
+benchmark-scenario
 benchmark-before
 benchmark-after

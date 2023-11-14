@@ -35,6 +35,7 @@ status_data.py \
     --set \
         results.started="$(cat benchmark-before)" \
         results.ended="$(cat benchmark-after)" \
+        name="RHDH load test $(cat benchmark-scenario)" \
     -d &>"$monitoring_collection_log"
 status_data.py \
     --status-data-file "$monitoring_collection_data" \

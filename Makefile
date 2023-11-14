@@ -84,6 +84,7 @@ clean:
 ## Run `make test SCENARIO=...` to run a specific scenario
 .PHONY: test
 test:
+	echo $(SCENARIO)>benchmark-scenario
 	cat locust-test-template.yaml | envsubst | kubectl apply --namespace $(LOCUST_NAMESPACE) -f -
 	kubectl create --namespace $(LOCUST_NAMESPACE) configmap locust.$(SCENARIO) --from-file scenarios/$(SCENARIO).py --dry-run=client -o yaml | kubectl apply --namespace $(LOCUST_NAMESPACE) -f -
 	date --utc -Ins>benchmark-before
