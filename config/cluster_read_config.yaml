@@ -47,8 +47,6 @@
 # Interesting CI environment variables
 {% for var in [
   'BUILD_ID',
-  'DEPLOYMENT_TYPE',
-  'DEPLOYMENT_VERSION',
   'HOSTNAME',
   'JOB_NAME',
   'OPENSHIFT_API',
