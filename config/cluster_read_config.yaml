@@ -68,6 +68,9 @@
   env_variable: {{ var }}
 {% endfor %}
 
+- name: metadata.git.last_commit.hash
+  command: git log -1 --pretty=format:"%H"
+
 
 
 # Gather some basic info about the cluster
