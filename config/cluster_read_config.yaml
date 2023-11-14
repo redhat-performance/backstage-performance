@@ -125,14 +125,14 @@
 
 {% macro pod_info(namespace, deployment, container) -%}
 # Gather info about pod configuration
-- name: parameters.cluster.pods.{{ deployment }}-{{ container }}.count
+- name: metadata.cluster.pods.{{ deployment }}-{{ container }}.count
   command: oc -n {{ namespace }} get deployment/{{ deployment }} -o json | jq '.spec.template.spec | if has("replicas") then .replicas else 1 end'
-- name: parameters.cluster.pods.{{ deployment }}-{{ container }}.resources
+- name: metadata.cluster.pods.{{ deployment }}-{{ container }}.resources
   command: oc -n {{ namespace }} get deployment/{{ deployment }} -o json | jq '.spec.template.spec.containers | map(select(.name == "{{ container }}"))[0].resources'
   output: json
-- name: parameters.cluster.pods.{{ deployment }}-{{ container }}.image
+- name: metadata.cluster.pods.{{ deployment }}-{{ container }}.image
   command: oc -n {{ namespace }} get deployment/{{ deployment }} -o json | jq --raw-output '.spec.template.spec.containers | map(select(.name == "{{ container }}"))[0].image'
-- name: parameters.cluster.pods.{{ deployment }}-{{ container }}.image_tag
+- name: metadata.cluster.pods.{{ deployment }}-{{ container }}.image_tag
   command: oc -n {{ namespace }} get deployment/{{ deployment }} -o json | jq --raw-output '.spec.template.spec.containers | map(select(.name == "{{ container }}"))[0].image | split(":")[1]'
 {%- endmacro %}
 
