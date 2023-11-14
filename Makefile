@@ -16,6 +16,16 @@ export DURATION ?= 1m
 # Used to set --spawn-rate option of locust CLI (Rate to spawn users at (users per second)).  See https://docs.locust.io/en/stable/configuration.html#command-line-options for details
 export SPAWN_RATE ?= 20
 
+# RHDH image to deploy
+export RHDH_IMAGE_REGISTRY ?= quay.io
+export RHDH_IMAGE_REPO ?= rhdh/rhdh-hub-rhel9
+export RHDH_IMAGE_TAG ?= 1.0-88
+
+# RHDH horizontal scaling
+export RHDH_DEPLOYMENT_REPLICAS ?= 1
+export RHDH_DB_REPLICAS ?= 1
+export RHDH_KEYCLOAK_REPLICAS ?= 1
+
 # python's venv base dir relative to the root of the repository
 PYTHON_VENV=.venv
 

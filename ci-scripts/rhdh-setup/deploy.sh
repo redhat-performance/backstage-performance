@@ -9,6 +9,13 @@ export JANUS_HELM_CHART=rhdh
 cli="oc"
 clin="$cli -n $NAMESPACE"
 
+export RHDH_DEPLOYMENT_REPLICAS=${RHDH_DEPLOYMENT_REPLICAS:-1}
+export RHDH_DB_REPLICAS=${RHDH_DB_REPLICAS:-1}
+export RHDH_KEYCLOAK_REPLICAS=${RHDH_KEYCLOAK_REPLICAS:-1}
+export RHDH_IMAGE_REGISTRY=${RHDH_IMAGE_REGISTRY:-quay.io}
+export RHDH_IMAGE_REPO=${RHDH_IMAGE_REPO:-rhdh/rhdh-hub-rhel9}
+export RHDH_IMAGE_TAG=${RHDH_IMAGE_TAG:-1.0-88}
+
 delete() {
     for cr in keycloakusers keycloakclients keycloakrealms keycloaks; do
         for res in $($clin get $cr.keycloak.org -o name); do
@@ -30,6 +37,7 @@ keycloak_install() {
     cat template/keycloak/keycloak.yaml | envsubst | $clin apply -f -
     grep -m 1 "keycloak-0" <($clin get pods -w)
     $clin wait --for=condition=Ready pod/keycloak-0 --timeout=300s
+    $clin rollout status statefulset/keycloak --timeout=300s
     cat template/keycloak/keycloakRealm.yaml | envsubst | $clin apply -f -
     cat template/keycloak/keycloakClient.yaml | envsubst | $clin apply -f -
     cat template/keycloak/keycloakUser.yaml | envsubst | $clin apply -f -
@@ -41,7 +49,16 @@ backstage_install() {
     until $clin create configmap app-config-rhdh --from-file "app-config-rhdh.yaml=app-config.yaml"; do $clin delete configmap app-config-rhdh; done
     helm repo add openshift-helm-charts https://charts.openshift.io/
     helm repo update openshift-helm-charts
-    cat template/backstage/chart-values.yaml | envsubst '${OPENSHIFT_APP_DOMAIN}' | helm upgrade --install ${JANUS_HELM_CHART} openshift-helm-charts/redhat-developer-hub -n ${NAMESPACE} --values -
+    cat template/backstage/chart-values.yaml |
+        envsubst \
+            '${OPENSHIFT_APP_DOMAIN} \
+            ${JANUS_HELM_CHART} \
+            ${RHDH_DEPLOYMENT_REPLICAS} \
+            ${RHDH_DB_REPLICAS} \
+            ${RHDH_IMAGE_REGISTRY} \
+            ${RHDH_IMAGE_REPO} \
+            ${RHDH_IMAGE_TAG} \
+            ' | helm upgrade --install ${JANUS_HELM_CHART} openshift-helm-charts/redhat-developer-hub -n ${NAMESPACE} --values -
     grep -m 1 "${JANUS_HELM_CHART}-developer-hub" <($clin get pods -w)
     $clin wait --for=condition=Ready pod -l=app.kubernetes.io/name=developer-hub --timeout=300s
 }
@@ -124,6 +141,9 @@ while getopts "rd" flag; do
     d)
         delete
         exit 0
+        ;;
+    *)
+        echo "Invalid option: ${flag}"
         ;;
     esac
 done
