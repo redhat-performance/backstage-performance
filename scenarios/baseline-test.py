@@ -3,6 +3,8 @@ from locust.exception import LocustError
 import random
 
 
+__version__ = "1"
+
 class BaselineTest(User):
     @task
     def tick(self) -> None:

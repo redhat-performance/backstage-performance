@@ -30,12 +30,15 @@ set -u
 mstart=$(date --utc --date "$(cat benchmark-before)" --iso-8601=seconds)
 mend=$(date --utc --date "$(cat benchmark-after)" --iso-8601=seconds)
 mhost=$(kubectl -n openshift-monitoring get route -l app.kubernetes.io/name=thanos-query -o json | jq --raw-output '.items[0].spec.host')
+mversion=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' scenarios/$(cat benchmark-scenario).py)
 status_data.py \
     --status-data-file "$monitoring_collection_data" \
     --set \
         results.started="$(cat benchmark-before)" \
         results.ended="$(cat benchmark-after)" \
         name="RHDH load test $(cat benchmark-scenario)" \
+        metadata.scenario.name="$(cat benchmark-scenario)" \
+        metadata.scenario.version="$mversion" \
     -d &>"$monitoring_collection_log"
 status_data.py \
     --status-data-file "$monitoring_collection_data" \

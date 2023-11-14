@@ -4,6 +4,8 @@ import urllib3
 
 urllib3.disable_warnings(InsecureRequestWarning)
 
+__version__ = "1"
+
 params = {
     "filter": "kind=component",
     "facet": "spec.type",
