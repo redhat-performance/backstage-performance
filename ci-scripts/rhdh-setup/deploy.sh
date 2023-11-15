@@ -14,7 +14,7 @@ export RHDH_DB_REPLICAS=${RHDH_DB_REPLICAS:-1}
 export RHDH_KEYCLOAK_REPLICAS=${RHDH_KEYCLOAK_REPLICAS:-1}
 export RHDH_IMAGE_REGISTRY=${RHDH_IMAGE_REGISTRY:-quay.io}
 export RHDH_IMAGE_REPO=${RHDH_IMAGE_REPO:-rhdh/rhdh-hub-rhel9}
-export RHDH_IMAGE_TAG=${RHDH_IMAGE_TAG:-1.0-88}
+export RHDH_IMAGE_TAG=${RHDH_IMAGE_TAG:-1.0-158}
 
 delete() {
     for cr in keycloakusers keycloakclients keycloakrealms keycloaks; do
