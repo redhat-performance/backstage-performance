@@ -16,7 +16,7 @@ make namespace
 
 cd ./ci-scripts/rhdh-setup
 
-export RHDH_DEPLOYMENT_REPLICAS=10
+export RHDH_DEPLOYMENT_REPLICAS=5
 export RHDH_DB_REPLICAS=5
 export RHDH_KEYCLOAK_REPLICAS=5
 
