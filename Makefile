@@ -54,7 +54,7 @@ deploy-locust: namespace
 		echo "Helm repo \"$(LOCUST_OPERATOR_REPO)\" already exists"; \
 	fi
 	@if ! helm list --namespace $(LOCUST_NAMESPACE) | grep -q "$(LOCUST_OPERATOR)"; then \
-		helm install $(LOCUST_OPERATOR) locust-k8s-operator/locust-k8s-operator --namespace $(LOCUST_NAMESPACE); \
+		helm install $(LOCUST_OPERATOR) locust-k8s-operator/locust-k8s-operator --namespace $(LOCUST_NAMESPACE) --values ./config/locust-k8s-operator.values.yaml; \
 	else \
 		echo "Helm release \"$(LOCUST_OPERATOR)\" already exists"; \
 	fi
@@ -89,14 +89,26 @@ test:
 	date --utc -Ins>benchmark-before
 	timeout=$$(date -d "30 seconds" "+%s"); while [ -z "$$(kubectl get --namespace $(LOCUST_NAMESPACE) pod -l performance-test-pod-name=$(SCENARIO)-test-master -o name)" ]; do if [ "$$(date "+%s")" -gt "$$timeout" ]; then echo "ERROR: Timeout waiting for locust master pod to start"; exit 1; else echo "Waiting for locust master pod to start..."; sleep 5s; fi; done
 	kubectl wait --namespace $(LOCUST_NAMESPACE) --for=condition=Ready=true $$(kubectl get --namespace $(LOCUST_NAMESPACE) pod -l performance-test-pod-name=$(SCENARIO)-test-master -o name)
-	kubectl logs --namespace $(LOCUST_NAMESPACE) -f -l performance-test-pod-name=$(SCENARIO)-test-master
+	@echo "Getting locust master log:"
+	kubectl logs --namespace $(LOCUST_NAMESPACE) -f -l performance-test-pod-name=$(SCENARIO)-test-master | tee load-test.log
 	date --utc -Ins>benchmark-after
+	@echo "All done!!!"
 
 ##	=== CI ===
 
 ## Run the load test in CI end to end
 .PHONY: ci-run
 ci-run: setup-venv deploy-locust add-dockerio test
+
+##	=== Maintanence ===
+
+## Make the locust images in quay.io up to date with docker.io
+## Requires write permissions to quay.io/backstage-performance organization or individual repos
+.PHONY: update-locust-images
+update-locust-images:
+	skopeo copy --src-no-creds docker://docker.io/locustio/locust:latest docker://quay.io/backstage-performance/locust:latest
+	skopeo copy --src-no-creds docker://docker.io/containersol/locust_exporter:latest docker://quay.io/backstage-performance/locust_exporter:latest
+	skopeo copy --src-no-creds docker://docker.io/lotest/locust-k8s-operator:latest docker://quay.io/backstage-performance/locust-k8s-operator:latest
 
 ##	=== Help ===
 

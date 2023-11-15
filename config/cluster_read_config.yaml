@@ -164,3 +164,6 @@
 - name: results.locust-operator.locust_requests_fail_ratio_Aggregated
   monitoring_query: sum(locust_requests_fail_ratio)
   monitoring_step: 15
+- name: results.locust-operator.locust_users
+  monitoring_query: sum(locust_users)
+  monitoring_step: 15

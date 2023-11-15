@@ -10,6 +10,8 @@ monitoring_collection_log=$ARTIFACT_DIR/monitoring-collection.log
 monitoring_collection_dir=$ARTIFACT_DIR/monitoring-collection-raw-data-dir
 mkdir -p "$monitoring_collection_dir"
 
+cp -vf load-test.log $ARTIFACT_DIR/load-test.log
+
 PYTHON_VENV_DIR=.venv
 
 echo "$(date --utc -Ins) Setting up tool to collect monitoring data"
