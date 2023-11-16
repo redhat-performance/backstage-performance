@@ -1,7 +1,12 @@
 #!/bin/bash
 set -uo pipefail
+
+source ./create_resource.sh
+
 [ -z ${QUAY_TOKEN} ]
 [ -z ${GITHUB_TOKEN} ]
+[ -z ${GITHUB_USER} ]
+[ -z ${GITHUB_REPO} ]
 
 export RHDH_NAMESPACE=${RHDH_NAMESPACE:-rhdh-performance}
 export RHDH_HELM_RELEASE_NAME=${RHDH_HELM_RELEASE_NAME:-rhdh}
@@ -19,6 +24,12 @@ export RHDH_IMAGE_TAG=${RHDH_IMAGE_TAG:-1.0-162}
 
 export RHDH_HELM_REPO=${RHDH_HELM_REPO:-https://gist.githubusercontent.com/nickboldt/a8483eb244f9c4286798e85accaa70af/raw} #v1.0-162
 export RHDH_HELM_CHART=${RHDH_HELM_CHART:-developer-hub}
+
+export PRE_LOAD_DB="${PRE_LOAD_DB:-true}"
+export BACKSTAGE_USER_COUNT="${BACKSTAGE_USER_COUNT:-1}"
+export GROUP_COUNT="${GROUP_COUNT:-1}"
+export API_COUNT="${API_COUNT:-1}"
+export COMPONENT_COUNT="${COMPONENT_COUNT:-1}"
 
 delete() {
     for cr in keycloakusers keycloakclients keycloakrealms keycloaks; do
@@ -137,10 +148,34 @@ spec:
 EOF
 }
 
+create_objs() {
+    if ! $PRE_LOAD_DB; then
+      create_groups
+      create_users
+    fi
+
+    if [[ ${GITHUB_USER}  ]] && [[ ${GITHUB_REPO} ]] ; then
+      create_per_grp create_cmp COMPONENT_COUNT
+      [[ $? -eq 0 ]] && clone_and_upload component.yaml
+
+      create_per_grp create_api API_COUNT
+      [[ $? -eq 0 ]] && clone_and_upload api.yaml
+    else
+      echo "skipping component creating. GITHUB_REPO and GITHUB_USER not set"
+      exit 1
+    fi
+}
+
 install() {
     appurl=$(oc whoami --show-console)
     export OPENSHIFT_APP_DOMAIN=${appurl#*.}
     keycloak_install
+
+    if $PRE_LOAD_DB; then
+      create_groups
+      create_users
+    fi
+
     backstage_install
     setup_monitoring
 }
@@ -161,3 +196,4 @@ while getopts "rd" flag; do
 done
 
 install
+create_objs
