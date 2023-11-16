@@ -8,7 +8,7 @@ catalog:
   providers:
     keycloakOrg:
       default:
-        baseUrl: https://keycloak-${NAMESPACE}.${OPENSHIFT_APP_DOMAIN}/auth
+        baseUrl: https://keycloak-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}/auth
         realm: backstage
         loginRealm: backstage
         clientId: backstage

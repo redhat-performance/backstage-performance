@@ -2,7 +2,7 @@ global:
   clusterRouterBase: ${OPENSHIFT_APP_DOMAIN}
 route:
   enabled: true
-  host: '{{ .Values.global.host }}'
+  host: "{{ .Values.global.host }}"
   path: /
   tls:
     enabled: true
@@ -20,14 +20,17 @@ upstream:
           origin: 'https://{{- include "janus-idp.hostname" . }}'
         database:
           connection:
-            password: '${POSTGRESQL_ADMIN_PASSWORD}'
+            password: "${POSTGRESQL_ADMIN_PASSWORD}"
             user: postgres
+        auth:
+          keys:
+            - secret: ${BACKEND_SECRET}
     args:
-      - '--config'
+      - "--config"
       - app-config.yaml
-      - '--config'
+      - "--config"
       - app-config.example.yaml
-      - '--config'
+      - "--config"
       - app-config.example.production.yaml
     command:
       - node
@@ -42,19 +45,36 @@ upstream:
         valueFrom:
           secretKeyRef:
             key: postgres-password
-            name: '{{ .Release.Name }}-postgresql'
+            name: "{{ .Release.Name }}-postgresql"
+      - name: BACKEND_SECRET
+        valueFrom:
+          secretKeyRef:
+            key: backend-secret
+            name: "{{ .Release.Name }}-developer-hub-auth"
+      - name: GITHUB_TOKEN
+        valueFrom:
+          secretKeyRef:
+            key: github.token
+            name: "{{ .Release.Name }}-plugin-secrets"
+      - name: KEYCLOAK_CLIENT_SECRET
+        valueFrom:
+          secretKeyRef:
+            key: CLIENT_SECRET
+            name: keycloak-client-secret-backstage
+      - name: LOG_LEVEL
+        value: "warn"
       - name: NODE_TLS_REJECT_UNAUTHORIZED
-        value: '0'
+        value: "0"
     image:
       debug: false
       pullPolicy: Always
       pullSecrets:
         - rhdh-pull-secret
-      registry: quay.io
-      repository: rhdh/rhdh-hub-rhel9
-      tag: 1.0-88
+      registry: ${RHDH_IMAGE_REGISTRY}
+      repository: ${RHDH_IMAGE_REPO}
+      tag: ${RHDH_IMAGE_TAG}
     installDir: /app
-    replicas: 1
+    replicas: ${RHDH_DEPLOYMENT_REPLICAS}
     revisionHistoryLimit: 10
   clusterDomain: cluster.local
   diagnosticMode:
@@ -65,7 +85,7 @@ upstream:
     enabled: false
   ingress:
     enabled: false
-    host: '{{ .Values.global.host }}'
+    host: "{{ .Values.global.host }}"
     tls:
       enabled: false
   metrics:
@@ -80,6 +100,7 @@ upstream:
       secretKeys:
         adminPasswordKey: postgres-password
         userPasswordKey: password
+        replicationPasswordKey: replication-password
     enabled: true
     image:
       registry: registry.redhat.io
@@ -94,13 +115,32 @@ upstream:
           valueFrom:
             secretKeyRef:
               key: postgres-password
-              name: '{{ .Release.Name }}-postgresql'
+              name: "{{ .Release.Name }}-postgresql"
       persistence:
         enabled: true
         mountPath: /var/lib/pgsql/data
         size: 1Gi
       podSecurityContext:
         enabled: false
+      securityContext:
+        enabled: false
+    architecture: replication
+    replication:
+      synchronousCommit: "off"
+      numSynchronousReplicas: ${RHDH_DB_REPLICAS}
+      applicationName: "${RHDH_HELM_RELEASE_NAME}"
+    readReplicas:
+      containerSecurityContext:
+        enabled: false
+      extraEnvVars:
+        - name: POSTGRESQL_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: replication-password
+              name: "{{ .Release.Name }}-postgresql"
+      podSecurityContext:
+        enabled: false
+      replicaCount: ${RHDH_DB_REPLICAS}
       securityContext:
         enabled: false
   service:
@@ -114,4 +154,3 @@ upstream:
   serviceAccount:
     automountServiceAccountToken: true
     create: false
-
