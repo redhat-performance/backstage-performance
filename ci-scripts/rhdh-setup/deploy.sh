@@ -3,11 +3,11 @@ set -uo pipefail
 [ -z ${QUAY_TOKEN} ]
 [ -z ${GITHUB_TOKEN} ]
 
-export NAMESPACE=rhdh-performance
-export JANUS_HELM_CHART=rhdh
+export RHDH_NAMESPACE=rhdh-performance
+export RHDH_HELM_RELEASE_NAME=rhdh
 
 cli="oc"
-clin="$cli -n $NAMESPACE"
+clin="$cli -n $RHDH_NAMESPACE"
 
 export RHDH_DEPLOYMENT_REPLICAS=${RHDH_DEPLOYMENT_REPLICAS:-1}
 export RHDH_DB_REPLICAS=${RHDH_DB_REPLICAS:-1}
@@ -27,19 +27,29 @@ delete() {
             $clin delete $res --wait
         done
     done
-    helm uninstall ${JANUS_HELM_CHART} --namespace ${NAMESPACE}
-    $clin delete pvc data-${JANUS_HELM_CHART}-postgresql-0 --ignore-not-found
-    $cli delete ns ${NAMESPACE} --wait
+    helm uninstall ${RHDH_HELM_RELEASE_NAME} --namespace ${RHDH_NAMESPACE}
+    $clin delete pvc data-${RHDH_HELM_RELEASE_NAME}-postgresql-0 --ignore-not-found
+    $cli delete ns ${RHDH_NAMESPACE} --wait
 }
 
 keycloak_install() {
-    $cli create namespace ${NAMESPACE} --dry-run=client -o yaml | $cli apply -f -
+    $cli create namespace ${RHDH_NAMESPACE} --dry-run=client -o yaml | $cli apply -f -
     export KEYCLOAK_CLIENT_SECRET=$(mktemp -u XXXXXXXXXX)
     cat template/keycloak/keycloak-op.yaml | envsubst | $clin apply -f -
     grep -m 1 "rhsso-operator" <($clin get pods -w)
     $clin wait --for=condition=Ready pod -l=name=rhsso-operator --timeout=300s
     cat template/keycloak/keycloak.yaml | envsubst | $clin apply -f -
-    $clin rollout status statefulset/keycloak --timeout=300s
+    timeout=$(date -d "450 seconds" "+%s")
+    while ! /bin/bash -c "$clin get statefulset/keycloak -o name"; do
+        if [ "$(date "+%s")" -gt "$timeout" ]; then
+            echo "ERROR: Timeout waiting for keycloak to start"
+            exit 1
+        else
+            echo "Waiting for keycloak to start..."
+            sleep 5s
+        fi
+    done
+    $clin rollout status statefulset/keycloak --timeout=600s
     cat template/keycloak/keycloakRealm.yaml | envsubst | $clin apply -f -
     cat template/keycloak/keycloakClient.yaml | envsubst | $clin apply -f -
     cat template/keycloak/keycloakUser.yaml | envsubst | $clin apply -f -
@@ -47,7 +57,7 @@ keycloak_install() {
 
 backstage_install() {
     until cat template/backstage/secret-rhdh-pull-secret.yaml | envsubst | $clin apply -f -; do $clin delete secret rhdh-pull-secret; done
-    cat template/backstage/app-config.yaml | envsubst '${NAMESPACE} ${OPENSHIFT_APP_DOMAIN}'>app-config.yaml
+    cat template/backstage/app-config.yaml | envsubst '${RHDH_NAMESPACE} ${OPENSHIFT_APP_DOMAIN}' >app-config.yaml
     until $clin create configmap app-config-rhdh --from-file "app-config-rhdh.yaml=app-config.yaml"; do $clin delete configmap app-config-rhdh; done
     cat template/backstage/plugin-secrets.yaml | envsubst | $clin apply -f -
     helm repo add rhdh-helm-repo ${RHDH_HELM_REPO}
@@ -55,14 +65,14 @@ backstage_install() {
     cat template/backstage/chart-values.yaml |
         envsubst \
             '${OPENSHIFT_APP_DOMAIN} \
-            ${JANUS_HELM_CHART} \
+            ${RHDH_HELM_RELEASE_NAME} \
             ${RHDH_DEPLOYMENT_REPLICAS} \
             ${RHDH_DB_REPLICAS} \
             ${RHDH_IMAGE_REGISTRY} \
             ${RHDH_IMAGE_REPO} \
             ${RHDH_IMAGE_TAG} \
-            ' | helm upgrade --install ${JANUS_HELM_CHART} --devel rhdh-helm-repo/${RHDH_HELM_CHART} -n ${NAMESPACE} --values -
-    $clin rollout status deployment/${JANUS_HELM_CHART}-developer-hub --timeout=300s
+            ' | helm upgrade --install ${RHDH_HELM_RELEASE_NAME} --devel rhdh-helm-repo/${RHDH_HELM_CHART} -n ${RHDH_NAMESPACE} --values -
+    $clin rollout status deployment/${RHDH_HELM_RELEASE_NAME}-developer-hub --timeout=300s
 }
 
 setup_monitoring() {
