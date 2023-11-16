@@ -22,6 +22,9 @@ upstream:
           connection:
             password: '${POSTGRESQL_ADMIN_PASSWORD}'
             user: postgres
+        auth:
+          keys:
+            - secret: ${BACKEND_SECRET}
     args:
       - '--config'
       - app-config.yaml
@@ -43,6 +46,21 @@ upstream:
           secretKeyRef:
             key: postgres-password
             name: '{{ .Release.Name }}-postgresql'
+      - name: BACKEND_SECRET
+        valueFrom:
+          secretKeyRef:
+            key: backend-secret
+            name: '{{ .Release.Name }}-developer-hub-auth'
+      - name: GITHUB_TOKEN
+        valueFrom:
+          secretKeyRef:
+            key: github.token
+            name: '{{ .Release.Name }}-plugin-secrets'
+      - name: KEYCLOAK_CLIENT_SECRET
+        valueFrom:
+          secretKeyRef:
+            key: CLIENT_SECRET
+            name: keycloak-client-secret-backstage
       - name: LOG_LEVEL
         value: 'warn'
       - name: NODE_TLS_REJECT_UNAUTHORIZED

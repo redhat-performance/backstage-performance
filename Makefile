@@ -21,6 +21,10 @@ export RHDH_IMAGE_REGISTRY ?= quay.io
 export RHDH_IMAGE_REPO ?= rhdh/rhdh-hub-rhel9
 export RHDH_IMAGE_TAG ?= 1.0-162
 
+# RHDH Helm chart to deploy
+export RHDH_HELM_REPO ?= https://gist.githubusercontent.com/nickboldt/a8483eb244f9c4286798e85accaa70af/raw/
+export RHDH_HELM_CHART ?= developer-hub
+
 # RHDH horizontal scaling
 export RHDH_DEPLOYMENT_REPLICAS ?= 1
 export RHDH_DB_REPLICAS ?= 1

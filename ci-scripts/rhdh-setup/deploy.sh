@@ -12,9 +12,13 @@ clin="$cli -n $NAMESPACE"
 export RHDH_DEPLOYMENT_REPLICAS=${RHDH_DEPLOYMENT_REPLICAS:-1}
 export RHDH_DB_REPLICAS=${RHDH_DB_REPLICAS:-1}
 export RHDH_KEYCLOAK_REPLICAS=${RHDH_KEYCLOAK_REPLICAS:-1}
+
 export RHDH_IMAGE_REGISTRY=${RHDH_IMAGE_REGISTRY:-quay.io}
 export RHDH_IMAGE_REPO=${RHDH_IMAGE_REPO:-rhdh/rhdh-hub-rhel9}
 export RHDH_IMAGE_TAG=${RHDH_IMAGE_TAG:-1.0-162}
+
+export RHDH_HELM_REPO=${RHDH_HELM_REPO:-https://gist.githubusercontent.com/nickboldt/a8483eb244f9c4286798e85accaa70af/raw} #v1.0-162
+export RHDH_HELM_CHART=${RHDH_HELM_CHART:-developer-hub}
 
 delete() {
     for cr in keycloakusers keycloakclients keycloakrealms keycloaks; do
@@ -35,8 +39,6 @@ keycloak_install() {
     grep -m 1 "rhsso-operator" <($clin get pods -w)
     $clin wait --for=condition=Ready pod -l=name=rhsso-operator --timeout=300s
     cat template/keycloak/keycloak.yaml | envsubst | $clin apply -f -
-    grep -m 1 "keycloak-0" <($clin get pods -w)
-    $clin wait --for=condition=Ready pod/keycloak-0 --timeout=300s
     $clin rollout status statefulset/keycloak --timeout=300s
     cat template/keycloak/keycloakRealm.yaml | envsubst | $clin apply -f -
     cat template/keycloak/keycloakClient.yaml | envsubst | $clin apply -f -
@@ -45,10 +47,11 @@ keycloak_install() {
 
 backstage_install() {
     until cat template/backstage/secret-rhdh-pull-secret.yaml | envsubst | $clin apply -f -; do $clin delete secret rhdh-pull-secret; done
-    cat template/backstage/app-config.yaml | envsubst >app-config.yaml
+    cat template/backstage/app-config.yaml | envsubst '${NAMESPACE} ${OPENSHIFT_APP_DOMAIN}'>app-config.yaml
     until $clin create configmap app-config-rhdh --from-file "app-config-rhdh.yaml=app-config.yaml"; do $clin delete configmap app-config-rhdh; done
-    helm repo add openshift-helm-charts https://charts.openshift.io/
-    helm repo update openshift-helm-charts
+    cat template/backstage/plugin-secrets.yaml | envsubst | $clin apply -f -
+    helm repo add rhdh-helm-repo ${RHDH_HELM_REPO}
+    helm repo update rhdh-helm-repo
     cat template/backstage/chart-values.yaml |
         envsubst \
             '${OPENSHIFT_APP_DOMAIN} \
@@ -58,9 +61,8 @@ backstage_install() {
             ${RHDH_IMAGE_REGISTRY} \
             ${RHDH_IMAGE_REPO} \
             ${RHDH_IMAGE_TAG} \
-            ' | helm upgrade --install ${JANUS_HELM_CHART} openshift-helm-charts/redhat-developer-hub -n ${NAMESPACE} --values -
-    grep -m 1 "${JANUS_HELM_CHART}-developer-hub" <($clin get pods -w)
-    $clin wait --for=condition=Ready pod -l=app.kubernetes.io/name=developer-hub --timeout=300s
+            ' | helm upgrade --install ${JANUS_HELM_CHART} --devel rhdh-helm-repo/${RHDH_HELM_CHART} -n ${NAMESPACE} --values -
+    $clin rollout status deployment/${JANUS_HELM_CHART}-developer-hub --timeout=300s
 }
 
 setup_monitoring() {
