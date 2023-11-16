@@ -19,7 +19,7 @@ export SPAWN_RATE ?= 20
 # RHDH image to deploy
 export RHDH_IMAGE_REGISTRY ?= quay.io
 export RHDH_IMAGE_REPO ?= rhdh/rhdh-hub-rhel9
-export RHDH_IMAGE_TAG ?= 1.0-158
+export RHDH_IMAGE_TAG ?= 1.0-162
 
 # RHDH horizontal scaling
 export RHDH_DEPLOYMENT_REPLICAS ?= 1
