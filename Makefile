@@ -22,8 +22,10 @@ export RHDH_IMAGE_REPO ?= rhdh/rhdh-hub-rhel9
 export RHDH_IMAGE_TAG ?= 1.0-162
 
 # RHDH Helm chart to deploy
+export RHDH_NAMESPACE ?= rhdh-performance
 export RHDH_HELM_REPO ?= https://gist.githubusercontent.com/nickboldt/a8483eb244f9c4286798e85accaa70af/raw/
 export RHDH_HELM_CHART ?= developer-hub
+export RHDH_HELM_RELEASE_NAME ?= rhdh
 
 # RHDH horizontal scaling
 export RHDH_DEPLOYMENT_REPLICAS ?= 1
@@ -56,6 +58,18 @@ setup-venv:
 .PHONY: namespace
 namespace:
 	@kubectl create namespace $(LOCUST_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
+
+##	=== Red Hat Developer Hub (RHDH)
+
+## Deploy RHDH
+.PHONY: deploy-rhdh
+deploy-rhdh:
+	./ci-scripts/setup.sh
+
+## Undeploy RHDH
+.PHONY: undeploy-rhdh
+undeploy-rhdh:
+	./ci-scripts/rhdh-setup/deploy.sh -d
 
 ##	=== Locust Operator ===
 
