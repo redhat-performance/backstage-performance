@@ -3,8 +3,8 @@ set -uo pipefail
 [ -z ${QUAY_TOKEN} ]
 [ -z ${GITHUB_TOKEN} ]
 
-export RHDH_NAMESPACE=rhdh-performance
-export RHDH_HELM_RELEASE_NAME=rhdh
+export RHDH_NAMESPACE=${RHDH_NAMESPACE:-rhdh-performance}
+export RHDH_HELM_RELEASE_NAME=${RHDH_HELM_RELEASE_NAME:-rhdh}
 
 cli="oc"
 clin="$cli -n $RHDH_NAMESPACE"
