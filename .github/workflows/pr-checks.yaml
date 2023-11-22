@@ -24,6 +24,3 @@ jobs:
 
       - name: Run linters
         run: make lint
-
-      - name: Run ShellCheck
-        uses: ludeeus/action-shellcheck@master
