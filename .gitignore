@@ -5,3 +5,4 @@ benchmark-scenario
 benchmark-before
 benchmark-after
 load-test.log
+shellcheck

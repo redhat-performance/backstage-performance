@@ -123,6 +123,16 @@ test:
 	date --utc -Ins>benchmark-after
 	@echo "All done!!!"
 
+## Run shellcheck on all of the shell scripts
+.PHONY: shellcheck
+shellcheck:
+	if [ ! -f ./shellcheck ]; then curl -sSL -o shellcheck.tar.xz https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.linux.x86_64.tar.xz; tar -xvf shellcheck.tar.xz --wildcards --strip-components=1 shellcheck-stable/shellcheck; rm -rvf shellcheck.tar.xz; fi
+	./shellcheck $$(find -name '*.sh')
+
+## Run all linters
+.PHONY: lint
+lint: shellcheck
+
 ##	=== CI ===
 
 ## Run the load test in CI end to end
