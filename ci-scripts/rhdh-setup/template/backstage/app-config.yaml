@@ -3,8 +3,9 @@ app:
 integrations:
   github:
     - host: github.com
-      token: ${GITHUB_TOKEN}
+      #token: ${GITHUB_TOKEN}
 catalog:
+  processingInterval: { minutes: 5 }
   providers:
     keycloakOrg:
       default:

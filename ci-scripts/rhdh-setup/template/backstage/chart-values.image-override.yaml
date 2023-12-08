@@ -67,6 +67,12 @@ upstream:
         value: "warn"
       - name: NODE_TLS_REJECT_UNAUTHORIZED
         value: "0"
+    image:
+      debug: false
+      pullPolicy: Always
+      registry: ${RHDH_IMAGE_REGISTRY}
+      repository: ${RHDH_IMAGE_REPO}
+      tag: ${RHDH_IMAGE_TAG}
     installDir: /app
     replicas: ${RHDH_DEPLOYMENT_REPLICAS}
     revisionHistoryLimit: 10

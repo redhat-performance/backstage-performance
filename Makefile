@@ -16,15 +16,16 @@ export DURATION ?= 1m
 # Used to set --spawn-rate option of locust CLI (Rate to spawn users at (users per second)).  See https://docs.locust.io/en/stable/configuration.html#command-line-options for details
 export SPAWN_RATE ?= 20
 
-# RHDH image to deploy
-export RHDH_IMAGE_REGISTRY ?= quay.io
-export RHDH_IMAGE_REPO ?= rhdh/rhdh-hub-rhel9
-export RHDH_IMAGE_TAG ?= 1.0-162
+# RHDH image to deploy. Uncomment and set to override RHDH image to deploy and test.
+export RHDH_IMAGE_REGISTRY ?=
+export RHDH_IMAGE_REPO ?=
+export RHDH_IMAGE_TAG ?=
 
 # RHDH Helm chart to deploy
 export RHDH_NAMESPACE ?= rhdh-performance
-export RHDH_HELM_REPO ?= https://gist.githubusercontent.com/nickboldt/a8483eb244f9c4286798e85accaa70af/raw/
+export RHDH_HELM_REPO ?= https://gist.githubusercontent.com/rhdh-bot/63cef5cb6285889527bd6a67c0e1c2a9/raw
 export RHDH_HELM_CHART ?= developer-hub
+export RHDH_HELM_CHART_VERSION ?=
 export RHDH_HELM_RELEASE_NAME ?= rhdh
 
 # RHDH horizontal scaling
@@ -34,6 +35,9 @@ export RHDH_KEYCLOAK_REPLICAS ?= 1
 
 # python's venv base dir relative to the root of the repository
 PYTHON_VENV=.venv
+
+# Local directory to store temporary files
+export TMP_DIR=$(shell readlink -m .tmp)
 
 # Name of the namespace to install locust operator as well as to run Pods of master and workers.
 LOCUST_NAMESPACE=locust-operator
@@ -64,12 +68,17 @@ namespace:
 ## Deploy RHDH
 .PHONY: deploy-rhdh
 deploy-rhdh:
-	./ci-scripts/setup.sh
+	cd ./ci-scripts/rhdh-setup/; ./deploy.sh -i
+
+## Create users, groups and objects such as components and APIs in RHDH
+.PHONY: populate-rhdh
+populate-rhdh:
+	cd ./ci-scripts/rhdh-setup/; ./deploy.sh -c
 
 ## Undeploy RHDH
 .PHONY: undeploy-rhdh
 undeploy-rhdh:
-	./ci-scripts/rhdh-setup/deploy.sh -d
+	cd ./ci-scripts/rhdh-setup/; ./deploy.sh -d
 
 ##	=== Locust Operator ===
 
@@ -93,18 +102,12 @@ undeploy-locust: clean
 	@kubectl delete namespace $(LOCUST_NAMESPACE) --wait
 	@helm repo remove $(LOCUST_OPERATOR_REPO)
 
-## Add docker.io token to default-dockercfg-* Secret to avoid pull rate limits from docker.io
-## Run `make add-dockerio DOCKERIO_TOKEN=...`
-.PHONY: add-dockerio
-add-dockerio: namespace
-	@TOKEN=$(DOCKERIO_TOKEN) NAMESPACE=$(LOCUST_NAMESPACE) ./add-dockercfg-docker.io.sh
-
 ##	=== Testing ===
 
 ## Remove test related resources from cluster
-## Run `make clean SCENARIO=...` to clean a specific scenario
-.PHONY: clean
-clean:
+## Run `make clean-test SCENARIO=...` to clean a specific scenario from cluster
+.PHONY: clean-test
+clean-test:
 	kubectl delete --namespace $(LOCUST_NAMESPACE) cm locust.$(SCENARIO) --ignore-not-found --wait
 	kubectl delete --namespace $(LOCUST_NAMESPACE) locusttests.locust.io $(SCENARIO).test --ignore-not-found --wait || true
 
@@ -132,12 +135,17 @@ shellcheck:
 ## Run all linters
 .PHONY: lint
 lint: shellcheck
+	shellcheck $$(find -name '*.sh')
 
 ##	=== CI ===
 
 ## Run the load test in CI end to end
 .PHONY: ci-run
-ci-run: setup-venv deploy-locust add-dockerio test
+ci-run: setup-venv deploy-locust test
+
+## Deploy and populate RHDH in CI end to end
+.PHONY: ci-deploy
+ci-deploy: clean namespace deploy-rhdh
 
 ##	=== Maintanence ===
 
@@ -148,6 +156,11 @@ update-locust-images:
 	skopeo copy --src-no-creds docker://docker.io/locustio/locust:latest docker://quay.io/backstage-performance/locust:latest
 	skopeo copy --src-no-creds docker://docker.io/containersol/locust_exporter:latest docker://quay.io/backstage-performance/locust_exporter:latest
 	skopeo copy --src-no-creds docker://docker.io/lotest/locust-k8s-operator:latest docker://quay.io/backstage-performance/locust-k8s-operator:latest
+
+## Clean local resources
+.PHONY: clean
+clean:
+	rm -rvf *.log benchmark-* shellcheck ci-scripts/rhdh-setup/.tmp $(TMP_DIR)
 
 ##	=== Help ===
 
