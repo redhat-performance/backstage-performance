@@ -31,6 +31,7 @@ export RHDH_HELM_RELEASE_NAME ?= rhdh
 # RHDH horizontal scaling
 export RHDH_DEPLOYMENT_REPLICAS ?= 1
 export RHDH_DB_REPLICAS ?= 1
+export RHDH_DB_STORAGE ?= 1Gi
 export RHDH_KEYCLOAK_REPLICAS ?= 1
 
 # python's venv base dir relative to the root of the repository
@@ -38,6 +39,9 @@ PYTHON_VENV=.venv
 
 # Local directory to store temporary files
 export TMP_DIR=$(shell readlink -m .tmp)
+
+# Local directory to store artifacts
+export ARTIFACT_DIR ?= $(shell readlink -m .artifacts)
 
 # Name of the namespace to install locust operator as well as to run Pods of master and workers.
 LOCUST_NAMESPACE=locust-operator
@@ -105,9 +109,9 @@ undeploy-locust: clean
 ##	=== Testing ===
 
 ## Remove test related resources from cluster
-## Run `make clean-test SCENARIO=...` to clean a specific scenario from cluster
-.PHONY: clean-test
-clean-test:
+## Run `make clean SCENARIO=...` to clean a specific scenario from cluster
+.PHONY: clean
+clean:
 	kubectl delete --namespace $(LOCUST_NAMESPACE) cm locust.$(SCENARIO) --ignore-not-found --wait
 	kubectl delete --namespace $(LOCUST_NAMESPACE) locusttests.locust.io $(SCENARIO).test --ignore-not-found --wait || true
 
@@ -115,16 +119,23 @@ clean-test:
 ## Run `make test SCENARIO=...` to run a specific scenario
 .PHONY: test
 test:
-	echo $(SCENARIO)>benchmark-scenario
+	mkdir -p $(ARTIFACT_DIR)
+	echo $(SCENARIO)>$(ARTIFACT_DIR)/benchmark-scenario
 	cat locust-test-template.yaml | envsubst | kubectl apply --namespace $(LOCUST_NAMESPACE) -f -
 	kubectl create --namespace $(LOCUST_NAMESPACE) configmap locust.$(SCENARIO) --from-file scenarios/$(SCENARIO).py --dry-run=client -o yaml | kubectl apply --namespace $(LOCUST_NAMESPACE) -f -
-	date --utc -Ins>benchmark-before
+	date --utc -Ins>$(ARTIFACT_DIR)/benchmark-before
 	timeout=$$(date -d "30 seconds" "+%s"); while [ -z "$$(kubectl get --namespace $(LOCUST_NAMESPACE) pod -l performance-test-pod-name=$(SCENARIO)-test-master -o name)" ]; do if [ "$$(date "+%s")" -gt "$$timeout" ]; then echo "ERROR: Timeout waiting for locust master pod to start"; exit 1; else echo "Waiting for locust master pod to start..."; sleep 5s; fi; done
 	kubectl wait --namespace $(LOCUST_NAMESPACE) --for=condition=Ready=true $$(kubectl get --namespace $(LOCUST_NAMESPACE) pod -l performance-test-pod-name=$(SCENARIO)-test-master -o name)
 	@echo "Getting locust master log:"
 	kubectl logs --namespace $(LOCUST_NAMESPACE) -f -l performance-test-pod-name=$(SCENARIO)-test-master | tee load-test.log
-	date --utc -Ins>benchmark-after
+	date --utc -Ins>$(ARTIFACT_DIR)/benchmark-after
 	@echo "All done!!!"
+
+## Run the scalability test
+## Run `make test-scalability SCENARIO=...` to run a specific scenario
+.PHONY: test-scalability
+test-scalability:
+	cd ./ci-scripts/scalability; ./test-scalability.sh
 
 ## Run shellcheck on all of the shell scripts
 .PHONY: shellcheck
@@ -145,7 +156,7 @@ ci-run: setup-venv deploy-locust test
 
 ## Deploy and populate RHDH in CI end to end
 .PHONY: ci-deploy
-ci-deploy: clean namespace deploy-rhdh
+ci-deploy: namespace deploy-rhdh
 
 ##	=== Maintanence ===
 
@@ -158,9 +169,9 @@ update-locust-images:
 	skopeo copy --src-no-creds docker://docker.io/lotest/locust-k8s-operator:latest docker://quay.io/backstage-performance/locust-k8s-operator:latest
 
 ## Clean local resources
-.PHONY: clean
-clean:
-	rm -rvf *.log benchmark-* shellcheck ci-scripts/rhdh-setup/.tmp $(TMP_DIR)
+.PHONY: clean-local
+clean-local:
+	rm -rvf *.log shellcheck $(TMP_DIR) $(ARTIFACT_DIR)
 
 ##	=== Help ===
 

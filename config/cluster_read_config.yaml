@@ -62,7 +62,31 @@
   'USERS',
   'WORKERS',
   'DURATION',
+  'SPAWN_RATE
   'SCENARIO',
+  'PRE_LOAD_DB',
+  'RHDH_DEPLOYMENT_REPLICAS',
+  'RHDH_DB_REPLICAS',
+  'RHDH_DB_STORAGE',
+  'RHDH_KEYCLOAK_REPLICAS',
+  'RHDH_HELM_REPO',
+  'RHDH_HELM_CHART',
+  'RHDH_HELM_CHART_VERSION',
+  'RHDH_HELM_RELEASE_NAME',
+  'RHDH_IMAGE_REGISTRY',
+  'RHDH_IMAGE_REPO',
+  'RHDH_IMAGE_TAG',
+  'API_COUNT',
+  'COMPONENT_COUNT',
+  'BACKSTAGE_USER_COUNT',
+  'GROUP_COUNT',
+  'WAIT_FOR_SEARCH_INDEX',
+  'SCALE_WORKERS',
+  'SCALE_ACTIVE_USERS_SPAWN_RATES',
+  'SCALE_BS_USERS_GROUPS',
+  'SCALE_CATALOG_SIZES',
+  'SCALE_REPLICAS',
+  'SCALE_DB_STORAGES'
 ] %}
 - name: metadata.env.{{ var }}
   env_variable: {{ var }}
@@ -127,7 +151,7 @@
 {% macro pod_info(namespace, deployment, container) -%}
 # Gather info about pod configuration
 - name: metadata.cluster.pods.{{ deployment }}-{{ container }}.count
-  command: oc -n {{ namespace }} get deployment/{{ deployment }} -o json | jq '.spec.template.spec | if has("replicas") then .replicas else 1 end'
+  command: oc -n {{ namespace }} get deployment/{{ deployment }} -o json | jq '.spec | if has("replicas") then .replicas else 1 end'
 - name: metadata.cluster.pods.{{ deployment }}-{{ container }}.resources
   command: oc -n {{ namespace }} get deployment/{{ deployment }} -o json | jq '.spec.template.spec.containers | map(select(.name == "{{ container }}"))[0].resources'
   output: json

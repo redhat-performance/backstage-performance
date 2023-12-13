@@ -13,7 +13,7 @@ export HOST
 HOST="https://$(oc get routes rhdh-developer-hub -n "${RHDH_NAMESPACE:-rhdh-performance}" -o jsonpath='{.spec.host}')"
 # end-of testing env
 
-ARTIFACT_DIR=${ARTIFACT_DIR:-artifacts}
+ARTIFACT_DIR=$(readlink -m "${ARTIFACT_DIR:-.artifacts}")
 mkdir -p "${ARTIFACT_DIR}"
 
 rate_limits_csv="${ARTIFACT_DIR}/gh-rate-limits-remaining.test.csv"
