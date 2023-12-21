@@ -118,6 +118,8 @@ backstage_install() {
         ${RHDH_IMAGE_REGISTRY} \
         ${RHDH_IMAGE_REPO} \
         ${RHDH_IMAGE_TAG} \
+	${KEYCLOAK_CLIENT_SECRET} \
+	${RHDH_NAMESPACE} \
         ' <"$chart_values" | tee "$TMP_DIR/chart-values.yaml" | helm upgrade --install "${RHDH_HELM_RELEASE_NAME}" --devel "${repo_name}/${RHDH_HELM_CHART}" ${version_arg} -n "${RHDH_NAMESPACE}" --values -
     wait_to_start statefulset "${RHDH_HELM_RELEASE_NAME}-postgresql-read" 300 300
     wait_to_start deployment "${RHDH_HELM_RELEASE_NAME}-developer-hub" 300 300

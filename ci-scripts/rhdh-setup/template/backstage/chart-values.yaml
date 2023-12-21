@@ -2,6 +2,18 @@ global:
   clusterRouterBase: ${OPENSHIFT_APP_DOMAIN}
   imagePullSecrets:
     - rhdh-pull-secret
+  dynamic:
+    includes:
+      - dynamic-plugins.default.yaml
+    plugins:
+      - package: ./dynamic-plugins/dist/janus-idp-backstage-plugin-keycloak-backend-dynamic
+        disabled: false
+        pluginConfig:
+          KEYCLOAK_BASE_URL:  https://keycloak-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}/auth
+          KEYCLOAK_LOGIN_REALM: backstage
+          KEYCLOAK_REALM: backstage
+          KEYCLOAK_CLIENT_ID: backstage
+          KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
 route:
   enabled: true
   host: "{{ .Values.global.host }}"
