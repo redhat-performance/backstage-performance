@@ -13,17 +13,18 @@ GITHUB_USER=$(cat /usr/local/ci-secrets/backstage-performance/github.user)
 GITHUB_REPO=$(cat /usr/local/ci-secrets/backstage-performance/github.repo)
 QUAY_TOKEN=$(cat /usr/local/ci-secrets/backstage-performance/quay.token)
 
-export RHDH_DEPLOYMENT_REPLICAS=5
-export RHDH_DB_REPLICAS=5
-export RHDH_KEYCLOAK_REPLICAS=5
+export RHDH_DEPLOYMENT_REPLICAS=${RHDH_DEPLOYMENT_REPLICAS:-5}
+export RHDH_DB_REPLICAS=${RHDH_DB_REPLICAS:-5}
+export RHDH_DB_STORAGE=${RHDH_DB_STORAGE:-1Gi}
+export RHDH_KEYCLOAK_REPLICAS=${RHDH_KEYCLOAK_REPLICAS:-5}
 
-export API_COUNT=1000
-export COMPONENT_COUNT=1000
-export BACKSTAGE_USER_COUNT=1000
-export GROUP_COUNT=250
+export API_COUNT=${API_COUNT:-1000}
+export COMPONENT_COUNT=${COMPONENT_COUNT:-1000}
+export BACKSTAGE_USER_COUNT=${BACKSTAGE_USER_COUNT:-1000}
+export GROUP_COUNT=${GROUP_COUNT:-250}
 
-ARTIFACT_DIR=${ARTIFACT_DIR:-artifacts}
-mkdir -p "${ARTIFACT_DIR}"
+ARTIFACT_DIR=$(readlink -m "${ARTIFACT_DIR:-.artifacts}")
+mkdir -p "$ARTIFACT_DIR"
 
 rate_limits_csv="${ARTIFACT_DIR}/gh-rate-limits-remaining.setup.csv"
 

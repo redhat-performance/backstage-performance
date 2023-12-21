@@ -119,7 +119,7 @@ upstream:
       persistence:
         enabled: true
         mountPath: /var/lib/pgsql/data
-        size: 1Gi
+        size: "${RHDH_DB_STORAGE}"
       podSecurityContext:
         enabled: false
       securityContext:
