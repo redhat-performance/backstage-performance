@@ -2,6 +2,8 @@
 
 export TMP_DIR WORKDIR
 
+POPULATION_CONCURRENCY=${POPULATION_CONCURRENCY:-10}
+
 TMP_DIR=${TMP_DIR:-$(readlink -m .tmp)}
 mkdir -p "$TMP_DIR"
 WORKDIR=$(readlink -m .)
@@ -19,6 +21,7 @@ keycloak_url() {
   if [ ! -f "$f" ]; then
     echo -n "https://$(oc get routes keycloak -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')" >"$f"
   fi
+  flock -u 4
   cat "$f"
   set +x
 }
@@ -102,17 +105,18 @@ create_cmp() {
 
 create_group() {
   token=$(get_token)
+  groupname="group${0}"
   curl -s -k --location --request POST "$(keycloak_url)/auth/admin/realms/backstage/groups" \
     -H 'Content-Type: application/json' \
     -H 'Authorization: Bearer '"$token" \
-    --data-raw '{"name": "group'"${0}"'"}'
+    --data-raw '{"name": "'"${groupname}"'"}'
 }
 
 create_groups() {
   echo "Creating Groups in Keycloak"
   refresh_pid=$!
   sleep 5
-  seq 1 "${GROUP_COUNT}" | xargs -n1 -P10 bash -c 'create_group'
+  seq 1 "${GROUP_COUNT}" | xargs -n1 -P"${POPULATION_CONCURRENCY}" bash -c 'create_group'
   kill $refresh_pid
 }
 
@@ -120,10 +124,12 @@ create_user() {
   token=$(get_token)
   grp=$(echo "${0}%${GROUP_COUNT}" | bc)
   [[ $grp -eq 0 ]] && grp=${GROUP_COUNT}
+  username="test${0}"
+  groupname="group${grp}"
   curl -s -k --location --request POST "$(keycloak_url)/auth/admin/realms/backstage/users" \
     -H 'Content-Type: application/json' \
     -H 'Authorization: Bearer '"$token" \
-    --data-raw '{"firstName":"test'"${0}"'","lastName":"tester", "email":"test'"${0}"'@test.com", "enabled":"true", "username":"test'"${0}"'","groups":["/group'"${grp}"'"]}'
+    --data-raw '{"firstName":"'"${username}"'","lastName":"tester", "email":"'"${username}"'@test.com", "enabled":"true", "username":"'"${username}"'","groups":["/'"${groupname}"'"]}'
 }
 
 create_users() {
@@ -131,7 +137,7 @@ create_users() {
   export GROUP_COUNT
   refresh_pid=$!
   sleep 5
-  seq 1 "${BACKSTAGE_USER_COUNT}" | xargs -n1 -P10 bash -c 'create_user'
+  seq 1 "${BACKSTAGE_USER_COUNT}" | xargs -n1 -P"${POPULATION_CONCURRENCY}" bash -c 'create_user'
   kill $refresh_pid
 }
 
@@ -144,7 +150,7 @@ get_token() {
     echo "Failed to acquire lock"
     exit 1
   }
-  if [ ! -f "$token_file" ] || [ "$(date +%s)" -gt "$(jq -rc '.expires_in_timestamp' "$token_file")" ]; then
+  if [ ! -f "$token_file" ] || [ ! -s "$token_file" ] || [ "$(date +%s)" -gt "$(jq -rc '.expires_in_timestamp' "$token_file")" ]; then
     keycloak_pass=$(oc -n "${RHDH_NAMESPACE}" get secret credential-example-sso -o template --template='{{.data.ADMIN_PASSWORD}}' | base64 -d)
     curl -s -k "$(keycloak_url)/auth/realms/master/protocol/openid-connect/token" -d username=admin -d "password=${keycloak_pass}" -d 'grant_type=password' -d 'client_id=admin-cli' | jq -r ".expires_in_timestamp = $(date -d '30 seconds' +%s)" >"$token_file"
   fi
