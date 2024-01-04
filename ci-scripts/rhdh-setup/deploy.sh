@@ -90,8 +90,7 @@ keycloak_install() {
 # shellcheck disable=SC2016,SC1004
 backstage_install() {
     until envsubst <template/backstage/secret-rhdh-pull-secret.yaml | $clin apply -f -; do $clin delete secret rhdh-pull-secret; done
-    envsubst '${RHDH_NAMESPACE} ${OPENSHIFT_APP_DOMAIN}' <template/backstage/app-config.yaml >app-config.yaml
-    until $clin create configmap app-config-rhdh --from-file "app-config-rhdh.yaml=app-config.yaml"; do $clin delete configmap app-config-rhdh; done
+    until $clin create configmap app-config-rhdh --from-file "app-config-rhdh.yaml=template/backstage/app-config.yaml"; do $clin delete configmap app-config-rhdh; done
     envsubst <template/backstage/plugin-secrets.yaml | $clin apply -f -
     helm repo remove "${repo_name}" || true
     helm repo add "${repo_name}" "${RHDH_HELM_REPO}"
@@ -118,6 +117,7 @@ backstage_install() {
         ${RHDH_IMAGE_REGISTRY} \
         ${RHDH_IMAGE_REPO} \
         ${RHDH_IMAGE_TAG} \
+        ${RHDH_NAMESPACE} \
         ' <"$chart_values" | tee "$TMP_DIR/chart-values.yaml" | helm upgrade --install "${RHDH_HELM_RELEASE_NAME}" --devel "${repo_name}/${RHDH_HELM_CHART}" ${version_arg} -n "${RHDH_NAMESPACE}" --values -
     wait_to_start statefulset "${RHDH_HELM_RELEASE_NAME}-postgresql-read" 300 300
     wait_to_start deployment "${RHDH_HELM_RELEASE_NAME}-developer-hub" 300 300
