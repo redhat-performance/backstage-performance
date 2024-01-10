@@ -193,11 +193,11 @@ create_objs() {
 
     if [[ ${GITHUB_USER} ]] && [[ ${GITHUB_REPO} ]]; then
         if create_per_grp create_cmp COMPONENT_COUNT; then
-            clone_and_upload "$TMP_DIR/component.yaml"
+            clone_and_upload "component-*.yaml"
         fi
 
         if create_per_grp create_api API_COUNT; then
-            clone_and_upload "$TMP_DIR/api.yaml"
+            clone_and_upload "api-*.yaml"
         fi
     else
         echo "skipping component creating. GITHUB_REPO and GITHUB_USER not set"
