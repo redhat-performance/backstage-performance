@@ -72,12 +72,16 @@ namespace:
 ## Deploy RHDH
 .PHONY: deploy-rhdh
 deploy-rhdh:
+	date --utc -Ins>$(TMP_DIR)/deploy-before
 	cd ./ci-scripts/rhdh-setup/; ./deploy.sh -i
+	date --utc -Ins>$(TMP_DIR)/deploy-after
 
 ## Create users, groups and objects such as components and APIs in RHDH
 .PHONY: populate-rhdh
 populate-rhdh:
+	date --utc -Ins>$(TMP_DIR)/populate-before
 	cd ./ci-scripts/rhdh-setup/; ./deploy.sh -c
+	date --utc -Ins>$(TMP_DIR)/populate-after
 
 ## Undeploy RHDH
 .PHONY: undeploy-rhdh
@@ -120,15 +124,15 @@ clean:
 .PHONY: test
 test:
 	mkdir -p $(ARTIFACT_DIR)
-	echo $(SCENARIO)>$(ARTIFACT_DIR)/benchmark-scenario
+	echo $(SCENARIO)>$(TMP_DIR)/benchmark-scenario
 	cat locust-test-template.yaml | envsubst | kubectl apply --namespace $(LOCUST_NAMESPACE) -f -
 	kubectl create --namespace $(LOCUST_NAMESPACE) configmap locust.$(SCENARIO) --from-file scenarios/$(SCENARIO).py --dry-run=client -o yaml | kubectl apply --namespace $(LOCUST_NAMESPACE) -f -
-	date --utc -Ins>$(ARTIFACT_DIR)/benchmark-before
+	date --utc -Ins>$(TMP_DIR)/benchmark-before
 	timeout=$$(date -d "30 seconds" "+%s"); while [ -z "$$(kubectl get --namespace $(LOCUST_NAMESPACE) pod -l performance-test-pod-name=$(SCENARIO)-test-master -o name)" ]; do if [ "$$(date "+%s")" -gt "$$timeout" ]; then echo "ERROR: Timeout waiting for locust master pod to start"; exit 1; else echo "Waiting for locust master pod to start..."; sleep 5s; fi; done
 	kubectl wait --namespace $(LOCUST_NAMESPACE) --for=condition=Ready=true $$(kubectl get --namespace $(LOCUST_NAMESPACE) pod -l performance-test-pod-name=$(SCENARIO)-test-master -o name)
 	@echo "Getting locust master log:"
 	kubectl logs --namespace $(LOCUST_NAMESPACE) -f -l performance-test-pod-name=$(SCENARIO)-test-master | tee load-test.log
-	date --utc -Ins>$(ARTIFACT_DIR)/benchmark-after
+	date --utc -Ins>$(TMP_DIR)/benchmark-after
 	@echo "All done!!!"
 
 ## Run the scalability test

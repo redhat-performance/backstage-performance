@@ -9,6 +9,11 @@ echo -e "\n === Collecting test results and metrics ===\n"
 ARTIFACT_DIR=$(readlink -m "${ARTIFACT_DIR:-.artifacts}")
 mkdir -p "${ARTIFACT_DIR}"
 
+export TMP_DIR
+
+TMP_DIR=$(readlink -m "${TMP_DIR:-.tmp}")
+mkdir -p "${TMP_DIR}"
+
 RHDH_NAMESPACE=${RHDH_NAMESPACE:-rhdh-performance}
 
 cli="oc"
@@ -47,9 +52,16 @@ try_gather_dir() {
     fi
 }
 
-try_gather_file ./.tmp/backstage.url
-try_gather_file ./.tmp/keycloak.url
-try_gather_file ./.tmp/chart-values.yaml
+try_gather_file "${TMP_DIR}/backstage.url"
+try_gather_file "${TMP_DIR}/keycloak.url"
+try_gather_file "${TMP_DIR}/chart-values.yaml"
+try_gather_file "${TMP_DIR}/deploy-before"
+try_gather_file "${TMP_DIR}/deploy-after"
+try_gather_file "${TMP_DIR}/populate-before"
+try_gather_file "${TMP_DIR}/populate-after"
+try_gather_file "${TMP_DIR}/benchmark-before"
+try_gather_file "${TMP_DIR}/benchmark-after"
+try_gather_file "${TMP_DIR}/benchmark-scenario"
 try_gather_file load-test.log
 
 PYTHON_VENV_DIR=.venv
@@ -71,22 +83,39 @@ set +u
 # shellcheck disable=SC1090,SC1091
 source $PYTHON_VENV_DIR/bin/activate
 set -u
-mstart=$(date --utc --date "$(cat "${ARTIFACT_DIR}/benchmark-before")" --iso-8601=seconds)
-mend=$(date --utc --date "$(cat "${ARTIFACT_DIR}/benchmark-after")" --iso-8601=seconds)
+# populate phase
+if [ "$PRE_LOAD_DB" == "true" ]; then
+    mstart=$(date --utc --date "$(cat "${TMP_DIR}/populate-before")" --iso-8601=seconds)
+    mend=$(date --utc --date "$(cat "${TMP_DIR}/populate-after")" --iso-8601=seconds)
+    mhost=$(kubectl -n openshift-monitoring get route -l app.kubernetes.io/name=thanos-query -o json | jq --raw-output '.items[0].spec.host')
+    status_data.py \
+        --status-data-file "$monitoring_collection_data" \
+        --additional config/cluster_read_config.populate.yaml \
+        --monitoring-start "$mstart" \
+        --monitoring-end "$mend" \
+        --monitoring-raw-data-dir "$monitoring_collection_dir" \
+        --prometheus-host "https://$mhost" \
+        --prometheus-port 443 \
+        --prometheus-token "$($cli whoami -t)" \
+        -d &>>"$monitoring_collection_log"
+fi
+# test phase
+mstart=$(date --utc --date "$(cat "${TMP_DIR}/benchmark-before")" --iso-8601=seconds)
+mend=$(date --utc --date "$(cat "${TMP_DIR}/benchmark-after")" --iso-8601=seconds)
 mhost=$(kubectl -n openshift-monitoring get route -l app.kubernetes.io/name=thanos-query -o json | jq --raw-output '.items[0].spec.host')
-mversion=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' "scenarios/$(cat "${ARTIFACT_DIR}/benchmark-scenario").py")
+mversion=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' "scenarios/$(cat "${TMP_DIR}/benchmark-scenario").py")
 status_data.py \
     --status-data-file "$monitoring_collection_data" \
     --set \
-    results.started="$(cat "${ARTIFACT_DIR}/benchmark-before")" \
-    results.ended="$(cat "${ARTIFACT_DIR}/benchmark-after")" \
-    name="RHDH load test $(cat "${ARTIFACT_DIR}/benchmark-scenario")" \
-    metadata.scenario.name="$(cat "${ARTIFACT_DIR}/benchmark-scenario")" \
+    results.started="$(cat "${TMP_DIR}/benchmark-before")" \
+    results.ended="$(cat "${TMP_DIR}/benchmark-after")" \
+    name="RHDH load test $(cat "${TMP_DIR}/benchmark-scenario")" \
+    metadata.scenario.name="$(cat "${TMP_DIR}/benchmark-scenario")" \
     metadata.scenario.version="$mversion" \
     -d &>"$monitoring_collection_log"
 status_data.py \
     --status-data-file "$monitoring_collection_data" \
-    --additional config/cluster_read_config.yaml \
+    --additional config/cluster_read_config.test.yaml \
     --monitoring-start "$mstart" \
     --monitoring-end "$mend" \
     --monitoring-raw-data-dir "$monitoring_collection_dir" \

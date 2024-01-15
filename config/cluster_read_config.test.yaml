@@ -174,7 +174,20 @@
 {{ monitor_pod('openshift-apiserver', 'apiserver', 15) }}
 {{ monitor_pod('openshift-kube-apiserver', 'kube-apiserver', 15, pod_suffix_regex='-ip-.+') }}
 
+{% macro pv_stats(pvc) -%}
+# Collect data for PV stats
+- name: measurements.cluster.pv_stats.test.{{pvc}}.capacity_bytes
+  monitoring_query: kubelet_volume_stats_capacity_bytes{persistentvolumeclaim="{{ pvc }}"}
+  monitoring_step: 15
+- name: measurements.cluster.pv_stats.test.{{pvc}}.used_bytes
+  monitoring_query: kubelet_volume_stats_used_bytes{persistentvolumeclaim="{{ pvc }}"}
+  monitoring_step: 15
+- name: measurements.cluster.pv_stats.test.{{pvc}}.available_bytes
+  monitoring_query: kubelet_volume_stats_available_bytes{persistentvolumeclaim="{{ pvc }}"}
+  monitoring_step: 15
+{%- endmacro %}
 
+{{ pv_stats('data-rhdh-postgresql-primary-0') }}
 
 # Results
 - name: results.locust-operator.locust_requests_avg_response_time_Aggregated
