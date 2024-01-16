@@ -21,6 +21,10 @@ read -ra replicas <<<"${SCALE_REPLICAS:-5}"
 
 read -ra db_storages <<<"${SCALE_DB_STORAGES:-1Gi 2Gi}"
 
+read -ra cpu_requests_limits <<<"${SCALE_CPU_REQUESTS_LIMITS:-:}"
+
+read -ra memory_requests_limits <<<"${SCALE_MEMORY_REQUESTS_LIMITS:-:}"
+
 csv_delim=";"
 csv_delim_quoted="\"$csv_delim\""
 
@@ -36,14 +40,22 @@ for w in "${workers[@]}"; do
                     active_users=${tokens[0]}
                     output="$ARTIFACT_DIR/scalability_c-${r}r-db_${s}-${bu}bu-${bg}bg-${w}w-${active_users}u.csv"
                     header="CatalogSize${csv_delim}AverateRPS${csv_delim}MaxRPS${csv_delim}AverageRT${csv_delim}MaxRT${csv_delim}FailRate${csv_delim}DBStorageUsed${csv_delim}DBStorageAvailable${csv_delim}DBStorageCapacity"
-                    echo "$header" >"$output"
-                    for c in "${catalog_sizes[@]}"; do
-                        index="${r}r-db_${s}-${bu}bu-${bg}bg-${w}w-${c}c"
-                        benchmark_json="$(find "${ARTIFACT_DIR}" -name benchmark.json | grep "$index" || true)"
-                        echo -n "$c" >>"$output"
-                        if [ -n "$benchmark_json" ]; then
-                            echo "Gathering data from $benchmark_json"
-                            jq_cmd="$csv_delim_quoted + (.results.\"locust-operator\".locust_requests_current_rps_Aggregated.mean | tostring) \
+                    for cr_cl in "${cpu_requests_limits[@]}"; do
+                        IFS=":" read -ra tokens <<<"${cr_cl}"
+                        cr="${tokens[0]}"
+                        cl="${tokens[1]}"
+                        for mr_ml in "${memory_requests_limits[@]}"; do
+                            IFS=":" read -ra tokens <<<"${mr_ml}"
+                            mr="${tokens[0]}"
+                            ml="${tokens[1]}"
+                            echo "$header" >"$output"
+                            for c in "${catalog_sizes[@]}"; do
+                                index="${r}r-db_${s}-${bu}bu-${bg}bg-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${c}c"
+                                benchmark_json="$(find "${ARTIFACT_DIR}" -name benchmark.json | grep "$index" || true)"
+                                echo -n "$c" >>"$output"
+                                if [ -n "$benchmark_json" ]; then
+                                    echo "Gathering data from $benchmark_json"
+                                    jq_cmd="$csv_delim_quoted + (.results.\"locust-operator\".locust_requests_current_rps_Aggregated.mean | tostring) \
                                 + $csv_delim_quoted + (.results.\"locust-operator\".locust_requests_current_rps_Aggregated.max | tostring) \
                                 + $csv_delim_quoted + (.results.\"locust-operator\".locust_requests_avg_response_time_Aggregated.mean | tostring) \
                                 + $csv_delim_quoted + (.results.\"locust-operator\".locust_requests_avg_response_time_Aggregated.max | tostring) \
@@ -51,13 +63,15 @@ for w in "${workers[@]}"; do
                                 + $csv_delim_quoted + (.measurements.cluster.pv_stats.populate.\"data-rhdh-postgresql-primary-0\".used_bytes.max | tostring) \
                                 + $csv_delim_quoted + (.measurements.cluster.pv_stats.populate.\"data-rhdh-postgresql-primary-0\".available_bytes.min | tostring) \
                                 + $csv_delim_quoted + (.measurements.cluster.pv_stats.populate.\"data-rhdh-postgresql-primary-0\".capacity_bytes.max | tostring)"
-                            sed -Ee 's/: ([0-9]+\.[0-9]*[X]+[0-9e\+-]*|[0-9]*X+[0-9]*\.[0-9e\+-]*|[0-9]*X+[0-9]*\.[0-9]*X+[0-9e\+-]+)/: "\1"/g' "$benchmark_json" | jq -rc "$jq_cmd" >>"$output"
-                        else
-                            for _ in $(seq 1 "$(echo "$header" | tr -cd "$csv_delim" | wc -c)"); do
-                                echo -n ";" >>"$output"
+                                    sed -Ee 's/: ([0-9]+\.[0-9]*[X]+[0-9e\+-]*|[0-9]*X+[0-9]*\.[0-9e\+-]*|[0-9]*X+[0-9]*\.[0-9]*X+[0-9e\+-]+)/: "\1"/g' "$benchmark_json" | jq -rc "$jq_cmd" >>"$output"
+                                else
+                                    for _ in $(seq 1 "$(echo "$header" | tr -cd "$csv_delim" | wc -c)"); do
+                                        echo -n ";" >>"$output"
+                                    done
+                                    echo >>"$output"
+                                fi
                             done
-                            echo >>"$output"
-                        fi
+                        done
                     done
                 done
             done

@@ -32,6 +32,10 @@ export RHDH_HELM_RELEASE_NAME ?= rhdh
 export RHDH_DEPLOYMENT_REPLICAS ?= 1
 export RHDH_DB_REPLICAS ?= 1
 export RHDH_DB_STORAGE ?= 1Gi
+export RHDH_RESOURCES_CPU_REQUESTS ?=
+export RHDH_RESOURCES_CPU_LIMITS ?=
+export RHDH_RESOURCES_MEMORY_RESOURCES ?=
+export RHDH_RESOURCES_MEMORY_LIMITS ?=
 export RHDH_KEYCLOAK_REPLICAS ?= 1
 
 # python's venv base dir relative to the root of the repository
