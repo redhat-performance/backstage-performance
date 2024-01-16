@@ -62,6 +62,9 @@ try_gather_file "${TMP_DIR}/populate-after"
 try_gather_file "${TMP_DIR}/benchmark-before"
 try_gather_file "${TMP_DIR}/benchmark-after"
 try_gather_file "${TMP_DIR}/benchmark-scenario"
+try_gather_file "${TMP_DIR}/create_group.log"
+try_gather_file "${TMP_DIR}/create_user.log"
+try_gather_file "${TMP_DIR}/get_token.log"
 try_gather_file load-test.log
 
 PYTHON_VENV_DIR=.venv
