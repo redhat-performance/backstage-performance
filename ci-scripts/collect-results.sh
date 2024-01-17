@@ -126,6 +126,19 @@ status_data.py \
     --prometheus-port 443 \
     --prometheus-token "$($cli whoami -t)" \
     -d &>>"$monitoring_collection_log"
+#Scenario specific metrics
+if [ -f "scenarios/$(cat "${TMP_DIR}/benchmark-scenario").metrics.yaml" ]; then
+    status_data.py \
+        --status-data-file "$monitoring_collection_data" \
+        --additional "scenarios/$(cat "${TMP_DIR}/benchmark-scenario").metrics.yaml" \
+        --monitoring-start "$mstart" \
+        --monitoring-end "$mend" \
+        --monitoring-raw-data-dir "$monitoring_collection_dir" \
+        --prometheus-host "https://$mhost" \
+        --prometheus-port 443 \
+        --prometheus-token "$($cli whoami -t)" \
+        -d &>>"$monitoring_collection_log"
+fi
 set +u
 deactivate
 set -u

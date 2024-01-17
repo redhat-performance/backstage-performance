@@ -1,0 +1,29 @@
+# Results
+{%macro results_scenario(name) -%}
+- name: results.{{name}}.locust_requests_avg_response_time
+  monitoring_query: sum(locust_requests_avg_response_time{name="{{name}}"})
+  monitoring_step: 15
+- name: results.{{name}}.locust_requests_avg_content_length
+  monitoring_query: sum(locust_requests_avg_content_length{name="{{name}}"})
+  monitoring_step: 15
+- name: results.{{name}}.locust_requests_current_rps
+  monitoring_query: sum(locust_requests_current_rps{name="{{name}}"})
+  monitoring_step: 15
+{%- endmacro %}
+
+{{ results_scenario('/api/catalog/entities?filter=kind%3Dapi') }}
+{{ results_scenario('/api/catalog/entities?filter=kind%3Dcomponent') }}
+{{ results_scenario('/api/catalog/entities?filter=kind%3Dcomponent%2Cspec.type%3Dlibrary') }}
+{{ results_scenario('/api/catalog/entity-facets?facet=kind') }}
+{{ results_scenario('/api/catalog/entity-facets?facet=metadata.namespace') }}
+{{ results_scenario('/api/catalog/entity-facets?facet=metadata.namespace&filter=kind%3Dapi') }}
+{{ results_scenario('/api/catalog/entity-facets?facet=metadata.namespace&filter=kind%3Dcomponent') }}
+{{ results_scenario('/api/catalog/entity-facets?facet=metadata.tags') }}
+{{ results_scenario('/api/catalog/entity-facets?facet=metadata.tags&filter=kind%3Dapi') }}
+{{ results_scenario('/api/catalog/entity-facets?facet=metadata.tags&filter=kind%3Dcomponent') }}
+{{ results_scenario('/api/catalog/entity-facets?facet=relations.ownedBy') }}
+{{ results_scenario('/api/catalog/entity-facets?facet=spec.lifecycle') }}
+{{ results_scenario('/api/catalog/entity-facets?facet=spec.lifecycle&filter=kind%3Dapi') }}
+{{ results_scenario('/api/catalog/entity-facets?facet=spec.lifecycle&filter=kind%3Dcomponent') }}
+{{ results_scenario('/api/catalog/entity-facets?facet=spec.type&filter=kind%3Dapi') }}
+{{ results_scenario('/api/catalog/entity-facets?facet=spec.type&filter=kind%3Dcomponent') }}
