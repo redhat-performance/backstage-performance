@@ -44,7 +44,7 @@ backstage_url() {
 }
 
 create_per_grp() {
-  echo "Creating entity YAML files"
+  echo "[INFO][$(date --utc -Ins)] Creating entity YAML files"
   varname=$2
   obj_count=${!varname}
   if [[ -z ${!varname} ]]; then
@@ -73,7 +73,7 @@ create_per_grp() {
 }
 
 clone_and_upload() {
-  echo "Uploading entities to GitHub"
+  echo "[INFO][$(date --utc -Ins)] Uploading entities to GitHub"
   git_str="${GITHUB_USER}:${GITHUB_TOKEN}@github.com"
   base_name=$(basename "$GITHUB_REPO")
   git_dir=$TMP_DIR/${base_name}
@@ -123,7 +123,7 @@ create_group() {
     -H 'Content-Type: application/json' \
     -H 'Authorization: Bearer '"$token" \
     --data-raw '{"name": "'"${groupname}"'"}' |& tee -a "$TMP_DIR/create_group.log"
-  echo "Group $groupname created" >>"$TMP_DIR/create_group.log"
+  echo "[INFO][$(date --utc -Ins)] Group $groupname created" >>"$TMP_DIR/create_group.log"
 }
 
 create_groups() {
@@ -142,7 +142,7 @@ create_user() {
     -H 'Content-Type: application/json' \
     -H 'Authorization: Bearer '"$token" \
     --data-raw '{"firstName":"'"${username}"'","lastName":"tester", "email":"'"${username}"'@test.com", "enabled":"true", "username":"'"${username}"'","groups":["/'"${groupname}"'"]}' |& tee -a "$TMP_DIR/create_user.log"
-  echo "User $username ($groupname) created" >>"$TMP_DIR/create_user.log"
+  echo "[INFO][$(date --utc -Ins)] User $username ($groupname) created" >>"$TMP_DIR/create_user.log"
 }
 
 create_users() {
@@ -154,12 +154,18 @@ create_users() {
 
 token_lockfile="$TMP_DIR/token.lockfile"
 log_token() {
-  token_log="$TMP_DIR/get_token.log"
-  echo "[$(date --utc -Ins)] $1" >>"$token_log"
+  echo "[${2:-INFO}][$(date --utc -Ins)] $1" >>"$TMP_DIR/get_token.log"
+}
+
+log_token_info() {
+  log_token "$1" "INFO"
+}
+
+log_token_err() {
+  log_token "$1" "ERROR"
 }
 
 get_token() {
-  token_log="$TMP_DIR/get_token.log"
   token_file=$TMP_DIR/token.json
   while ! mkdir "$token_lockfile" 2>/dev/null; do
     sleep 0.5s
@@ -169,21 +175,21 @@ get_token() {
 
   timeout_timestamp=$(date -d "60 seconds" "+%s")
   while [ ! -f "$token_file" ] || [ ! -s "$token_file" ] || [ "$(date +%s)" -gt "$(jq -rc '.expires_in_timestamp' "$token_file")" ]; do
-    log_token "refreshing keycloak token"
-    keycloak_pass=$(oc -n "${RHDH_NAMESPACE}" get secret credential-example-sso -o template --template='{{.data.ADMIN_PASSWORD}}' | base64 -d)
-    curl -s -k "$(keycloak_url)/auth/realms/master/protocol/openid-connect/token" -d username=admin -d "password=${keycloak_pass}" -d 'grant_type=password' -d 'client_id=admin-cli' | jq -r ".expires_in_timestamp = $(date -d '30 seconds' +%s)" >"$token_file"
+    log_token_info "Refreshing keycloak token"
     if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
-      log_token "ERROR: Timeout getting keycloak token"
+      log_token_err "Timeout getting keycloak token"
       exit 1
-    else
-      log_token "Re-attempting to get keycloak token"
-      sleep 5s
     fi
+    keycloak_pass=$(oc -n "${RHDH_NAMESPACE}" get secret credential-example-sso -o template --template='{{.data.ADMIN_PASSWORD}}' | base64 -d)
+    if ! curl -s -k "$(keycloak_url)/auth/realms/master/protocol/openid-connect/token" -d username=admin -d "password=${keycloak_pass}" -d 'grant_type=password' -d 'client_id=admin-cli' | jq -r ".expires_in_timestamp = $(date -d '30 seconds' +%s)" >"$token_file"; then
+      log_token_err "Unable to get token, re-attempting"
+    fi
+    sleep 5s
   done
 
-  rm -rf "$token_lockfile"
   jq -rc '.access_token' "$token_file"
+  rm -rf "$token_lockfile"
 }
 
-export -f keycloak_url backstage_url backstage_url get_token create_group create_user log_token
+export -f keycloak_url backstage_url backstage_url get_token create_group create_user log_token log_token_info log_token_err
 export kc_lockfile bs_lockfile token_lockfile

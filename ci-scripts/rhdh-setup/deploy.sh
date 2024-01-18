@@ -20,6 +20,10 @@ repo_name="$RHDH_NAMESPACE-helm-repo"
 export RHDH_DEPLOYMENT_REPLICAS=${RHDH_DEPLOYMENT_REPLICAS:-1}
 export RHDH_DB_REPLICAS=${RHDH_DB_REPLICAS:-1}
 export RHDH_DB_STORAGE=${RHDH_DB_STORAGE:-1Gi}
+export RHDH_RESOURCES_CPU_REQUESTS=${RHDH_RESOURCES_CPU_REQUESTS:-}
+export RHDH_RESOURCES_CPU_LIMITS=${RHDH_RESOURCES_CPU_LIMITS:-}
+export RHDH_RESOURCES_MEMORY_REQUESTS=${RHDH_RESOURCES_MEMORY_REQUESTS:-}
+export RHDH_RESOURCES_MEMORY_LIMITS=${RHDH_RESOURCES_MEMORY_LIMITS:-}
 export RHDH_KEYCLOAK_REPLICAS=${RHDH_KEYCLOAK_REPLICAS:-1}
 
 export RHDH_IMAGE_REGISTRY=${RHDH_IMAGE_REGISTRY:-}
@@ -44,13 +48,14 @@ wait_to_start() {
     rn=$resource/$name
     description=${5:-$rn}
     timeout_timestamp=$(date -d "$initial_timeout seconds" "+%s")
+    interval=10s
     while ! /bin/bash -c "$clin get $rn -o name"; do
         if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
-            echo "ERROR: Timeout waiting for $description to start"
+            echo "[ERROR][$(date --utc -Ins)] Timeout waiting for $description to start"
             exit 1
         else
-            echo "Waiting for $description to start..."
-            sleep 5s
+            echo "[INFO][$(date --utc -Ins)] Waiting $interval for $description to start..."
+            sleep "$interval"
         fi
     done
     $clin rollout status "$rn" --timeout="${wait_timeout}s"
@@ -107,7 +112,6 @@ backstage_install() {
         chart_origin="$chart_origin@$RHDH_HELM_CHART_VERSION"
     fi
     echo "Installing RHDH Helm chart $RHDH_HELM_RELEASE_NAME from $chart_origin in $RHDH_NAMESPACE namespace"
-    #shellcheck disable=SC2086
     envsubst \
         '${OPENSHIFT_APP_DOMAIN} \
         ${RHDH_HELM_RELEASE_NAME} \
@@ -118,7 +122,13 @@ backstage_install() {
         ${RHDH_IMAGE_REPO} \
         ${RHDH_IMAGE_TAG} \
         ${RHDH_NAMESPACE} \
-        ' <"$chart_values" | tee "$TMP_DIR/chart-values.yaml" | helm upgrade --install "${RHDH_HELM_RELEASE_NAME}" --devel "${repo_name}/${RHDH_HELM_CHART}" ${version_arg} -n "${RHDH_NAMESPACE}" --values -
+        ' <"$chart_values" >"$TMP_DIR/chart-values.yaml"
+    if [ -n "${RHDH_RESOURCES_CPU_REQUESTS}" ]; then yq -i '.upstream.backstage.resources.requests.cpu = "'"${RHDH_RESOURCES_CPU_REQUESTS}"'"' "$TMP_DIR/chart-values.yaml"; fi
+    if [ -n "${RHDH_RESOURCES_CPU_LIMITS}" ]; then yq -i '.upstream.backstage.resources.limits.cpu = "'"${RHDH_RESOURCES_CPU_LIMITS}"'"' "$TMP_DIR/chart-values.yaml"; fi
+    if [ -n "${RHDH_RESOURCES_MEMORY_REQUESTS}" ]; then yq -i '.upstream.backstage.resources.requests.memory = "'"${RHDH_RESOURCES_MEMORY_REQUESTS}"'"' "$TMP_DIR/chart-values.yaml"; fi
+    if [ -n "${RHDH_RESOURCES_MEMORY_LIMITS}" ]; then yq -i '.upstream.backstage.resources.limits.memory = "'"${RHDH_RESOURCES_MEMORY_LIMITS}"'"' "$TMP_DIR/chart-values.yaml"; fi
+    #shellcheck disable=SC2086
+    helm upgrade --install "${RHDH_HELM_RELEASE_NAME}" --devel "${repo_name}/${RHDH_HELM_CHART}" ${version_arg} -n "${RHDH_NAMESPACE}" --values "$TMP_DIR/chart-values.yaml"
     wait_to_start statefulset "${RHDH_HELM_RELEASE_NAME}-postgresql-read" 300 300
     wait_to_start deployment "${RHDH_HELM_RELEASE_NAME}-developer-hub" 300 300
 }
