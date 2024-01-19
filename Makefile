@@ -34,7 +34,7 @@ export RHDH_DB_REPLICAS ?= 1
 export RHDH_DB_STORAGE ?= 1Gi
 export RHDH_RESOURCES_CPU_REQUESTS ?=
 export RHDH_RESOURCES_CPU_LIMITS ?=
-export RHDH_RESOURCES_MEMORY_RESOURCES ?=
+export RHDH_RESOURCES_MEMORY_REQUESTS ?=
 export RHDH_RESOURCES_MEMORY_LIMITS ?=
 export RHDH_KEYCLOAK_REPLICAS ?= 1
 
@@ -75,14 +75,14 @@ namespace:
 
 ## Deploy RHDH
 .PHONY: deploy-rhdh
-deploy-rhdh:
+deploy-rhdh: $(TMP_DIR)
 	date --utc -Ins>$(TMP_DIR)/deploy-before
 	cd ./ci-scripts/rhdh-setup/; ./deploy.sh -i
 	date --utc -Ins>$(TMP_DIR)/deploy-after
 
 ## Create users, groups and objects such as components and APIs in RHDH
 .PHONY: populate-rhdh
-populate-rhdh:
+populate-rhdh: $(TMP_DIR)
 	date --utc -Ins>$(TMP_DIR)/populate-before
 	cd ./ci-scripts/rhdh-setup/; ./deploy.sh -c
 	date --utc -Ins>$(TMP_DIR)/populate-after
@@ -91,6 +91,16 @@ populate-rhdh:
 .PHONY: undeploy-rhdh
 undeploy-rhdh:
 	cd ./ci-scripts/rhdh-setup/; ./deploy.sh -d
+
+## Create temp directory
+.PHONY: $(TMP_DIR)
+$(TMP_DIR):
+	mkdir -p $(TMP_DIR)
+
+## Create artifacts directory
+.PHONY: $(ARTIFACT_DIR)
+$(ARTIFACT_DIR):
+	mkdir -p $(ARTIFACT_DIR)
 
 ##	=== Locust Operator ===
 
@@ -126,8 +136,7 @@ clean:
 ## Deploy and run the locust test
 ## Run `make test SCENARIO=...` to run a specific scenario
 .PHONY: test
-test:
-	mkdir -p $(ARTIFACT_DIR)
+test: $(TMP_DIR) $(ARTIFACT_DIR)
 	echo $(SCENARIO)>$(TMP_DIR)/benchmark-scenario
 	cat locust-test-template.yaml | envsubst | kubectl apply --namespace $(LOCUST_NAMESPACE) -f -
 	kubectl create --namespace $(LOCUST_NAMESPACE) configmap locust.$(SCENARIO) --from-file scenarios/$(SCENARIO).py --dry-run=client -o yaml | kubectl apply --namespace $(LOCUST_NAMESPACE) -f -

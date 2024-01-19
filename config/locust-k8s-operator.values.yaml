@@ -7,9 +7,9 @@ config:
     resource:
       cpuRequest: 250m
       memRequest: 128Mi
-      ephemeralRequest: 30M
-      cpuLimit: 1000m
-      memLimit: 1024Mi
-      ephemeralLimit: 50M
+      ephemeralRequest: 30Mi
+      cpuLimit: 2000m
+      memLimit: 2Gi
+      ephemeralLimit: 100Mi
     metricsExporter:
       image: "quay.io/backstage-performance/locust_exporter:latest"

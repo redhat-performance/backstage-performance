@@ -40,6 +40,9 @@ export GROUP_COUNT="${GROUP_COUNT:-1}"
 export API_COUNT="${API_COUNT:-1}"
 export COMPONENT_COUNT="${COMPONENT_COUNT:-1}"
 
+TMP_DIR=$(readlink -m "${TMP_DIR:-.tmp}")
+mkdir -p "${TMP_DIR}"
+
 wait_to_start() {
     resource=${1:-deployment}
     name=${2:-name}
