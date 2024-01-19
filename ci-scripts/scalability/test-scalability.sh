@@ -17,9 +17,9 @@ read -ra workers <<<"${SCALE_WORKERS:-5}"
 
 read -ra active_users_spawn_rate <<<"${SCALE_ACTIVE_USERS_SPAWN_RATES:-1:1 200:40}"
 
-read -ra bs_users_groups <<<"${SCALE_BS_USERS_GROUPS:-1:1 15000:5000}"
+read -ra bs_users_groups <<<"${SCALE_BS_USERS_GROUPS:-1:1 10000:2500}"
 
-read -ra catalog_sizes <<<"${SCALE_CATALOG_SIZES:-1 10000}"
+read -ra catalog_apis_components <<<"${SCALE_CATALOG_SIZES:-1:1 10000:10000}"
 
 read -ra replicas <<<"${SCALE_REPLICAS:-5}"
 
@@ -31,7 +31,7 @@ read -ra memory_requests_limits <<<"${SCALE_MEMORY_REQUESTS_LIMITS:-:}"
 
 echo
 echo "////// RHDH scalability test //////"
-echo "Number of scalability matrix iterations: $((${#workers[*]} * ${#active_users_spawn_rate[*]} * ${#bs_users_groups[*]} * ${#catalog_sizes[*]} * ${#replicas[*]} * ${#db_storages[*]}))"
+echo "Number of scalability matrix iterations: $((${#workers[*]} * ${#active_users_spawn_rate[*]} * ${#bs_users_groups[*]} * ${#catalog_apis_components[*]} * ${#replicas[*]} * ${#db_storages[*]} * ${#cpu_requests_limits[*]} * ${#memory_requests_limits[*]}))"
 echo
 
 wait_for_indexing() {
@@ -70,17 +70,20 @@ mkdir -p "${SCALABILITY_ARTIFACTS}"
 for w in "${workers[@]}"; do
     for bu_bg in "${bs_users_groups[@]}"; do
         IFS=":" read -ra tokens <<<"${bu_bg}"
-        bu="${tokens[0]}"
-        bg="${tokens[1]}"
+        bu="${tokens[0]}"                                        # backstage users
+        [[ "${#tokens[@]}" == 1 ]] && bg="" || bg="${tokens[1]}" # backstage components
         for cr_cl in "${cpu_requests_limits[@]}"; do
             IFS=":" read -ra tokens <<<"${cr_cl}"
-            cr="${tokens[0]}"
-            cl="${tokens[1]}"
+            cr="${tokens[0]}"                                        # cpu requests
+            [[ "${#tokens[@]}" == 1 ]] && cl="" || cl="${tokens[1]}" # cpu limits
             for mr_ml in "${memory_requests_limits[@]}"; do
                 IFS=":" read -ra tokens <<<"${mr_ml}"
-                mr="${tokens[0]}"
-                ml="${tokens[1]}"
-                for c in "${catalog_sizes[@]}"; do
+                mr="${tokens[0]}"                                        # memory requests
+                [[ "${#tokens[@]}" == 1 ]] && ml="" || ml="${tokens[1]}" # memory limits
+                for a_c in "${catalog_apis_components[@]}"; do
+                    IFS=":" read -ra tokens <<<"${a_c}"
+                    a="${tokens[0]}"                                       # apis
+                    [[ "${#tokens[@]}" == 1 ]] && c="" || c="${tokens[1]}" # components
                     for r in "${replicas[@]}"; do
                         for s in "${db_storages[@]}"; do
                             echo
@@ -98,9 +101,9 @@ for w in "${workers[@]}"; do
                             export BACKSTAGE_USER_COUNT=$bu
                             export GROUP_COUNT=$bg
                             export WORKERS=$w
-                            export API_COUNT=$c
+                            export API_COUNT=$a
                             export COMPONENT_COUNT=$c
-                            index="${r}r-db_${s}-${bu}bu-${bg}bg-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${c}c"
+                            index="${r}r-db_${s}-${bu}bu-${bg}bg-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c"
                             set +x
                             oc login "$OPENSHIFT_API" -u "$OPENSHIFT_USERNAME" -p "$OPENSHIFT_PASSWORD" --insecure-skip-tls-verify=true
                             make undeploy-rhdh
@@ -110,19 +113,19 @@ for w in "${workers[@]}"; do
                             wait_for_indexing |& tee "$setup_artifacts/after-setup-search.log"
                             for au_sr in "${active_users_spawn_rate[@]}"; do
                                 IFS=":" read -ra tokens <<<"${au_sr}"
-                                active_users=${tokens[0]}
-                                spawn_rate=${tokens[1]}
+                                au=${tokens[0]}                                          # active users
+                                [[ "${#tokens[@]}" == 1 ]] && sr="" || sr="${tokens[1]}" # spawn rate
                                 echo
                                 echo "/// Running the scalability test ///"
                                 echo
                                 set -x
                                 export SCENARIO=${SCENARIO:-search-catalog}
-                                export USERS="${active_users}"
+                                export USERS="${au}"
                                 export DURATION=${DURATION:-5m}
-                                export SPAWN_RATE="${spawn_rate}"
+                                export SPAWN_RATE="${sr}"
                                 set +x
                                 make clean
-                                test_artifacts="$SCALABILITY_ARTIFACTS/$index/test/${active_users}u"
+                                test_artifacts="$SCALABILITY_ARTIFACTS/$index/test/${au}u"
                                 mkdir -p "$test_artifacts"
                                 wait_for_indexing |& tee "$test_artifacts/before-test-search.log"
                                 ARTIFACT_DIR=$test_artifacts ./ci-scripts/test.sh |& tee "$test_artifacts/test.log"
