@@ -39,7 +39,7 @@ for w in "${workers[@]}"; do
                     IFS=":" read -ra tokens <<<"${au_sr}"
                     active_users=${tokens[0]}
                     output="$ARTIFACT_DIR/scalability_c-${r}r-db_${s}-${bu}bu-${bg}bg-${w}w-${active_users}u.csv"
-                    header="CatalogSize${csv_delim}Apis${csv_delim}Components${csv_delim}AverageRPS${csv_delim}MaxRPS${csv_delim}AverageRT${csv_delim}MaxRT${csv_delim}FailRate${csv_delim}DBStorageUsed${csv_delim}DBStorageAvailable${csv_delim}DBStorageCapacity"
+                    header="CatalogSize${csv_delim}Apis${csv_delim}Components${csv_delim}MaxActiveUsers${csv_delim}AverageRPS${csv_delim}MaxRPS${csv_delim}AverageRT${csv_delim}MaxRT${csv_delim}Failures${csv_delim}FailRate${csv_delim}DBStorageUsed${csv_delim}DBStorageAvailable${csv_delim}DBStorageCapacity"
                     for cr_cl in "${cpu_requests_limits[@]}"; do
                         IFS=":" read -ra tokens <<<"${cr_cl}"
                         cr="${tokens[0]}"                                        # cpu requests
@@ -61,11 +61,13 @@ for w in "${workers[@]}"; do
                                     jq_cmd="\"$((a + c))\" \
                                         + $csv_delim_quoted + \"${a}\" \
                                         + $csv_delim_quoted + \"${c}\" \
+                                        + $csv_delim_quoted + (.results.locust_users.max | tostring) \
                                         + $csv_delim_quoted + (.results.Aggregated.locust_requests_current_rps.mean | tostring) \
                                         + $csv_delim_quoted + (.results.Aggregated.locust_requests_current_rps.max | tostring) \
                                         + $csv_delim_quoted + (.results.Aggregated.locust_requests_avg_response_time.mean | tostring) \
                                         + $csv_delim_quoted + (.results.Aggregated.locust_requests_avg_response_time.max | tostring) \
-                                        + $csv_delim_quoted + (.results.Aggregated.locust_requests_fail_ratio.mean | tostring) \
+                                        + $csv_delim_quoted + (.results.Aggregated.locust_requests_num_failures.max | tostring) \
+                                        + $csv_delim_quoted + (.results.locust_requests_fail_ratio.mean | tostring) \
                                         + $csv_delim_quoted + (.measurements.cluster.pv_stats.populate.\"data-rhdh-postgresql-primary-0\".used_bytes.max | tostring) \
                                         + $csv_delim_quoted + (.measurements.cluster.pv_stats.populate.\"data-rhdh-postgresql-primary-0\".available_bytes.min | tostring) \
                                         + $csv_delim_quoted + (.measurements.cluster.pv_stats.populate.\"data-rhdh-postgresql-primary-0\".capacity_bytes.max | tostring)"
