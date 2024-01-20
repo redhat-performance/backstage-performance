@@ -55,7 +55,7 @@ for w in "${workers[@]}"; do
                                 [[ "${#tokens[@]}" == 1 ]] && c="" || c="${tokens[1]}" # components
                                 index="${r}r-db_${s}-${bu}bu-${bg}bg-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c"
                                 echo "[$index] Looking for benchmark.json for..."
-                                benchmark_json="$(find "${ARTIFACT_DIR}" -name benchmark.json | grep "$index" || true)"
+                                benchmark_json="$(readlink -m "$(find "${ARTIFACT_DIR}" -name benchmark.json | grep "$index" || true)")"
                                 if [ -n "$benchmark_json" ]; then
                                     echo "[$index] Gathering data from $benchmark_json"
                                     jq_cmd="\"$((a + c))\" \
