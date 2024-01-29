@@ -54,10 +54,12 @@ for w in "${workers[@]}"; do
                                 a="${tokens[0]}"                                       # apis
                                 [[ "${#tokens[@]}" == 1 ]] && c="" || c="${tokens[1]}" # components
                                 index="${r}r-db_${s}-${bu}bu-${bg}bg-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c"
-                                echo "[$index] Looking for benchmark.json for..."
-                                benchmark_json="$(readlink -m "$(find "${ARTIFACT_DIR}" -name benchmark.json | grep "$index" || true)")"
+                                iteration="${index}/test/${active_users}u"
+                                echo "[$iteration] Looking for benchmark.json..."
+                                benchmark_json="$(find "${ARTIFACT_DIR}" -name benchmark.json | grep "$iteration" || true)"
                                 if [ -n "$benchmark_json" ]; then
-                                    echo "[$index] Gathering data from $benchmark_json"
+                                    benchmark_json="$(readlink -m "$benchmark_json")"
+                                    echo "[$iteration] Gathering data from $benchmark_json"
                                     jq_cmd="\"$((a + c))\" \
                                         + $csv_delim_quoted + \"${a}\" \
                                         + $csv_delim_quoted + \"${c}\" \
@@ -73,7 +75,7 @@ for w in "${workers[@]}"; do
                                         + $csv_delim_quoted + (.measurements.cluster.pv_stats.populate.\"data-rhdh-postgresql-primary-0\".capacity_bytes.max | tostring)"
                                     sed -Ee 's/: ([0-9]+\.[0-9]*[X]+[0-9e\+-]*|[0-9]*X+[0-9]*\.[0-9e\+-]*|[0-9]*X+[0-9]*\.[0-9]*X+[0-9e\+-]+)/: "\1"/g' "$benchmark_json" | jq -rc "$jq_cmd" >>"$output"
                                 else
-                                    echo "[$index] Unable to find benchmark.json"
+                                    echo "[$iteration] Unable to find benchmark.json"
                                     for _ in $(seq 1 "$(echo "$header" | tr -cd "$csv_delim" | wc -c)"); do
                                         echo -n ";" >>"$output"
                                     done
