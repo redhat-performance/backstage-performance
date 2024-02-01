@@ -141,7 +141,7 @@ create_user() {
   curl -s -k --location --request POST "$(keycloak_url)/auth/admin/realms/backstage/users" \
     -H 'Content-Type: application/json' \
     -H 'Authorization: Bearer '"$token" \
-    --data-raw '{"firstName":"'"${username}"'","lastName":"tester", "email":"'"${username}"'@test.com", "enabled":"true", "username":"'"${username}"'","groups":["/'"${groupname}"'"]}' |& tee -a "$TMP_DIR/create_user.log"
+    --data-raw '{"firstName":"'"${username}"'","lastName":"tester", "email":"'"${username}"'@test.com","emailVerified":"true", "enabled":"true", "username":"'"${username}"'","groups":["/'"${groupname}"'"],"credentials":[{"type":"password","value":"'"${KEYCLOAK_USER_PASS}"'","temporary":false}]}' |& tee -a "$TMP_DIR/create_user.log"
   echo "[INFO][$(date --utc -Ins)] User $username ($groupname) created" >>"$TMP_DIR/create_user.log"
 }
 
