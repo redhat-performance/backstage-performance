@@ -23,7 +23,7 @@ export RHDH_IMAGE_TAG ?=
 
 # RHDH Helm chart to deploy
 export RHDH_NAMESPACE ?= rhdh-performance
-export RHDH_HELM_REPO ?= https://gist.githubusercontent.com/rhdh-bot/63cef5cb6285889527bd6a67c0e1c2a9/raw
+export RHDH_HELM_REPO ?= https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/rhdh-1.1-rhel-9/installation
 export RHDH_HELM_CHART ?= developer-hub
 export RHDH_HELM_CHART_VERSION ?=
 export RHDH_HELM_RELEASE_NAME ?= rhdh
