@@ -6,8 +6,9 @@ set -o pipefail
 
 # Just a helper script to output CSV file based on all found benchmark-tekton.json files
 
-find . -name benchmark.json -print0 | while IFS= read -r -d '' filename; do 
-    jq <"${filename}" --raw-output '[
+find . -name benchmark.json -print0 | while IFS= read -r -d '' filename; do
+    sed -Ee 's/: ([0-9]+\.[0-9]*[X]+[0-9e\+-]*|[0-9]*X+[0-9]*\.[0-9e\+-]*|[0-9]*X+[0-9]*\.[0-9]*X+[0-9e\+-]+)/: "\1"/g' "${filename}" \
+        | jq --raw-output '[
         .metadata.env.BUILD_ID,
         .results.started,
         .results.ended,
