@@ -142,3 +142,5 @@ fi
 set +u
 deactivate
 set -u
+
+./ci-scripts/runs-to-csv.sh "$ARTIFACT_DIR" >"$ARTIFACT_DIR/summary.csv"
