@@ -89,3 +89,5 @@ for w in "${workers[@]}"; do
         done
     done
 done
+
+./ci-scripts/runs-to-csv.sh "$ARTIFACT_DIR" >"$ARTIFACT_DIR/summary.csv"
