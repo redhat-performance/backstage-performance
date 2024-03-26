@@ -4,6 +4,7 @@ export SCENARIO ?= baseline-test
 # Used to set --host option of locust CLI (base URL to load test). See https://docs.locust.io/en/stable/configuration.html#command-line-options for details
 export HOST ?= http://localhost
 
+export KEYCLOAK_USER_PASS ?= $(shell mktemp -u XXXXXXXXXX)
 # Used to set --users option of locust CLI (Peak number of concurrent Locust users.). See https://docs.locust.io/en/stable/configuration.html#command-line-options for details
 export USERS ?= 100
 
@@ -37,6 +38,8 @@ export RHDH_RESOURCES_CPU_LIMITS ?=
 export RHDH_RESOURCES_MEMORY_REQUESTS ?=
 export RHDH_RESOURCES_MEMORY_LIMITS ?=
 export RHDH_KEYCLOAK_REPLICAS ?= 1
+export LOCUST_EXTRA_CMD ?=
+export AUTH_PROVIDER ?=
 
 # python's venv base dir relative to the root of the repository
 PYTHON_VENV=.venv
@@ -138,10 +141,22 @@ clean:
 .PHONY: test
 test: $(TMP_DIR) $(ARTIFACT_DIR)
 	echo $(SCENARIO)>$(TMP_DIR)/benchmark-scenario
+ifneq ($(shell test $(AUTH_PROVIDER) == 'keycloak'  && echo 1 || echo 0),0)
+	$(eval key_pass := $(shell oc -n  rhdh-performance  get secret perf-test-secrets -o template --template='{{.data.keycloak_user_pass}}' | base64 -d))
+	$(eval key_host := $(shell oc  -n  rhdh-performance  get routes/keycloak -o template  --template='{{.spec.host}}' ))
+	$(eval LOCUST_EXTRA_CMD := --keycloak-host $(key_host) --keycloak-password $(key_pass)  )
+ifneq ($(shell test $(USERS) -gt $(WORKERS) && echo 1 || echo 0),0)
+	@echo "users greater than  workers "
+else
+	$(eval WORKERS := $(USERS))
+endif
+else
+	@echo "no changes"
+endif
 	cat locust-test-template.yaml | envsubst | kubectl apply --namespace $(LOCUST_NAMESPACE) -f -
 	kubectl create --namespace $(LOCUST_NAMESPACE) configmap locust.$(SCENARIO) --from-file scenarios/$(SCENARIO).py --dry-run=client -o yaml | kubectl apply --namespace $(LOCUST_NAMESPACE) -f -
 	date --utc -Ins>$(TMP_DIR)/benchmark-before
-	timeout=$$(date -d "30 seconds" "+%s"); while [ -z "$$(kubectl get --namespace $(LOCUST_NAMESPACE) pod -l performance-test-pod-name=$(SCENARIO)-test-master -o name)" ]; do if [ "$$(date "+%s")" -gt "$$timeout" ]; then echo "ERROR: Timeout waiting for locust master pod to start"; exit 1; else echo "Waiting for locust master pod to start..."; sleep 5s; fi; done
+	timeout=$$(date -d "480 seconds" "+%s"); while [ -z "$$(kubectl get --namespace $(LOCUST_NAMESPACE) pod -l performance-test-pod-name=$(SCENARIO)-test-master -o name)" ]; do if [ "$$(date "+%s")" -gt "$$timeout" ]; then echo "ERROR: Timeout waiting for locust master pod to start"; exit 1; else echo "Waiting for locust master pod to start..."; sleep 5s; fi; done
 	kubectl wait --namespace $(LOCUST_NAMESPACE) --for=condition=Ready=true $$(kubectl get --namespace $(LOCUST_NAMESPACE) pod -l performance-test-pod-name=$(SCENARIO)-test-master -o name)
 	@echo "Getting locust master log:"
 	kubectl logs --namespace $(LOCUST_NAMESPACE) -f -l performance-test-pod-name=$(SCENARIO)-test-master | tee load-test.log

@@ -39,6 +39,9 @@ export BACKSTAGE_USER_COUNT="${BACKSTAGE_USER_COUNT:-1}"
 export GROUP_COUNT="${GROUP_COUNT:-1}"
 export API_COUNT="${API_COUNT:-1}"
 export COMPONENT_COUNT="${COMPONENT_COUNT:-1}"
+export KEYCLOAK_USER_PASS=${KEYCLOAK_USER_PASS:-$(mktemp -u XXXXXXXXXX)}
+export AUTH_PROVIDER="${AUTH_PROVIDER:-''}"
+
 
 TMP_DIR=$(readlink -m "${TMP_DIR:-.tmp}")
 mkdir -p "${TMP_DIR}"
@@ -84,8 +87,11 @@ delete() {
 keycloak_install() {
     $cli create namespace "${RHDH_NAMESPACE}" --dry-run=client -o yaml | $cli apply -f -
     export KEYCLOAK_CLIENT_SECRET
+    export COOKIE_SECRET
     KEYCLOAK_CLIENT_SECRET=$(mktemp -u XXXXXXXXXX)
+    COOKIE_SECRET=$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr -d -- '\n' | tr -- '+/' '-_'; echo)
     envsubst <template/keycloak/keycloak-op.yaml | $clin apply -f -
+    envsubst <template/backstage/perf-test-secrets.yaml | $clin apply -f -
     grep -m 1 "rhsso-operator" <($clin get pods -w)
     wait_to_start deployment rhsso-operator 300 300
     envsubst <template/keycloak/keycloak.yaml | $clin apply -f -
@@ -97,8 +103,11 @@ keycloak_install() {
 
 # shellcheck disable=SC2016,SC1004
 backstage_install() {
+    cp "template/backstage/app-config.yaml" "$TMP_DIR/app-config.yaml"
+    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '. |= . + {"signInPage":"oauth2Proxy"}' "$TMP_DIR/app-config.yaml"; fi
+    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '. |= . + {"auth":{"environment":"production","providers":{"oauth2Proxy":{}}}}' "$TMP_DIR/app-config.yaml"; fi
     until envsubst <template/backstage/secret-rhdh-pull-secret.yaml | $clin apply -f -; do $clin delete secret rhdh-pull-secret; done
-    until $clin create configmap app-config-rhdh --from-file "app-config-rhdh.yaml=template/backstage/app-config.yaml"; do $clin delete configmap app-config-rhdh; done
+    until $clin create configmap app-config-rhdh --from-file "app-config-rhdh.yaml=$TMP_DIR/app-config.yaml"; do $clin delete configmap app-config-rhdh; done
     envsubst <template/backstage/plugin-secrets.yaml | $clin apply -f -
     helm repo remove "${repo_name}" || true
     helm repo add "${repo_name}" "${RHDH_HELM_REPO}"
@@ -115,6 +124,8 @@ backstage_install() {
         chart_origin="$chart_origin@$RHDH_HELM_CHART_VERSION"
     fi
     echo "Installing RHDH Helm chart $RHDH_HELM_RELEASE_NAME from $chart_origin in $RHDH_NAMESPACE namespace"
+    cp "$chart_values" "$TMP_DIR/chart-values.temp.yaml"
+    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.backstage |= . + load("template/backstage/oauth2-container-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"; fi
     envsubst \
         '${OPENSHIFT_APP_DOMAIN} \
         ${RHDH_HELM_RELEASE_NAME} \
@@ -125,11 +136,14 @@ backstage_install() {
         ${RHDH_IMAGE_REPO} \
         ${RHDH_IMAGE_TAG} \
         ${RHDH_NAMESPACE} \
-        ' <"$chart_values" >"$TMP_DIR/chart-values.yaml"
+        ${COOKIE_SECRET} \
+        ' <"$TMP_DIR/chart-values.temp.yaml" >"$TMP_DIR/chart-values.yaml"
     if [ -n "${RHDH_RESOURCES_CPU_REQUESTS}" ]; then yq -i '.upstream.backstage.resources.requests.cpu = "'"${RHDH_RESOURCES_CPU_REQUESTS}"'"' "$TMP_DIR/chart-values.yaml"; fi
     if [ -n "${RHDH_RESOURCES_CPU_LIMITS}" ]; then yq -i '.upstream.backstage.resources.limits.cpu = "'"${RHDH_RESOURCES_CPU_LIMITS}"'"' "$TMP_DIR/chart-values.yaml"; fi
     if [ -n "${RHDH_RESOURCES_MEMORY_REQUESTS}" ]; then yq -i '.upstream.backstage.resources.requests.memory = "'"${RHDH_RESOURCES_MEMORY_REQUESTS}"'"' "$TMP_DIR/chart-values.yaml"; fi
     if [ -n "${RHDH_RESOURCES_MEMORY_LIMITS}" ]; then yq -i '.upstream.backstage.resources.limits.memory = "'"${RHDH_RESOURCES_MEMORY_LIMITS}"'"' "$TMP_DIR/chart-values.yaml"; fi
+    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.service.ports.targetPort = "oauth2-proxy"' "$TMP_DIR/chart-values.yaml"; fi
+    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.service.ports.backend = 4180' "$TMP_DIR/chart-values.yaml"; fi
     #shellcheck disable=SC2086
     helm upgrade --install "${RHDH_HELM_RELEASE_NAME}" --devel "${repo_name}/${RHDH_HELM_CHART}" ${version_arg} -n "${RHDH_NAMESPACE}" --values "$TMP_DIR/chart-values.yaml"
     wait_to_start statefulset "${RHDH_HELM_RELEASE_NAME}-postgresql-read" 300 300
@@ -232,24 +246,30 @@ install() {
     setup_monitoring
 }
 
-while getopts "crdi" flag; do
+while getopts ":i:crd" flag; do
     case "${flag}" in
     c)
         create_objs
+	exit 0
         ;;
     r)
         delete
         install
+	exit 0
         ;;
     d)
         delete
+	exit 0
         ;;
     i)
+        AUTH_PROVIDER="$OPTARG"
         install
+	exit 0
         ;;
-    *)
+    \?)
         echo "WARNING: Invalid option: ${flag} - defaulting to -i (install)"
-        install
         ;;
     esac
 done
+
+install

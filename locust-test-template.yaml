@@ -10,6 +10,7 @@ spec:
     --users ${USERS}
     --spawn-rate ${SPAWN_RATE}
     --run-time ${DURATION}
+    ${LOCUST_EXTRA_CMD}
   workerCommandSeed: --locustfile /lotest/src/${SCENARIO}.py
   workerReplicas: ${WORKERS}
   configMap: locust.${SCENARIO}
