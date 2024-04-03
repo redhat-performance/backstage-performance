@@ -141,7 +141,7 @@ clean:
 .PHONY: test
 test: $(TMP_DIR) $(ARTIFACT_DIR)
 	echo $(SCENARIO)>$(TMP_DIR)/benchmark-scenario
-ifneq ($(shell test $(AUTH_PROVIDER) == 'keycloak'  && echo 1 || echo 0),0)
+ifneq ($(shell test '$(AUTH_PROVIDER)' == 'keycloak' && echo 1 || echo 0),0)
 	$(eval key_pass := $(shell oc -n  rhdh-performance  get secret perf-test-secrets -o template --template='{{.data.keycloak_user_pass}}' | base64 -d))
 	$(eval key_host := $(shell oc  -n  rhdh-performance  get routes/keycloak -o template  --template='{{.spec.host}}' ))
 	$(eval LOCUST_EXTRA_CMD := --keycloak-host $(key_host) --keycloak-password $(key_pass)  )

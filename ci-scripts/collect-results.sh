@@ -144,3 +144,12 @@ deactivate
 set -u
 
 ./ci-scripts/runs-to-csv.sh "$ARTIFACT_DIR" >"$ARTIFACT_DIR/summary.csv"
+
+# Error report
+find "$ARTIFACT_DIR" -name load-test.log -print0 | sort -V | while IFS= read -r file; do
+    if grep "Error report" "$file" >/dev/null; then
+        tail -n +"$(grep -n "Error report" "$file" | head -n 1 | cut -d ":" -f 1)" "$file"
+    else
+        echo 'No errors found!'
+    fi
+done >"$ARTIFACT_DIR/error-report.txt"

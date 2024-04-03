@@ -9,6 +9,9 @@ echo -e "\n === Collecting test results and metrics for RHDH scalability test ==
 ARTIFACT_DIR=$(readlink -m "${ARTIFACT_DIR:-.artifacts}")
 mkdir -p "$ARTIFACT_DIR"
 
+SCALABILITY_ARTIFACTS="$ARTIFACT_DIR/scalability"
+mkdir -p "$SCALABILITY_ARTIFACTS"
+
 read -ra workers <<<"${SCALE_WORKERS:-5}"
 
 read -ra active_users_spawn_rate <<<"${SCALE_ACTIVE_USERS_SPAWN_RATES:-1:1 200:40}"
@@ -28,6 +31,7 @@ read -ra memory_requests_limits <<<"${SCALE_MEMORY_REQUESTS_LIMITS:-:}"
 csv_delim=";"
 csv_delim_quoted="\"$csv_delim\""
 
+echo "Collecting scalability data"
 for w in "${workers[@]}"; do
     for r in "${replicas[@]}"; do
         for bu_bg in "${bs_users_groups[@]}"; do
@@ -90,4 +94,12 @@ for w in "${workers[@]}"; do
     done
 done
 
+echo "Collecting scalability summary"
 ./ci-scripts/runs-to-csv.sh "$ARTIFACT_DIR" >"$ARTIFACT_DIR/summary.csv"
+
+echo "Collecting error reports"
+find "$ARTIFACT_DIR/scalability" -name error-report.txt | sort -V | while IFS= read -r error_report; do
+    # shellcheck disable=SC2001
+    echo "$error_report" | sed -e 's,.*/scalability/\([^/]\+\)/test/\([^/]\+\)/error-report.txt.*,[\1/\2],g'
+    cat "$error_report"
+done >"$ARTIFACT_DIR/error-report.txt"
