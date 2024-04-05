@@ -47,7 +47,7 @@ upstream:
       backend: 7007
     extraAppConfig:
       - configMapRef: app-config-rhdh
-        filename: app-config-rhdh.yaml
+        filename: app-config.rhdh.yaml
     extraEnvVars:
       - name: POSTGRESQL_ADMIN_PASSWORD
         valueFrom:
@@ -70,12 +70,12 @@ upstream:
         value: "backstage"
       - name: KEYCLOAK_REALM
         value: "backstage"
-      - name: KEYCLOAK_CLIENT_ID
+      - name: CLIENT_ID
         valueFrom:
           secretKeyRef:
             key: CLIENT_ID
             name: keycloak-client-secret-backstage
-      - name: KEYCLOAK_CLIENT_SECRET
+      - name: CLIENT_SECRET
         valueFrom:
           secretKeyRef:
             key: CLIENT_SECRET
@@ -84,12 +84,6 @@ upstream:
         value: "warn"
       - name: NODE_TLS_REJECT_UNAUTHORIZED
         value: "0"
-    image:
-      debug: false
-      pullPolicy: Always
-      registry: ${RHDH_IMAGE_REGISTRY}
-      repository: ${RHDH_IMAGE_REPO}
-      tag: ${RHDH_IMAGE_TAG}
     installDir: /app
     replicas: ${RHDH_DEPLOYMENT_REPLICAS}
     revisionHistoryLimit: 10
