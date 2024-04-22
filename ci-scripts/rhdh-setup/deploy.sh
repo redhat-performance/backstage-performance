@@ -129,6 +129,7 @@ backstage_install() {
     envsubst \
         '${OPENSHIFT_APP_DOMAIN} \
         ${RHDH_HELM_RELEASE_NAME} \
+        ${RHDH_HELM_CHART} \
         ${RHDH_DEPLOYMENT_REPLICAS} \
         ${RHDH_DB_REPLICAS} \
         ${RHDH_DB_STORAGE} \
