@@ -37,7 +37,7 @@ backstage_url() {
     exit 1
   }
   if [ ! -f "$f" ]; then
-    echo -n "https://$(oc get routes "${RHDH_HELM_RELEASE_NAME}-developer-hub" -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')" >"$f"
+    echo -n "https://$(oc get routes "${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}" -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')" >"$f"
   fi
   flock -u 5
   cat "$f"

@@ -17,7 +17,7 @@ spec:
     implicitFlowEnabled: false
     publicClient: false
     redirectUris:
-      - https://${RHDH_HELM_RELEASE_NAME}-developer-hub-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}/oauth2/callback
+      - https://${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}/oauth2/callback
     serviceAccountsEnabled: true
     standardFlowEnabled: true
   realmSelector:
