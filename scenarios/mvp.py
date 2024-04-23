@@ -141,10 +141,6 @@ class MVPTest(HttpUser):
             r = self.client.get('/api/auth/oauth2Proxy/refresh', verify=False)
             qs_str=urllib.parse.parse_qs(r.url)
             STATE=qs_str['state']
-
-            param = {'client_id': self.CLIENTID, 'state': STATE, 'redirect_uri': self.REDIRECT_URL,'scope': 'openid email profile','response_type': 'code'}
-            r = self.client.get(self.KEYCLOAK_URL+"/realms/backstage/protocol/openid-connect/auth",  verify=False, params=param)
-
             login_cookies=r.cookies
             pattern = r'action="([^"]*)"'
             LOGIN_URL_tmp=re.findall(pattern, str(r.content))[0]
