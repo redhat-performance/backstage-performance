@@ -2,6 +2,7 @@
 
 export PRE_LOAD_DB=${PRE_LOAD_DB:-true}
 export RHDH_HELM_REPO=${RHDH_HELM_REPO:-https://gist.githubusercontent.com/rhdh-bot/63cef5cb6285889527bd6a67c0e1c2a9/raw}
+export RHDH_HELM_RELEASE_NAME=${RHDH_HELM_RELEASE_NAME:-rhdh}
 export RHDH_HELM_CHART=${RHDH_HELM_CHART:-developer-hub}
 export RHDH_NAMESPACE=${RHDH_NAMESPACE:-rhdh-performance}
 
@@ -36,7 +37,8 @@ echo
 
 wait_for_indexing() {
     if [ "$WAIT_FOR_SEARCH_INDEX" == "true" ]; then
-        HOST="https://$(oc get routes rhdh-developer-hub -n "${RHDH_NAMESPACE:-rhdh-performance}" -o jsonpath='{.spec.host}')"
+        rhdh_route="${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}"
+        HOST="https://$(oc get routes "${rhdh_route}" -n "${RHDH_NAMESPACE:-rhdh-performance}" -o jsonpath='{.spec.host}')"
 
         start=$(date +%s)
         timeout_timestamp=$(date -d "3600 seconds" "+%s")

@@ -9,8 +9,13 @@ echo -e "\n === Executing RHDH load test ===\n"
 export SCENARIO
 
 # testing env
-export HOST
-HOST="https://$(oc get routes rhdh-developer-hub -n "${RHDH_NAMESPACE:-rhdh-performance}" -o jsonpath='{.spec.host}')"
+export HOST RHDH_HELM_RELEASE_NAME RHDH_HELM_CHART
+
+RHDH_HELM_RELEASE_NAME=${RHDH_HELM_RELEASE_NAME:-rhdh}
+RHDH_HELM_CHART=${RHDH_HELM_CHART:-redhat-developer-hub}
+
+rhdh_route="${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}"
+HOST="https://$(oc get routes "${rhdh_route}" -n "${RHDH_NAMESPACE:-rhdh-performance}" -o jsonpath='{.spec.host}')"
 # end-of testing env
 
 ARTIFACT_DIR=$(readlink -m "${ARTIFACT_DIR:-.artifacts}")
