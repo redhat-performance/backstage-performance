@@ -1,32 +1,9 @@
-#!/usr/bin/env python3
 
 import pytest
-from playwright.sync_api import sync_playwright
-
-
-@pytest.fixture(scope="module")
-def browser():
-    # Initialize Playwright
-    with sync_playwright() as p:
-        # Launch the Chromium browser
-        browser = p.chromium.launch(headless=False)
-        # Provide the browser instance to the test
-        yield browser
-        # Teardown: Close the browser after the test completes
-        browser.close()
-
+from playwright.sync_api import Page
 
 @pytest.fixture(scope="function")
-def page(browser):
-    # Create a new page within the browser context
-    page = browser.new_page()
-    yield page
-    # Close the page after the test completes
-    page.close()
-
-
-@pytest.fixture(scope="function")
-def access(page):
+def access(page:Page):
     page.goto(
         "https://rhdh-redhat-developer-hub-rhdh-performance.apps.rhperfcluster.ptjz.p1.openshiftapps.com/"
     )
@@ -37,8 +14,10 @@ def access(page):
     guestEnterButton.click()
 
 
-def test_guest_enter(page, access, browser):
+def test_guest_enter(page:Page, access):
+
     # Assertion: Check if the page title matches the expected title
+    page.wait_for_timeout(5000)
     assert page.title() == "Welcome back! | Red Hat Developer Hub"
 
 
@@ -46,7 +25,7 @@ def test_guest_enter(page, access, browser):
 # def test_github_sigin(browser):
 
 
-def test_search_bar(page, access, browser):
+def test_search_bar(page: Page, access):
 
     searchBar = page.wait_for_selector(
         "#search-bar-text-field"
@@ -63,7 +42,7 @@ def test_search_bar(page, access, browser):
     assert page.title() == "demo | Overview | Red Hat Developer Hub"
 
 
-def test_learning_path(page, access, browser):
+def test_learning_path(page: Page, access):
 
     learningPathButton = page.wait_for_selector(
         '//span[contains(text(), "Learning Paths")]'
