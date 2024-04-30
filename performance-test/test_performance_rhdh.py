@@ -1,9 +1,10 @@
-
 import pytest
 from playwright.sync_api import Page
+import time
+
 
 @pytest.fixture(scope="function")
-def access(page:Page):
+def access(page: Page):
     page.goto(
         "https://rhdh-redhat-developer-hub-rhdh-performance.apps.rhperfcluster.ptjz.p1.openshiftapps.com/"
     )
@@ -14,7 +15,7 @@ def access(page:Page):
     guestEnterButton.click()
 
 
-def test_guest_enter(page:Page, access):
+def test_guest_enter(page: Page, access):
 
     # Assertion: Check if the page title matches the expected title
     page.wait_for_timeout(5000)
@@ -23,6 +24,7 @@ def test_guest_enter(page:Page, access):
 
 # ==================================================TODO===============================================================
 # def test_github_sigin(browser):
+# pass
 
 
 def test_search_bar(page: Page, access):
@@ -77,3 +79,34 @@ def test_learning_path(page: Page, access):
     )
     learningSelect.click()
     page.wait_for_timeout(5000)  # 5 seconds delay (5000 milliseconds)
+
+
+def test_catalog(page: Page, access):
+
+    catalog = page.wait_for_selector('//span[contains(text(), "Catalog")]')
+    catalog.click()
+
+    createButton = page.wait_for_selector('//span[contains(text(), "Create")]')
+    createButton.click()
+
+    registerExistingComponent = page.wait_for_selector(
+        '//span[contains(text(), "Register Existing Component")]'
+    )
+    registerExistingComponent.click()
+
+    url = page.wait_for_selector("#url")
+    url.type("https://github.com/backstage/backstage/blob/master/catalog-info.yaml")
+
+    analyzeButton = page.wait_for_selector('//span[contains(text(), "Analyze")]')
+    analyzeButton.click()
+
+    page.wait_for_timeout(2000) #2 seconds for processing
+    importButton = page.wait_for_selector('//span[contains(text(),"Import")]')
+    importButton.click()
+
+    viewComponent = page.wait_for_selector('//span[contains(text(),"View Component")]')
+    viewComponent.click()
+
+    page.wait_for_timeout(2000) #2 seconds for processing
+    assert page.title() == "backstage | Overview | Red Hat Developer Hub"
+    page.wait_for_timeout(5000)
