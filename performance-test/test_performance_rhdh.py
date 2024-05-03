@@ -1,6 +1,8 @@
 import pytest
 from playwright.sync_api import Page
 import time
+import os
+import psutil
 
 
 @pytest.fixture(scope="function")
@@ -8,18 +10,10 @@ def access(page: Page):
     page.goto(
         "https://rhdh-redhat-developer-hub-rhdh-performance.apps.rhperfcluster.ptjz.p1.openshiftapps.com/"
     )
-    page.wait_for_load_state("networkidle")
     guestEnterButton = page.wait_for_selector(
         '//span[@class="MuiButton-label-222" and text()="Enter"]'
     )
     guestEnterButton.click()
-
-
-def test_guest_enter(page: Page, access):
-
-    # Assertion: Check if the page title matches the expected title
-    page.wait_for_timeout(5000)
-    assert page.title() == "Welcome back! | Red Hat Developer Hub"
 
 
 # ==================================================TODO===============================================================
@@ -27,12 +21,25 @@ def test_guest_enter(page: Page, access):
 # pass
 
 
+def test_guest_enter(page: Page, access):
+
+    expected_title = "Welcome back! | Red Hat Developer Hub"
+    page.wait_for_selector('//h1[contains(text(),"Welcome back!")]')
+    print(
+        page.evaluate("window.performance.getEntriesByType('paint')")
+    )  # info painting page(rendering)
+    print(
+        page.evaluate("performance.getEntriesByType('navigation')")
+    )  # info about dom complete duration etc
+    assert page.title() == expected_title
+
+
 def test_search_bar(page: Page, access):
 
     searchBar = page.wait_for_selector(
         "#search-bar-text-field"
     )  # here '#' is used to grep id tag elements
-    searchBar.type("demo")  # Type demo in bug search bar
+    searchBar.type("demo")  # Type demo in big search bar
     searchBar.press("Enter")  # Press enter after typing demo
 
     markElement = page.wait_for_selector(
@@ -100,13 +107,13 @@ def test_catalog(page: Page, access):
     analyzeButton = page.wait_for_selector('//span[contains(text(), "Analyze")]')
     analyzeButton.click()
 
-    page.wait_for_timeout(2000) #2 seconds for processing
+    page.wait_for_timeout(2000)  # 2 seconds for processing
     importButton = page.wait_for_selector('//span[contains(text(),"Import")]')
     importButton.click()
 
     viewComponent = page.wait_for_selector('//span[contains(text(),"View Component")]')
     viewComponent.click()
 
-    page.wait_for_timeout(2000) #2 seconds for processing
+    page.wait_for_timeout(2000)  # 2 seconds for processing
     assert page.title() == "backstage | Overview | Red Hat Developer Hub"
     page.wait_for_timeout(5000)
