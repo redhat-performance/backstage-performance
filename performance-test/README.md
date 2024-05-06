@@ -9,7 +9,7 @@ This repository contains automated tests using Playwright for testing web applic
 
 ### Installation
 
-1. Install `pytest-playwright` using pip: `pip install pytest-playwright`
+1. pip3 install -r requirements.txt
 2. Install Playwright dependencies: `playwright install`
 
 ### Running Tests
