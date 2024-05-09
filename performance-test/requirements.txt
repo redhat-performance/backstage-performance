@@ -1,4 +1,2 @@
 playwright
-pytest-playwright
-pytest
 psutil
