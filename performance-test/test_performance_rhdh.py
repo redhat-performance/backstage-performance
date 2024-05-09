@@ -49,30 +49,26 @@ def test_guest_enter(page: Page, access):
     # Create a psutil.Process object for the current process
     p = psutil.Process(pid=current_pid)
 
-    # Get CPU times before opening the browser
+    # Get CPU times and IO counters before opening the browser
     cpu_times_before = p.cpu_times()
+    io_counters_before = p.io_counters()
 
     expected_title = "Welcome back! | Red Hat Developer Hub"
 
     # Wait for the page to load and assert the title
     for i in range(100):
-
         page.wait_for_selector('//h1[contains(text(),"Welcome back!")]')
-
-        print(
-            page.evaluate("window.performance.getEntriesByType('paint')")
-        )  # info about painting the page (rendering)
-        print(
-            page.evaluate("performance.getEntriesByType('navigation')")
-        )  # info about DOM complete duration etc
         assert page.title() == expected_title
         page.reload()
 
-    # Get CPU times after the page has loaded
+    # Get CPU times and IO counters after the page has loaded
     cpu_times_after = p.cpu_times()
+    io_counters_after = p.io_counters()
 
-    print("before:", cpu_times_before)
-    print("after:", cpu_times_after)
+    print("CPU times before:", cpu_times_before)
+    print("CPU times after:", cpu_times_after)
+    print("io counter before:", io_counters_before)
+    print("io counter after:", io_counters_after)
 
     # Calculate CPU time differences
     user_time_diff = cpu_times_after.user - cpu_times_before.user
@@ -89,6 +85,18 @@ def test_guest_enter(page: Page, access):
     print("System CPU time during page load:", system_time_diff)
     print("Children User CPU time during page load:", children_user_time_diff)
     print("Children System CPU time during page load:", children_system_time_diff)
+
+    # Calculate IO counters differences
+    read_count_diff = io_counters_after.read_count - io_counters_before.read_count
+    write_count_diff = io_counters_after.write_count - io_counters_before.write_count
+    read_bytes_diff = io_counters_after.read_bytes - io_counters_before.read_bytes
+    write_bytes_diff = io_counters_after.write_bytes - io_counters_before.write_bytes
+
+    # Print IO counters differences
+    print("Read count during page load:", read_count_diff)
+    print("Write count during page load:", write_count_diff)
+    print("Bytes read during page load:", read_bytes_diff)
+    print("Bytes written during page load:", write_bytes_diff)
 
 
 # ==================================================TODO===============================================================
