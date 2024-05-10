@@ -41,6 +41,9 @@ export RHDH_KEYCLOAK_REPLICAS ?= 1
 export LOCUST_EXTRA_CMD ?=
 export AUTH_PROVIDER ?=
 
+# RHDH install method - one of 'helm' or 'olm'
+export RHDH_INSTALL_METHOD ?= helm
+
 # python's venv base dir relative to the root of the repository
 PYTHON_VENV=.venv
 
@@ -76,23 +79,27 @@ namespace:
 
 ##	=== Red Hat Developer Hub (RHDH)
 
-## Deploy RHDH
-.PHONY: deploy-rhdh
-deploy-rhdh: $(TMP_DIR)
+## Deploy RHDH with Helm
+.PHONY: deploy-rhdh-helm
+deploy-rhdh-helm: $(TMP_DIR)
 	date --utc -Ins>$(TMP_DIR)/deploy-before
-	cd ./ci-scripts/rhdh-setup/; ./deploy.sh -i
+	cd ./ci-scripts/rhdh-setup/; ./deploy.sh -i "$(AUTH_PROVIDER)"
 	date --utc -Ins>$(TMP_DIR)/deploy-after
 
 ## Create users, groups and objects such as components and APIs in RHDH
 .PHONY: populate-rhdh
 populate-rhdh: $(TMP_DIR)
 	date --utc -Ins>$(TMP_DIR)/populate-before
-	cd ./ci-scripts/rhdh-setup/; ./deploy.sh -c
+ifeq ($(RHDH_INSTALL_METHOD),helm)
+	cd ./ci-scripts/rhdh-setup/; ./deploy.sh -c "$(AUTH_PROVIDER)"
+else ifeq ($(RHDH_INSTALL_METHOD),olm)
+	cd ./ci-scripts/rhdh-setup/; ./deploy.sh -o -c "$(AUTH_PROVIDER)"
+endif
 	date --utc -Ins>$(TMP_DIR)/populate-after
 
-## Undeploy RHDH
-.PHONY: undeploy-rhdh
-undeploy-rhdh:
+## Undeploy RHDH with Helm
+.PHONY: undeploy-rhdh-helm
+undeploy-rhdh-helm:
 	cd ./ci-scripts/rhdh-setup/; ./deploy.sh -d
 
 ## Create temp directory
@@ -104,6 +111,18 @@ $(TMP_DIR):
 .PHONY: $(ARTIFACT_DIR)
 $(ARTIFACT_DIR):
 	mkdir -p $(ARTIFACT_DIR)
+
+## Deploy RHDH with OLM
+.PHONY: deploy-rhdh-olm
+deploy-rhdh-olm: $(TMP_DIR)
+	date --utc -Ins>$(TMP_DIR)/deploy-before
+	cd ./ci-scripts/rhdh-setup; ./deploy.sh -o -i "$(AUTH_PROVIDER)"
+	date --utc -Ins>$(TMP_DIR)/deploy-after
+
+## Undeploy RHDH with OLM
+.PHONY: undeploy-rhdh-olm
+undeploy-rhdh-olm:
+	cd ./ci-scripts/rhdh-setup; ./deploy.sh -o -d
 
 ##	=== Locust Operator ===
 
@@ -188,7 +207,13 @@ ci-run: setup-venv deploy-locust test
 
 ## Deploy and populate RHDH in CI end to end
 .PHONY: ci-deploy
-ci-deploy: namespace deploy-rhdh
+ci-deploy: namespace
+ifeq ($(RHDH_INSTALL_METHOD),helm)
+ci-deploy: deploy-rhdh-helm
+else ifeq ($(RHDH_INSTALL_METHOD),olm)
+ci-deploy: deploy-rhdh-olm
+endif
+
 
 ##	=== Maintanence ===
 
@@ -204,6 +229,15 @@ update-locust-images:
 .PHONY: clean-local
 clean-local:
 	rm -rvf *.log shellcheck $(TMP_DIR) $(ARTIFACT_DIR)
+
+## Clean all
+.PHONY: clean-all
+clean-all: namespace clean clean-local
+ifeq ($(RHDH_INSTALL_METHOD),helm)
+clean-all: undeploy-rhdh-helm
+else ifeq ($(RHDH_INSTALL_METHOD),olm)
+clean-all: undeploy-rhdh-olm
+endif
 
 ##	=== Help ===
 
