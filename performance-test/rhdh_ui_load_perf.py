@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from playwright.sync_api import sync_playwright
 import time
 import os
@@ -49,7 +51,7 @@ def main():
 
         # Get CPU times and IO counters before opening the browser
         cpu_times_before = process.cpu_times()
-        io_counters_before = process.io_counters()
+        io_counters_before = psutil.net_io_counters()
 
         expected_title = "Welcome back! | Red Hat Developer Hub"
 
@@ -67,7 +69,7 @@ def main():
 
         # Get CPU times and IO counters after the page has loaded
         cpu_times_after = process.cpu_times()
-        io_counters_after = process.io_counters()
+        io_counters_after = psutil.net_io_counters()
 
         print("CPU times before:", cpu_times_before)
         print("CPU times after:", cpu_times_after)
@@ -86,17 +88,16 @@ def main():
         print("Children User CPU time during page load:", children_user_time_diff)
         print("Children System CPU time during page load:", children_system_time_diff)
 
-        # Calculate IO counters differences
-        read_count_diff = io_counters_after.read_count - io_counters_before.read_count
-        write_count_diff = io_counters_after.write_count - io_counters_before.write_count
-        read_bytes_diff = io_counters_after.read_bytes - io_counters_before.read_bytes
-        write_bytes_diff = io_counters_after.write_bytes - io_counters_before.write_bytes
+        bytes_sent_diff = io_counters_after.bytes_sent - io_counters_before.bytes_sent
+        bytes_recv_diff = io_counters_after.bytes_recv - io_counters_before.bytes_recv
+        packets_sent_diff = io_counters_after.packets_sent - io_counters_before.packets_sent
+        packets_recv_diff = io_counters_after.packets_recv - io_counters_before.packets_recv
 
         # Print IO counters differences
-        print("Read count during page load:", read_count_diff)
-        print("Write count during page load:", write_count_diff)
-        print("Bytes read during page load:", read_bytes_diff)
-        print("Bytes written during page load:", write_bytes_diff)
+        print("Bytes sent diff:", bytes_sent_diff)
+        print("Bytes received diff:", bytes_recv_diff)
+        print("Packets sent diff:", packets_sent_diff)
+        print("Packets received diff:", packets_recv_diff)
 
         teardown_monitoring()
         browser.close()
