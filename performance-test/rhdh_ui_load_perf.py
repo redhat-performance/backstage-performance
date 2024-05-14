@@ -30,6 +30,10 @@ def teardown_monitoring():
     )
 
 def main():
+    rhdh_endpoint = os.environ.get('RHDH_ENDPOINT')
+    if not rhdh_endpoint:
+        raise ValueError("RHDH_ENDPOINT environment variable is not set.")
+
     with sync_playwright() as p:
         browser = p.chromium.launch()
         context = browser.new_context()
@@ -37,7 +41,7 @@ def main():
 
         setup_monitoring()
 
-        page.goto("https://rhdh-redhat-developer-hub-rhdh-performance.apps.rhperfcluster.ptjz.p1.openshiftapps.com/")
+        page.goto(rhdh_endpoint)
 
         # Click the 'Enter' button after the page has loaded
         guest_enter_button = page.wait_for_selector('//span[@class="MuiButton-label-222" and text()="Enter"]')
