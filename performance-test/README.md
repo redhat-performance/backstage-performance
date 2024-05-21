@@ -7,18 +7,13 @@ This repository contains automated tests using Playwright for testing web applic
 
 - **Playwright**: Playwright is required to run these tests.
 
-### Installation
-
-1. pip3 install -r requirements.txt
-2. Install Playwright dependencies: `playwright install`
-
-### Running Tests
-
-To run the tests using pytest: `python3 rhdh_ui_load_perf.py`
-
 ### Running Container
 
-`podman run -it quay.io/rhcloudperfscale/rhdh_ui_load_perf:<latest-tag>`
+`podman run -e endpoint="https://rhdh-redhat-developer-hub-rhdh-performance.apps.rhperfcluster.ptjz.p1.openshiftapps.com/" -e reload=10 -it quay.io/rhcloudperfscale/rhdh_ui_load_perf:<latest-tag>`
+
+### Local Testing
+1. `podman build -t q1 .`
+2. `podman run -e endpoint="https://rhdh-redhat-developer-hub-rhdh-performance.apps.rhperfcluster.ptjz.p1.openshiftapps.com/" -e reload=10 -it localhost/q1`
 
 
 
