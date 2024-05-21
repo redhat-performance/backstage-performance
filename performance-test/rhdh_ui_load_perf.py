@@ -35,6 +35,17 @@ def main():
         raise ValueError("RHDH_ENDPOINT environment variable is not set.")
 
     with sync_playwright() as p:
+        
+        # csv report init
+        csv_file_obj = open('test.csv', 'w', newline='')
+        writer = csv.writer(csv_file_obj)
+        writer.writerow([
+            "first-paint_start_time",
+            "first-contentful-paint_start_time",
+            "domContentLoadedEventStart",
+            "domContentLoadedEventEnd"
+        ])
+
         browser = p.chromium.launch()
         context = browser.new_context()
         page = context.new_page()
@@ -62,12 +73,21 @@ def main():
         # Wait for the page to load and assert the title
         for i in range(10):
             page.wait_for_selector('//h1[contains(text(),"Welcome back!")]')
-            print(
-                page.evaluate("\nwindow.performance.getEntriesByType('paint')")
-            )  # info about painting the page (rendering)
-            print(
-                page.evaluate("performance.getEntriesByType('navigation')")
-            )  # info about DOM complete duration etc
+            
+            # info about painting the page (rendering)
+            paint_info = page.evaluate("\nwindow.performance.getEntriesByType('paint')")
+            print(paint_info)
+
+            # info about DOM complete duration etc
+            navigation_info = page.evaluate("performance.getEntriesByType('navigation')")
+            print(navigation_info)
+            
+            writer.writerow([
+                paint_info[0]['startTime'],
+                paint_info[1]['startTime'],
+                navigation_info[0]['domContentLoadedEventStart'],
+                navigation_info[0]['domContentLoadedEventEnd']
+            ])
             assert page.title() == expected_title
             page.reload()
 
@@ -102,6 +122,9 @@ def main():
         print("Bytes received diff:", bytes_recv_diff)
         print("Packets sent diff:", packets_sent_diff)
         print("Packets received diff:", packets_recv_diff)
+
+        # close csv report file object
+        csv_file_obj.close()
 
         teardown_monitoring()
         browser.close()
