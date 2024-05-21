@@ -31,12 +31,13 @@ def teardown_monitoring():
     )
 
 def main():
-    rhdh_endpoint = os.environ.get('RHDH_ENDPOINT')
+    rhdh_endpoint = os.environ.get('endpoint')
+    customReload = int(os.environ.get('reload'))
     if not rhdh_endpoint:
         raise ValueError("RHDH_ENDPOINT environment variable is not set.")
 
     with sync_playwright() as p:
-        
+
         # csv report init
         csv_file_obj = open('test.csv', 'w', newline='')
         writer = csv.writer(csv_file_obj)
@@ -72,7 +73,7 @@ def main():
         expected_title = "Welcome back! | Red Hat Developer Hub"
 
         # Wait for the page to load and assert the title
-        for i in range(10):
+        for i in range(customReload):
             page.wait_for_selector('//h1[contains(text(),"Welcome back!")]')
             
             # info about painting the page (rendering)

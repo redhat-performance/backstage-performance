@@ -16,6 +16,9 @@ This repository contains automated tests using Playwright for testing web applic
 
 To run the tests using pytest: `python3 rhdh_ui_load_perf.py`
 
+### Running Container
+
+`podman run -it quay.io/rhcloudperfscale/rhdh_ui_load_perf:<latest-tag>`
 
 
 
