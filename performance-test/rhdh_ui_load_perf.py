@@ -4,6 +4,7 @@ from playwright.sync_api import sync_playwright
 import time
 import os
 import psutil
+import csv
 from utils.monitor import MemoryMonitor  # this is a custom utility for monitoring memory
 
 monitor = None
