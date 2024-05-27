@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from playwright.sync_api import sync_playwright
+from datetime import datetime as dt
 import time
 import os
 import psutil
@@ -39,7 +40,7 @@ def main():
         writer = csv.writer(csv_file_obj)
         writer.writerow(
             [
-                "current_time",
+                "reload_time",
                 "hostname",
                 "first-paint_start_time",
                 "first-contentful-paint_start_time",
@@ -85,6 +86,8 @@ def main():
                 cpu_times_before = process.cpu_times()
                 network_before = psutil.net_io_counters()
 
+                # capture timestamp before we start reload
+                before_reload_timestamp = dt.now()
                 page.reload()
                 page.wait_for_selector('//h1[contains(text(),"Welcome back!")]')
                 paint_info = page.evaluate(
@@ -94,13 +97,23 @@ def main():
                     "performance.getEntriesByType('navigation')"
                 )
                 assert page.title() == expected_title
+
+                # capturing timestamp after we finished reload
+                after_reload_timestamp = dt.now()
+
+                # update the reload progress bar by 1
                 progress.update(reload_task, advance=1)
 
-                # Stop monitoring before reload
+                # Record the CPU times after the page reload
+                cpu_times_after = process.cpu_times()
+                # capturing network metrics
                 network_after = psutil.net_io_counters()
+
+                # Stop monitoring before reload
                 monitor.stop()
                 monitor.join()
 
+                # ----------------- calculation below ----------------------------
                 # Calculate the average memory usage during the monitoring period
                 avg_rss = (
                     sum(monitor.rss_usage) / len(monitor.rss_usage) / (1024 * 1024)
@@ -114,9 +127,7 @@ def main():
                     / (1024 * 1024)
                 )
 
-                # Record the CPU times after the page reload
-                cpu_times_after = process.cpu_times()
-
+                # calculation for network metrics captured during we reload the page
                 bytes_sent_diff = network_after.bytes_sent - network_before.bytes_sent
                 bytes_recv_diff = network_after.bytes_recv - network_before.bytes_recv
                 pkts_sent_diff = (
@@ -131,11 +142,12 @@ def main():
                 cpu_times_system_diff = cpu_times_after.system - cpu_times_before.system
                 cpu_times_iowait_diff = cpu_times_after.iowait - cpu_times_before.iowait
 
-                current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+                # calculate time taken for reload
+                reload_time = after_reload_timestamp - before_reload_timestamp
 
                 writer.writerow(
                     [
-                        current_time,
+                        reload_time.total_seconds(),
                         hostname,
                         paint_info[0]["startTime"],
                         paint_info[1]["startTime"],
