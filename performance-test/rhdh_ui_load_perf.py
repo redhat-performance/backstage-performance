@@ -2,36 +2,18 @@
 
 from playwright.sync_api import sync_playwright
 import time
-import os # to capture pid of current process
-import psutil # to capture cpu and memory metrics
-import csv # to capture ,metrics into a csv file
-import socket # to capture hostname
+import os
+import psutil
+import csv
+import socket
 from utils.monitor import MemoryMonitor  # custom utility for monitoring memory
-from rich.progress import Progress # to display progress bar for relaods
-from rich.console import Console # to print in a nice way
+from rich.progress import Progress
+from rich.console import Console
 from rich.table import Table
-import pandas as pd # for printing csv file in human readable format
+import pandas as pd
 
-monitor = None
 console = Console()
 
-def setup_monitoring():
-    global monitor
-    console.print("\n[bold green]Setting up monitoring...[/bold green]")
-    monitor = MemoryMonitor()
-    monitor.start()
-
-def teardown_monitoring():
-    global monitor
-    monitor.stop()
-    monitor.join()
-
-def get_memory_info():
-    global monitor
-    avg_rss = sum(monitor.rss_usage) / len(monitor.rss_usage) / (1024 * 1024)
-    avg_vms = sum(monitor.vms_usage) / len(monitor.vms_usage) / (1024 * 1024)
-    avg_shared = sum(monitor.shared_usage) / len(monitor.shared_usage) / (1024 * 1024)
-    return avg_rss, avg_vms, avg_shared
 
 def print_csv_as_table(file_path):
     df = pd.read_csv(file_path)
@@ -42,6 +24,7 @@ def print_csv_as_table(file_path):
         table.add_row(*map(str, row.values))
     console.print(table)
 
+
 def main():
     rhdh_endpoint = os.environ.get("endpoint")
     customReload = int(os.environ.get("reload"))
@@ -49,26 +32,36 @@ def main():
         raise ValueError("RHDH_ENDPOINT environment variable is not set.")
 
     hostname = socket.gethostname()
-    
+
     with sync_playwright() as p:
         csv_file_path = "test.csv"
         csv_file_obj = open(csv_file_path, "w", newline="")
         writer = csv.writer(csv_file_obj)
         writer.writerow(
             [
-                "current_time", "hostname",
-                "first-paint_start_time", "first-contentful-paint_start_time",
-                "domContentLoadedEventStart", "domContentLoadedEventEnd", "domComplete",
-                "cputimes_user", "cputimes_system", "cputimes_iowait",
-                "rss_memory", "vms_memory", "shared_memory"
+                "current_time",
+                "hostname",
+                "first-paint_start_time",
+                "first-contentful-paint_start_time",
+                "domContentLoadedEventStart",
+                "domContentLoadedEventEnd",
+                "domComplete",
+                "cputimes_user_diff",
+                "cputimes_system_diff",
+                "cputimes_iowait_diff",
+                "rss_memory",
+                "vms_memory",
+                "shared_memory",
+                "bytes_sent_diff",
+                "bytes_recv_diff",
+                "pkts_sent_diff",
+                "pkts_recv_diff",
             ]
         )
 
         browser = p.chromium.launch()
         context = browser.new_context()
         page = context.new_page()
-
-        setup_monitoring()
 
         page.goto(rhdh_endpoint)
 
@@ -85,36 +78,89 @@ def main():
             reload_task = progress.add_task("[cyan]Reloading...", total=customReload)
 
             for i in range(customReload):
-                page.wait_for_selector('//h1[contains(text(),"Welcome back!")]')
-                paint_info = page.evaluate("window.performance.getEntriesByType('paint')")
-                navigation_info = page.evaluate("performance.getEntriesByType('navigation')")
+                monitor = MemoryMonitor()
+                monitor.start()
 
-                cpu_times = process.cpu_times()
-                avg_rss, avg_vms, avg_shared = get_memory_info()
+                # Record the CPU times before the page reload
+                cpu_times_before = process.cpu_times()
+                network_before = psutil.net_io_counters()
+
+                page.reload()
+                page.wait_for_selector('//h1[contains(text(),"Welcome back!")]')
+                paint_info = page.evaluate(
+                    "window.performance.getEntriesByType('paint')"
+                )
+                navigation_info = page.evaluate(
+                    "performance.getEntriesByType('navigation')"
+                )
+                assert page.title() == expected_title
+                progress.update(reload_task, advance=1)
+
+                # Stop monitoring before reload
+                network_after = psutil.net_io_counters()
+                monitor.stop()
+                monitor.join()
+
+                # Calculate the average memory usage during the monitoring period
+                avg_rss = (
+                    sum(monitor.rss_usage) / len(monitor.rss_usage) / (1024 * 1024)
+                )
+                avg_vms = (
+                    sum(monitor.vms_usage) / len(monitor.vms_usage) / (1024 * 1024)
+                )
+                avg_shared = (
+                    sum(monitor.shared_usage)
+                    / len(monitor.shared_usage)
+                    / (1024 * 1024)
+                )
+
+                # Record the CPU times after the page reload
+                cpu_times_after = process.cpu_times()
+
+                bytes_sent_diff = network_after.bytes_sent - network_before.bytes_sent
+                bytes_recv_diff = network_after.bytes_recv - network_before.bytes_recv
+                pkts_sent_diff = (
+                    network_after.packets_sent - network_before.packets_sent
+                )
+                pkts_recv_diff = (
+                    network_after.packets_recv - network_before.packets_recv
+                )
+
+                # Calculate the differences in CPU times
+                cpu_times_user_diff = cpu_times_after.user - cpu_times_before.user
+                cpu_times_system_diff = cpu_times_after.system - cpu_times_before.system
+                cpu_times_iowait_diff = cpu_times_after.iowait - cpu_times_before.iowait
 
                 current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
 
                 writer.writerow(
                     [
-                        current_time, hostname,
-                        paint_info[0]["startTime"], paint_info[1]["startTime"],
+                        current_time,
+                        hostname,
+                        paint_info[0]["startTime"],
+                        paint_info[1]["startTime"],
                         navigation_info[0]["domContentLoadedEventStart"],
                         navigation_info[0]["domContentLoadedEventEnd"],
                         navigation_info[0]["domComplete"],
-                        cpu_times.user, cpu_times.system, cpu_times.iowait,
-                        avg_rss, avg_vms, avg_shared
+                        cpu_times_user_diff,
+                        cpu_times_system_diff,
+                        cpu_times_iowait_diff,
+                        avg_rss,
+                        avg_vms,
+                        avg_shared,
+                        bytes_sent_diff,
+                        bytes_recv_diff,
+                        pkts_sent_diff,
+                        pkts_recv_diff,
                     ]
                 )
-                assert page.title() == expected_title
-                page.reload()
-                progress.update(reload_task, advance=1)
 
         csv_file_obj.close()
-        teardown_monitoring()
         browser.close()
 
         # Print CSV in a readable table format
         print_csv_as_table(csv_file_path)
+
 
 if __name__ == "__main__":
     main()
