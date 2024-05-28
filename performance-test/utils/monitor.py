@@ -3,6 +3,7 @@ import psutil
 import time
 import os
 
+
 class MemoryMonitor(Thread):
     def __init__(self):
         super().__init__()
@@ -12,6 +13,9 @@ class MemoryMonitor(Thread):
         self.running = True
 
     def run(self):
+        self.rss_usage = []
+        self.vms_usage = []
+        self.shared_usage = []
         while self.running:
             # Get memory usage metrics
             process = psutil.Process(os.getpid())
