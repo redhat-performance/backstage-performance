@@ -32,9 +32,12 @@ export RHDH_IMAGE_REGISTRY=${RHDH_IMAGE_REGISTRY:-}
 export RHDH_IMAGE_REPO=${RHDH_IMAGE_REPO:-}
 export RHDH_IMAGE_TAG=${RHDH_IMAGE_TAG:-}
 
-export RHDH_HELM_REPO=${RHDH_HELM_REPO:-https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/rhdh-1-rhel-9/installation}
+export RHDH_HELM_REPO=${RHDH_HELM_REPO:-https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/rhdh-1.1-rhel-9/installation}
 export RHDH_HELM_CHART=${RHDH_HELM_CHART:-redhat-developer-hub}
 export RHDH_HELM_CHART_VERSION=${RHDH_HELM_CHART_VERSION:-}
+
+export RHDH_OLM_INDEX_IMAGE="${RHDH_OLM_INDEX_IMAGE:-registry.redhat.io/redhat/redhat-operator-index:v$(oc version -o json | jq -r '.openshiftVersion' | sed -r -e "s#([0-9]+\.[0-9]+)\..+#\1#")}"
+export RHDH_OLM_CHANNEL=${RHDH_OLM_CHANNEL:-fast-1.1}
 
 export PRE_LOAD_DB="${PRE_LOAD_DB:-true}"
 export BACKSTAGE_USER_COUNT="${BACKSTAGE_USER_COUNT:-1}"
@@ -69,6 +72,24 @@ wait_to_start_in_namespace() {
         fi
     done
     $cli -n "$namespace" rollout status "$rn" --timeout="${wait_timeout}s"
+}
+
+wait_for_crd() {
+    name=${1:-name}
+    initial_timeout=${2:-300}
+    rn=crd/$name
+    description=${3:-$rn}
+    timeout_timestamp=$(date -d "$initial_timeout seconds" "+%s")
+    interval=10s
+    while ! /bin/bash -c "$cli get $rn"; do
+        if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
+            echo "[ERROR][$(date --utc -Ins)] Timeout waiting for $description to exist"
+            exit 1
+        else
+            echo "[INFO][$(date --utc -Ins)] Waiting $interval for $description to exist..."
+            sleep "$interval"
+        fi
+    done
 }
 
 wait_to_start() {
@@ -278,15 +299,10 @@ install_rhdh_with_olm() {
     $clin create secret generic rhdh-backend-secret --from-literal=BACKEND_SECRET="$(mktemp -u XXXXXXXXXXX)"
     $clin create cm app-config-backend-secret --from-file=template/backstage/olm/app-config.rhdh.backend-secret.yaml
     $clin apply -f template/backstage/olm/dynamic-plugins.configmap.yaml
-
-    pushd "$TMP_DIR" || return
-    rhdh_installer="./install-rhdh-catalog-source.sh"
-    curl -sSL -o "$rhdh_installer" https://raw.githubusercontent.com/janus-idp/operator/main/.rhdh/scripts/install-rhdh-catalog-source.sh
-    chmod +x "$rhdh_installer"
-    $rhdh_installer --latest --install-operator rhdh
-    wait_to_start_in_namespace "$RHDH_OPERATOR_NAMESPACE" deployment rhdh-operator 300 300
-    popd || return
-
+    set -x
+    OLM_CHANNEL="${RHDH_OLM_CHANNEL}" UPSTREAM_IIB="${RHDH_OLM_INDEX_IMAGE}" ./install-rhdh-catalog-source.sh --install-operator rhdh
+    set +x
+    wait_for_crd backstages.rhdh.redhat.com
     envsubst <template/backstage/olm/backstage.yaml | $clin apply -f -
 
     wait_to_start statefulset "backstage-psql-developer-hub" 300 300

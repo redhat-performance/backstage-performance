@@ -29,6 +29,10 @@ export RHDH_HELM_CHART ?= redhat-developer-hub
 export RHDH_HELM_CHART_VERSION ?=
 export RHDH_HELM_RELEASE_NAME ?= rhdh
 
+# RHDH OLM subscription to deploy
+export RHDH_OLM_INDEX_IMAGE ?= registry.redhat.io/redhat/redhat-operator-index:v$(shell oc version -o json | jq -r '.openshiftVersion' | sed -r -e "s,([0-9]+\.[0-9]+)\..+,\1,")
+export RHDH_OLM_CHANNEL ?= fast-1.1
+
 # RHDH horizontal scaling
 export RHDH_DEPLOYMENT_REPLICAS ?= 1
 export RHDH_DB_REPLICAS ?= 1
