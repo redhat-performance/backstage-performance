@@ -24,7 +24,6 @@ keycloak_url() {
   fi
   flock -u 4
   cat "$f"
-  set +x
 }
 
 bs_lockfile="$TMP_DIR/bs.lockfile"
@@ -37,7 +36,12 @@ backstage_url() {
     exit 1
   }
   if [ ! -f "$f" ]; then
-    echo -n "https://$(oc get routes "${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}" -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')" >"$f"
+    if [ "$INSTALL_METHOD" == "helm" ]; then
+      rhdh_route="${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}"
+    else
+      rhdh_route="backstage-developer-hub"
+    fi
+    echo -n "https://$(oc get routes "${rhdh_route}" -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')" >"$f"
   fi
   flock -u 5
   cat "$f"

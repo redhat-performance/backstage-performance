@@ -1,0 +1,43 @@
+apiVersion: rhdh.redhat.com/v1alpha1
+kind: Backstage
+metadata:
+  name: developer-hub
+  namespace: ${RHDH_NAMESPACE}
+spec:
+  application:
+    appConfig:
+      configMaps:
+        - name: app-config-rhdh
+          key: app-config.rhdh.yaml
+        - name: app-config-backend-secret
+          key: app-config.rhdh.backend-secret.yaml
+      mountPath: /opt/app-root/src
+    dynamicPluginsConfigMapName: "dynamic-plugins-rhdh"
+    extraFiles:
+      mountPath: /opt/app-root/src
+    extraEnvs:
+      envs:
+        - name: KEYCLOAK_BASE_URL
+          value: "https://keycloak-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}/auth"
+        - name: KEYCLOAK_LOGIN_REALM
+          value: "backstage"
+        - name: KEYCLOAK_REALM
+          value: "backstage"
+        - name: LOG_LEVEL
+          value: "warn"
+        - name: NODE_TLS_REJECT_UNAUTHORIZED
+          value: "0"
+      secrets:
+        - key: CLIENT_ID
+          name: keycloak-client-secret-backstage
+        - key: CLIENT_SECRET
+          name: keycloak-client-secret-backstage
+        - key: BACKEND_SECRET
+          name: rhdh-backend-secret
+    replicas: ${RHDH_DEPLOYMENT_REPLICAS}
+    route:
+      enabled: true
+  database:
+    enableLocalDb: true
+  imagePullSecrets:
+    - rhdh-pull-secret

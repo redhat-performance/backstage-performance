@@ -193,6 +193,28 @@
 
 {{ pv_stats('data-rhdh-postgresql-primary-0') }}
 
+# Collect index usage
+#Note: It is assumed that the default value for namespace and pod name is used.
+- name: measurements.postgresql.backstage-plugin-catalog.index
+  command: oc exec rhdh-postgresql-primary-0 -n rhdh-performance -- psql -h localhost -U postgres backstage_plugin_catalog -c "SELECT relname, 100 * idx_scan / (seq_scan + idx_scan) percent_of_times_index_used, n_live_tup rows_in_table FROM pg_stat_user_tables ORDER BY n_live_tup DESC;" -A -F ',' |head -n -1|yq -p csv -o json
+  output: json
+
+- name: measurements.postgresql.backstage-plugin-auth.index
+  command: oc exec rhdh-postgresql-primary-0 -n rhdh-performance -- psql -h localhost -U postgres backstage_plugin_auth -c "SELECT relname, 100 * idx_scan / (seq_scan + idx_scan) percent_of_times_index_used, n_live_tup rows_in_table FROM pg_stat_user_tables ORDER BY n_live_tup DESC;" -A -F ',' |head -n -1|yq -p csv -o json
+  output: json
+
+- name: measurements.postgresql.backstage-plugin-app.index
+  command: oc exec rhdh-postgresql-primary-0 -n rhdh-performance -- psql -h localhost -U postgres backstage_plugin_app -c "SELECT relname, 100 * idx_scan / (seq_scan + idx_scan) percent_of_times_index_used, n_live_tup rows_in_table FROM pg_stat_user_tables ORDER BY n_live_tup DESC;" -A -F ',' |head -n -1|yq -p csv -o json
+  output: json
+
+- name: measurements.postgresql.backstage-plugin-scaffolder.index
+  command: oc exec rhdh-postgresql-primary-0 -n rhdh-performance -- psql -h localhost -U postgres backstage_plugin_scaffolder -c "SELECT relname, 100 * idx_scan / (seq_scan + idx_scan) percent_of_times_index_used, n_live_tup rows_in_table FROM pg_stat_user_tables ORDER BY n_live_tup DESC;" -A -F ',' |head -n -1|yq -p csv -o json
+  output: json
+
+- name: measurements.postgresql.backstage-plugin-search.index
+  command: oc exec rhdh-postgresql-primary-0 -n rhdh-performance -- psql -h localhost -U postgres backstage_plugin_search -c "SELECT relname, 100 * idx_scan / (seq_scan + idx_scan) percent_of_times_index_used, n_live_tup rows_in_table FROM pg_stat_user_tables ORDER BY n_live_tup DESC;" -A -F ',' |head -n -1|yq -p csv -o json
+  output: json
+
 # Results
 {%macro results_scenario(name) -%}
 - name: results.{{name}}.locust_requests_avg_response_time

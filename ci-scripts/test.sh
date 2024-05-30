@@ -6,16 +6,27 @@ set -o pipefail
 
 echo -e "\n === Executing RHDH load test ===\n"
 
-export SCENARIO
+export SCENARIO RHDH_INSTALL_METHOD AUTH_PROVIDER
+
+RHDH_INSTALL_METHOD=${RHDH_INSTALL_METHOD:-helm}
+AUTH_PROVIDER=${AUTH_PROVIDER:-}
 
 # testing env
-export HOST RHDH_HELM_RELEASE_NAME RHDH_HELM_CHART
+if [ "$RHDH_INSTALL_METHOD" == "olm" ]; then
+    rhdh_route="backstage-developer-hub"
+elif [ "$RHDH_INSTALL_METHOD" == "helm" ]; then
+    export RHDH_HELM_RELEASE_NAME RHDH_HELM_CHART
 
-RHDH_HELM_RELEASE_NAME=${RHDH_HELM_RELEASE_NAME:-rhdh}
-RHDH_HELM_CHART=${RHDH_HELM_CHART:-redhat-developer-hub}
+    RHDH_HELM_RELEASE_NAME=${RHDH_HELM_RELEASE_NAME:-rhdh}
+    RHDH_HELM_CHART=${RHDH_HELM_CHART:-redhat-developer-hub}
 
-rhdh_route="${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}"
-HOST="https://$(oc get routes "${rhdh_route}" -n "${RHDH_NAMESPACE:-rhdh-performance}" -o jsonpath='{.spec.host}')"
+    rhdh_route="${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}"
+else
+    echo "Invalid RHDH install method: $RHDH_INSTALL_METHOD"
+    exit 1
+fi
+export HOST
+HOST="https://$(oc get routes "$rhdh_route" -n "${RHDH_NAMESPACE:-rhdh-performance}" -o jsonpath='{.spec.host}')"
 # end-of testing env
 
 ARTIFACT_DIR=$(readlink -m "${ARTIFACT_DIR:-.artifacts}")
