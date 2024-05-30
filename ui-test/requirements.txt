@@ -1,0 +1,4 @@
+playwright==1.43.0
+psutil
+rich
+pandas
