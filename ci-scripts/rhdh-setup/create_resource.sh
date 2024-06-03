@@ -3,7 +3,7 @@
 export TMP_DIR WORKDIR
 
 POPULATION_CONCURRENCY=${POPULATION_CONCURRENCY:-10}
-COMPONENT_SHARD_SIZE=${COMPONENT_SHARD_SIZE:-50000}
+COMPONENT_SHARD_SIZE=${COMPONENT_SHARD_SIZE:-500}
 
 TMP_DIR=${TMP_DIR:-$(readlink -m .tmp)}
 mkdir -p "$TMP_DIR"
@@ -74,6 +74,8 @@ create_per_grp() {
       fi
     done
   done
+  if [[ 'create_cmp' == "${1}"  ]] ; then clone_and_upload "component-*.yaml" ;fi
+  if [[ 'create_api' == "${1}"  ]] ; then clone_and_upload "api-*.yaml" ;fi
 }
 
 clone_and_upload() {
@@ -91,16 +93,35 @@ clone_and_upload() {
   git checkout -b "$tmp_branch"
   mapfile -t files < <(find "$TMP_DIR" -name "$1")
   for filename in "${files[@]}"; do
-    mv -vf "$filename" "$(basename "$filename")"
+    cp -vf "$filename" "$(basename "$filename")"
     git add "$(basename "$filename")"
   done
   git commit -a -m "commit objects"
   git push -f --set-upstream origin "$tmp_branch"
   cd ..
   sleep 5
+  rhdh_token=$(curl -s -k "$(backstage_url)/api/auth/guest/refresh"|jq -r '.backstageIdentity.token')
   for filename in "${files[@]}"; do
+    e_count=$(yq eval '.metadata.name | capture(".*-(?<value>[0-9]+)").value' "$filename" |tail -n 1)
     upload_url="${GITHUB_REPO%.*}/blob/${tmp_branch}/$(basename "$filename")"
-    curl -k "$(backstage_url)/api/catalog/locations" -X POST -H 'Accept-Encoding: gzip, deflate, br' -H 'Content-Type: application/json' --data-raw '{"type":"url","target":"'"${upload_url}"'"}'
+    curl -k "$(backstage_url)/api/catalog/locations" -X POST -H 'Accept-Encoding: gzip, deflate, br' -H 'Authorization: Bearer '"$rhdh_token" -H 'Content-Type: application/json' --data-raw '{"type":"url","target":"'"${upload_url}"'"}'
+
+    timeout_timestamp=$(date -d "300 seconds" "+%s")
+    while true; do
+        if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
+            echo "ERROR: Timeout waiting on entity count"
+            exit 1
+        else
+            if [[ 'component-*.yaml' == "${1}"  ]] ; then b_count=$(curl -s -k "$(backstage_url)/api/catalog/entity-facets?facet=kind"  -H 'Content-Type: application/json'  -H 'Authorization: Bearer '"$rhdh_token" |jq -r  '.facets.kind[] | select(.value == "Component")| .count') ;fi
+            if [[ 'api-*.yaml' == "${1}"  ]] ; then b_count=$(curl -s -k "$(backstage_url)/api/catalog/entity-facets?facet=kind"  -H 'Content-Type: application/json'  -H 'Authorization: Bearer '"$rhdh_token" |jq -r  '.facets.kind[] | select(.value == "API")| .count') ;fi
+            if [[ $b_count -ge $e_count  ]] ; then break;fi
+        fi
+        echo "Waiting for the entity count ${e_count}"
+        sleep 10s
+    done
+  done
+  for filename in "${files[@]}"; do
+    rm -vf "$filename"
   done
 }
 
