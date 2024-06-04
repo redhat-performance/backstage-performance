@@ -55,6 +55,11 @@ export KEYCLOAK_USER_PASS=${KEYCLOAK_USER_PASS:-$(mktemp -u XXXXXXXXXX)}
 export AUTH_PROVIDER="${AUTH_PROVIDER:-''}"
 export ENABLE_RBAC="${ENABLE_RBAC:-false}"
 
+export PSQL_LOG="${PSQL_LOG:-true}"
+export LOG_MIN_DURATION_STATEMENT="${LOG_MIN_DURATION_STATEMENT:-65}"
+export LOG_MIN_DURATION_SAMPLE="${LOG_MIN_DURATION_SAMPLE:-50}"
+export LOG_STATEMENT_SAMPLE_RATE="${LOG_STATEMENT_SAMPLE_RATE:-0.7}"
+
 export INSTALL_METHOD=helm
 
 TMP_DIR=$(readlink -m "${TMP_DIR:-.tmp}")
@@ -147,6 +152,7 @@ install() {
     fi
 
     backstage_install
+    psql_debug
     setup_monitoring
 }
 
@@ -282,6 +288,21 @@ install_rhdh_with_olm() {
 
     wait_to_start statefulset "backstage-psql-developer-hub" 300 300
     wait_to_start deployment "backstage-developer-hub" 300 300
+}
+
+# shellcheck disable=SC2016,SC1001,SC2086
+psql_debug() {
+    if [ "$INSTALL_METHOD" == "helm" ]; then
+        psql_db=rhdh-postgresql-primary-0
+    elif [ "$INSTALL_METHOD" == "olm" ]; then
+        psql_db=backstage-psql-developer-hub-0
+    fi
+    if ${PSQL_LOG}; then
+       oc exec "${psql_db}" -n "${RHDH_NAMESPACE}" -- sh -c "sed -i "s/^\s*#log_min_duration_statement.*/log_min_duration_statement=${LOG_MIN_DURATION_STATEMENT}/" /var/lib/pgsql/data/userdata/postgresql.conf "
+       oc exec "${psql_db}" -n "${RHDH_NAMESPACE}" -- sh -c "sed -i "s/^\s*#log_min_duration_sample.*/log_min_duration_sample=${LOG_MIN_DURATION_SAMPLE}/" /var/lib/pgsql/data/userdata/postgresql.conf "
+       oc exec "${psql_db}" -n "${RHDH_NAMESPACE}" -- sh -c "sed -i "s/^\s*#log_statement_sample_rate.*/log_statement_sample_rate=${LOG_STATEMENT_SAMPLE_RATE}/" /var/lib/pgsql/data/userdata/postgresql.conf "
+    fi
+    oc exec "${psql_db}" -n "${RHDH_NAMESPACE}" -- sh -c 'pg_ctl -D $PGDATA restart -mf'
 }
 
 setup_monitoring() {
