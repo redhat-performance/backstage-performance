@@ -106,8 +106,9 @@ clone_and_upload() {
   sleep 5
   rhdh_token=$(curl -s -k "$(backstage_url)/api/auth/guest/refresh" | jq -r '.backstageIdentity.token')
   for filename in "${files[@]}"; do
-    e_count=$(yq eval '.metadata.name | capture(".*-(?<value>[0-9]+)").value' "$filename" | tail -n 1)
+    e_count=$(yq eval '.metadata.name | capture(".*-(?P<value>[0-9]+)").value' "$filename" | tail -n 1)
     upload_url="${GITHUB_REPO%.*}/blob/${tmp_branch}/$(basename "$filename")"
+    echo "Uploading entities from $upload_url"
     curl -k "$(backstage_url)/api/catalog/locations" -X POST -H 'Accept-Encoding: gzip, deflate, br' -H 'Authorization: Bearer '"$rhdh_token" -H 'Content-Type: application/json' --data-raw '{"type":"url","target":"'"${upload_url}"'"}'
 
     timeout_timestamp=$(date -d "300 seconds" "+%s")
@@ -120,7 +121,7 @@ clone_and_upload() {
         if [[ 'api-*.yaml' == "${1}" ]]; then b_count=$(curl -s -k "$(backstage_url)/api/catalog/entity-facets?facet=kind" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$rhdh_token" | jq -r '.facets.kind[] | select(.value == "API")| .count'); fi
         if [[ $b_count -ge $e_count ]]; then break; fi
       fi
-      echo "Waiting for the entity count ${e_count}"
+      echo "Waiting for the entity count to be ${e_count} (current: ${b_count})"
       sleep 10s
     done
   done
