@@ -158,6 +158,12 @@ class MVPTest(HttpUser):
             TOKEN=json_dict['backstageIdentity']['token']
 
             self.HEADER = {'Authorization': 'Bearer ' + TOKEN}
+        else :
+            r = self.client.get('/api/auth/guest/refresh', verify=False)
+            json_dict = json.loads(r.content)
+            TOKEN=json_dict['backstageIdentity']['token']
+
+            self.HEADER = {'Authorization': 'Bearer ' + TOKEN}
 
     def __init__(self, parent):
         super().__init__(parent)
