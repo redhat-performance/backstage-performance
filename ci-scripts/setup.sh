@@ -6,6 +6,10 @@ set -o pipefail
 
 echo -e "\n === Installing and setting up RHDH ===\n"
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck disable=SC1090,SC1091
+source "$(readlink -m "$SCRIPT_DIR"/../test.env)"
+
 export GITHUB_TOKEN GITHUB_USER GITHUB_REPO QUAY_TOKEN KUBECONFIG PRE_LOAD_DB
 
 GITHUB_TOKEN=$(cat /usr/local/ci-secrets/backstage-performance/github.token)
