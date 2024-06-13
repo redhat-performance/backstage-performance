@@ -70,6 +70,7 @@ try_gather_file "${TMP_DIR}/create_group.log"
 try_gather_file "${TMP_DIR}/create_user.log"
 try_gather_file "${TMP_DIR}/get_token.log"
 try_gather_file load-test.log
+try_gather_file postgresql.log
 
 PYTHON_VENV_DIR=.venv
 

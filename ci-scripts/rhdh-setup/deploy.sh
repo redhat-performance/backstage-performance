@@ -51,6 +51,11 @@ export COMPONENT_COUNT="${COMPONENT_COUNT:-1}"
 export KEYCLOAK_USER_PASS=${KEYCLOAK_USER_PASS:-$(mktemp -u XXXXXXXXXX)}
 export AUTH_PROVIDER="${AUTH_PROVIDER:-''}"
 
+export PSQL_LOG="${PSQL_LOG:-true}"
+export LOG_MIN_DURATION_STATEMENT="${LOG_MIN_DURATION_STATEMENT:-65}"
+export LOG_MIN_DURATION_SAMPLE="${LOG_MIN_DURATION_SAMPLE:-50}"
+export LOG_STATEMENT_SAMPLE_RATE="${LOG_STATEMENT_SAMPLE_RATE:-0.7}"
+
 export INSTALL_METHOD=helm
 
 TMP_DIR=$(readlink -m "${TMP_DIR:-.tmp}")
@@ -159,6 +164,15 @@ backstage_install() {
     fi
 }
 
+psql_debug() {
+    if ${PSQL_LOG}; then
+       oc exec rhdh-postgresql-primary-0 -n ${RHDH_NAMESPACE} -- sh -c "sed -i "s/^\s*#log_min_duration_statement.*/log_min_duration_statement=${LOG_MIN_DURATION_STATEMENT}/" /var/lib/pgsql/data/userdata/postgresql.conf "
+       oc exec rhdh-postgresql-primary-0 -n ${RHDH_NAMESPACE} -- sh -c "sed -i "s/^\s*#log_min_duration_sample.*/log_min_duration_sample=${LOG_MIN_DURATION_SAMPLE}/" /var/lib/pgsql/data/userdata/postgresql.conf "
+       oc exec rhdh-postgresql-primary-0 -n ${RHDH_NAMESPACE} -- sh -c "sed -i "s/^\s*#log_statement_sample_rate.*/log_statement_sample_rate=${LOG_STATEMENT_SAMPLE_RATE}/" /var/lib/pgsql/data/userdata/postgresql.conf "
+    fi
+    oc exec rhdh-postgresql-primary-0 -n ${RHDH_NAMESPACE} -- sh -c 'pg_ctl -D $PGDATA restart -mf'
+}
+
 setup_monitoring() {
     echo "Enabling user workload monitoring"
     rm -f config.yaml
@@ -247,6 +261,7 @@ install() {
     fi
 
     backstage_install
+    psql_debug
     setup_monitoring
 }
 
