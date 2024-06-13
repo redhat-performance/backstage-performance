@@ -1,3 +1,8 @@
+# Override test environment variables
+ifneq (,$(wildcard test.env))
+	include test.env
+endif
+
 # Scenario to run. It correlates with the locust file at scenarios/<SCENARIO>.py
 export SCENARIO ?= baseline-test
 
