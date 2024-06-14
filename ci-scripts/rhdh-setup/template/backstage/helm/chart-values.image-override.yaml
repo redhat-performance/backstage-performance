@@ -31,8 +31,11 @@ upstream:
             password: "${POSTGRESQL_ADMIN_PASSWORD}"
             user: postgres
         auth:
-          keys:
-            - secret: ${BACKEND_SECRET}
+          externalAccess:
+            - type: legacy
+              options:
+                secret: ${BACKEND_SECRET}
+                subject: legacy-catalog
     args:
       - "--config"
       - app-config.yaml

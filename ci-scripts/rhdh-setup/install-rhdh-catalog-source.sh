@@ -86,7 +86,7 @@ OCP_VER="v$(oc version -o json | jq -r '.openshiftVersion' | sed -r -e "s#([0-9]
 OCP_ARCH="$(oc version -o json | jq -r '.serverVersion.platform' | sed -r -e "s#linux/##")"
 if [[ $OCP_ARCH == "amd64" ]]; then OCP_ARCH="x86_64"; fi
 # if logged in, this should return something like latest-v4.12-x86_64
-UPSTREAM_IIB="${UPSTREAM_IIB:-${OLM_INDEX_IMAGE_BASE:-quay.io/rhdh/iib:next}-${OCP_VER}-${OCP_ARCH}}"
+UPSTREAM_IIB="${UPSTREAM_IIB:-${OLM_INDEX_IMAGE_BASE:-quay.io/rhdh/iib:latest}-${OCP_VER}-${OCP_ARCH}}"
 
 while [[ "$#" -gt 0 ]]; do
   case $1 in

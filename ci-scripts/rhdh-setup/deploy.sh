@@ -36,12 +36,14 @@ export RHDH_IMAGE_REGISTRY=${RHDH_IMAGE_REGISTRY:-}
 export RHDH_IMAGE_REPO=${RHDH_IMAGE_REPO:-}
 export RHDH_IMAGE_TAG=${RHDH_IMAGE_TAG:-}
 
-export RHDH_HELM_REPO=${RHDH_HELM_REPO:-https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/rhdh-1.1-rhel-9/installation}
+export RHDH_HELM_REPO=${RHDH_HELM_REPO:-https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/rhdh-1.2-rhel-9/installation}
 export RHDH_HELM_CHART=${RHDH_HELM_CHART:-redhat-developer-hub}
 export RHDH_HELM_CHART_VERSION=${RHDH_HELM_CHART_VERSION:-}
 
-export RHDH_OLM_INDEX_IMAGE="${RHDH_OLM_INDEX_IMAGE:-registry.redhat.io/redhat/redhat-operator-index:v$(oc version -o json | jq -r '.openshiftVersion' | sed -r -e "s#([0-9]+\.[0-9]+)\..+#\1#")}"
-export RHDH_OLM_CHANNEL=${RHDH_OLM_CHANNEL:-fast-1.1}
+OCP_VER="$(oc version -o json | jq -r '.openshiftVersion' | sed -r -e "s#([0-9]+\.[0-9]+)\..+#\1#")"
+OCP_ARCH="$(oc version -o json | jq -r '.serverVersion.platform' | sed -r -e "s#linux/##" | sed -e 's#amd64#x86_64#')"
+export RHDH_OLM_INDEX_IMAGE="${RHDH_OLM_INDEX_IMAGE:-quay.io/rhdh/iib:1.2-v${OCP_VER}-${OCP_ARCH}}"
+export RHDH_OLM_CHANNEL=${RHDH_OLM_CHANNEL:-fast}
 
 export PRE_LOAD_DB="${PRE_LOAD_DB:-true}"
 export BACKSTAGE_USER_COUNT="${BACKSTAGE_USER_COUNT:-1}"
@@ -100,26 +102,19 @@ wait_to_start() {
     wait_to_start_in_namespace "$RHDH_NAMESPACE" "$@"
 }
 
-delete() {
-    echo "Remove RHDH with install method: $INSTALL_METHOD"
-    if ! $cli get ns "$RHDH_NAMESPACE" >/dev/null; then
-        echo "$RHDH_NAMESPACE namespace does not exit... Skipping. "
-    else
-        for cr in keycloakusers keycloakclients keycloakrealms keycloaks; do
-            for res in $($clin get "$cr.keycloak.org" -o name); do
-                $clin patch "$res" -p '{"metadata":{"finalizers":[]}}' --type=merge
-                $clin delete "$res" --wait
-            done
-        done
+install() {
+    appurl=$(oc whoami --show-console)
+    export OPENSHIFT_APP_DOMAIN=${appurl#*.}
+    $cli create namespace "${RHDH_NAMESPACE}" --dry-run=client -o yaml | $cli apply -f -
+    keycloak_install
+
+    if $PRE_LOAD_DB; then
+        create_groups
+        create_users
     fi
-    if [ "$INSTALL_METHOD" == "helm" ]; then
-        helm uninstall "${RHDH_HELM_RELEASE_NAME}" --namespace "${RHDH_NAMESPACE}"
-        $clin delete pvc "data-${RHDH_HELM_RELEASE_NAME}-postgresql-0" --ignore-not-found=true
-        $cli delete ns "${RHDH_NAMESPACE}" --ignore-not-found=true --wait
-        helm repo remove "${repo_name}" || true
-    elif [ "$INSTALL_METHOD" == "olm" ]; then
-        delete_rhdh_with_olm
-    fi
+
+    backstage_install
+    setup_monitoring
 }
 
 keycloak_install() {
@@ -141,6 +136,21 @@ keycloak_install() {
     envsubst <template/keycloak/keycloakUser.yaml | $clin apply -f -
 }
 
+create_objs() {
+    if ! $PRE_LOAD_DB; then
+        create_groups
+        create_users
+    fi
+
+    if [[ ${GITHUB_USER} ]] && [[ ${GITHUB_REPO} ]]; then
+        create_per_grp create_cmp COMPONENT_COUNT
+        create_per_grp create_api API_COUNT
+    else
+        echo "skipping component creating. GITHUB_REPO and GITHUB_USER not set"
+        exit 1
+    fi
+}
+
 backstage_install() {
     echo "Installing RHDH with install method: $INSTALL_METHOD"
     cp "template/backstage/app-config.yaml" "$TMP_DIR/app-config.yaml"
@@ -157,6 +167,64 @@ backstage_install() {
         echo "Invalid install method: $INSTALL_METHOD, currently allowed methods are helm or olm"
         return 1
     fi
+}
+
+# shellcheck disable=SC2016,SC1004
+install_rhdh_with_helm() {
+    helm repo remove "${repo_name}" || true
+    helm repo add "${repo_name}" "${RHDH_HELM_REPO}"
+    helm repo update "${repo_name}"
+    chart_values=template/backstage/helm/chart-values.yaml
+    if [ -n "${RHDH_IMAGE_REGISTRY}${RHDH_IMAGE_REPO}${RHDH_IMAGE_TAG}" ]; then
+        echo "Using '$RHDH_IMAGE_REGISTRY/$RHDH_IMAGE_REPO:$RHDH_IMAGE_TAG' image for RHDH"
+        chart_values=template/backstage/helm/chart-values.image-override.yaml
+    fi
+    version_arg=""
+    chart_origin=$repo_name/$RHDH_HELM_CHART
+    if [ -n "${RHDH_HELM_CHART_VERSION}" ]; then
+        version_arg="--version $RHDH_HELM_CHART_VERSION"
+        chart_origin="$chart_origin@$RHDH_HELM_CHART_VERSION"
+    fi
+    echo "Installing RHDH Helm chart $RHDH_HELM_RELEASE_NAME from $chart_origin in $RHDH_NAMESPACE namespace"
+    cp "$chart_values" "$TMP_DIR/chart-values.temp.yaml"
+    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.backstage |= . + load("template/backstage/helm/oauth2-container-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"; fi
+    envsubst \
+        '${OPENSHIFT_APP_DOMAIN} \
+            ${RHDH_HELM_RELEASE_NAME} \
+            ${RHDH_HELM_CHART} \
+            ${RHDH_DEPLOYMENT_REPLICAS} \
+            ${RHDH_DB_REPLICAS} \
+            ${RHDH_DB_STORAGE} \
+            ${RHDH_IMAGE_REGISTRY} \
+            ${RHDH_IMAGE_REPO} \
+            ${RHDH_IMAGE_TAG} \
+            ${RHDH_NAMESPACE} \
+            ${COOKIE_SECRET} \
+            ' <"$TMP_DIR/chart-values.temp.yaml" >"$TMP_DIR/chart-values.yaml"
+    if [ -n "${RHDH_RESOURCES_CPU_REQUESTS}" ]; then yq -i '.upstream.backstage.resources.requests.cpu = "'"${RHDH_RESOURCES_CPU_REQUESTS}"'"' "$TMP_DIR/chart-values.yaml"; fi
+    if [ -n "${RHDH_RESOURCES_CPU_LIMITS}" ]; then yq -i '.upstream.backstage.resources.limits.cpu = "'"${RHDH_RESOURCES_CPU_LIMITS}"'"' "$TMP_DIR/chart-values.yaml"; fi
+    if [ -n "${RHDH_RESOURCES_MEMORY_REQUESTS}" ]; then yq -i '.upstream.backstage.resources.requests.memory = "'"${RHDH_RESOURCES_MEMORY_REQUESTS}"'"' "$TMP_DIR/chart-values.yaml"; fi
+    if [ -n "${RHDH_RESOURCES_MEMORY_LIMITS}" ]; then yq -i '.upstream.backstage.resources.limits.memory = "'"${RHDH_RESOURCES_MEMORY_LIMITS}"'"' "$TMP_DIR/chart-values.yaml"; fi
+    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.service.ports.targetPort = "oauth2-proxy"' "$TMP_DIR/chart-values.yaml"; fi
+    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.service.ports.backend = 4180' "$TMP_DIR/chart-values.yaml"; fi
+    #shellcheck disable=SC2086
+    helm upgrade --install "${RHDH_HELM_RELEASE_NAME}" --devel "${repo_name}/${RHDH_HELM_CHART}" ${version_arg} -n "${RHDH_NAMESPACE}" --values "$TMP_DIR/chart-values.yaml"
+    wait_to_start statefulset "${RHDH_HELM_RELEASE_NAME}-postgresql-read" 300 300
+    wait_to_start deployment "${RHDH_HELM_RELEASE_NAME}-developer-hub" 300 300
+}
+
+install_rhdh_with_olm() {
+    $clin create secret generic rhdh-backend-secret --from-literal=BACKEND_SECRET="$(mktemp -u XXXXXXXXXXX)"
+    $clin create cm app-config-backend-secret --from-file=template/backstage/olm/app-config.rhdh.backend-secret.yaml
+    $clin apply -f template/backstage/olm/dynamic-plugins.configmap.yaml
+    set -x
+    OLM_CHANNEL="${RHDH_OLM_CHANNEL}" UPSTREAM_IIB="${RHDH_OLM_INDEX_IMAGE}" ./install-rhdh-catalog-source.sh --install-operator rhdh
+    set +x
+    wait_for_crd backstages.rhdh.redhat.com
+    envsubst <template/backstage/olm/backstage.yaml | $clin apply -f -
+
+    wait_to_start statefulset "backstage-psql-developer-hub" 300 300
+    wait_to_start deployment "backstage-developer-hub" 300 300
 }
 
 setup_monitoring() {
@@ -220,92 +288,26 @@ spec:
 EOF
 }
 
-create_objs() {
-    if ! $PRE_LOAD_DB; then
-        create_groups
-        create_users
-    fi
-
-    if [[ ${GITHUB_USER} ]] && [[ ${GITHUB_REPO} ]]; then
-        create_per_grp create_cmp COMPONENT_COUNT
-        create_per_grp create_api API_COUNT
+delete() {
+    echo "Remove RHDH with install method: $INSTALL_METHOD"
+    if ! $cli get ns "$RHDH_NAMESPACE" >/dev/null; then
+        echo "$RHDH_NAMESPACE namespace does not exit... Skipping. "
     else
-        echo "skipping component creating. GITHUB_REPO and GITHUB_USER not set"
-        exit 1
+        for cr in keycloakusers keycloakclients keycloakrealms keycloaks; do
+            for res in $($clin get "$cr.keycloak.org" -o name); do
+                $clin patch "$res" -p '{"metadata":{"finalizers":[]}}' --type=merge
+                $clin delete "$res" --wait
+            done
+        done
     fi
-}
-
-install() {
-    appurl=$(oc whoami --show-console)
-    export OPENSHIFT_APP_DOMAIN=${appurl#*.}
-    $cli create namespace "${RHDH_NAMESPACE}" --dry-run=client -o yaml | $cli apply -f -
-    keycloak_install
-
-    if $PRE_LOAD_DB; then
-        create_groups
-        create_users
+    if [ "$INSTALL_METHOD" == "helm" ]; then
+        helm uninstall "${RHDH_HELM_RELEASE_NAME}" --namespace "${RHDH_NAMESPACE}"
+        $clin delete pvc "data-${RHDH_HELM_RELEASE_NAME}-postgresql-0" --ignore-not-found=true
+        $cli delete ns "${RHDH_NAMESPACE}" --ignore-not-found=true --wait
+        helm repo remove "${repo_name}" || true
+    elif [ "$INSTALL_METHOD" == "olm" ]; then
+        delete_rhdh_with_olm
     fi
-
-    backstage_install
-    setup_monitoring
-}
-
-# shellcheck disable=SC2016,SC1004
-install_rhdh_with_helm() {
-    helm repo remove "${repo_name}" || true
-    helm repo add "${repo_name}" "${RHDH_HELM_REPO}"
-    helm repo update "${repo_name}"
-    chart_values=template/backstage/helm/chart-values.yaml
-    if [ -n "${RHDH_IMAGE_REGISTRY}${RHDH_IMAGE_REPO}${RHDH_IMAGE_TAG}" ]; then
-        echo "Using '$RHDH_IMAGE_REGISTRY/$RHDH_IMAGE_REPO:$RHDH_IMAGE_TAG' image for RHDH"
-        chart_values=template/backstage/helm/chart-values.image-override.yaml
-    fi
-    version_arg=""
-    chart_origin=$repo_name/$RHDH_HELM_CHART
-    if [ -n "${RHDH_HELM_CHART_VERSION}" ]; then
-        version_arg="--version $RHDH_HELM_CHART_VERSION"
-        chart_origin="$chart_origin@$RHDH_HELM_CHART_VERSION"
-    fi
-    echo "Installing RHDH Helm chart $RHDH_HELM_RELEASE_NAME from $chart_origin in $RHDH_NAMESPACE namespace"
-    cp "$chart_values" "$TMP_DIR/chart-values.temp.yaml"
-    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.backstage |= . + load("template/backstage/helm/oauth2-container-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"; fi
-    envsubst \
-        '${OPENSHIFT_APP_DOMAIN} \
-            ${RHDH_HELM_RELEASE_NAME} \
-            ${RHDH_HELM_CHART} \
-            ${RHDH_DEPLOYMENT_REPLICAS} \
-            ${RHDH_DB_REPLICAS} \
-            ${RHDH_DB_STORAGE} \
-            ${RHDH_IMAGE_REGISTRY} \
-            ${RHDH_IMAGE_REPO} \
-            ${RHDH_IMAGE_TAG} \
-            ${RHDH_NAMESPACE} \
-            ${COOKIE_SECRET} \
-            ' <"$TMP_DIR/chart-values.temp.yaml" >"$TMP_DIR/chart-values.yaml"
-    if [ -n "${RHDH_RESOURCES_CPU_REQUESTS}" ]; then yq -i '.upstream.backstage.resources.requests.cpu = "'"${RHDH_RESOURCES_CPU_REQUESTS}"'"' "$TMP_DIR/chart-values.yaml"; fi
-    if [ -n "${RHDH_RESOURCES_CPU_LIMITS}" ]; then yq -i '.upstream.backstage.resources.limits.cpu = "'"${RHDH_RESOURCES_CPU_LIMITS}"'"' "$TMP_DIR/chart-values.yaml"; fi
-    if [ -n "${RHDH_RESOURCES_MEMORY_REQUESTS}" ]; then yq -i '.upstream.backstage.resources.requests.memory = "'"${RHDH_RESOURCES_MEMORY_REQUESTS}"'"' "$TMP_DIR/chart-values.yaml"; fi
-    if [ -n "${RHDH_RESOURCES_MEMORY_LIMITS}" ]; then yq -i '.upstream.backstage.resources.limits.memory = "'"${RHDH_RESOURCES_MEMORY_LIMITS}"'"' "$TMP_DIR/chart-values.yaml"; fi
-    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.service.ports.targetPort = "oauth2-proxy"' "$TMP_DIR/chart-values.yaml"; fi
-    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.service.ports.backend = 4180' "$TMP_DIR/chart-values.yaml"; fi
-    #shellcheck disable=SC2086
-    helm upgrade --install "${RHDH_HELM_RELEASE_NAME}" --devel "${repo_name}/${RHDH_HELM_CHART}" ${version_arg} -n "${RHDH_NAMESPACE}" --values "$TMP_DIR/chart-values.yaml"
-    wait_to_start statefulset "${RHDH_HELM_RELEASE_NAME}-postgresql-read" 300 300
-    wait_to_start deployment "${RHDH_HELM_RELEASE_NAME}-developer-hub" 300 300
-}
-
-install_rhdh_with_olm() {
-    $clin create secret generic rhdh-backend-secret --from-literal=BACKEND_SECRET="$(mktemp -u XXXXXXXXXXX)"
-    $clin create cm app-config-backend-secret --from-file=template/backstage/olm/app-config.rhdh.backend-secret.yaml
-    $clin apply -f template/backstage/olm/dynamic-plugins.configmap.yaml
-    set -x
-    OLM_CHANNEL="${RHDH_OLM_CHANNEL}" UPSTREAM_IIB="${RHDH_OLM_INDEX_IMAGE}" ./install-rhdh-catalog-source.sh --install-operator rhdh
-    set +x
-    wait_for_crd backstages.rhdh.redhat.com
-    envsubst <template/backstage/olm/backstage.yaml | $clin apply -f -
-
-    wait_to_start statefulset "backstage-psql-developer-hub" 300 300
-    wait_to_start deployment "backstage-developer-hub" 300 300
 }
 
 delete_rhdh_with_olm() {
