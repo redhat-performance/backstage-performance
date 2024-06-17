@@ -15,6 +15,8 @@ WORKDIR=$(readlink -m .)
 
 kc_lockfile="$TMP_DIR/kc.lockfile"
 
+COOKIE="$TMP_DIR/cookie.jar"
+
 keycloak_url() {
   f="$TMP_DIR/keycloak.url"
   exec 4>"$kc_lockfile"
@@ -40,7 +42,7 @@ backstage_url() {
     exit 1
   }
   if [ ! -f "$f" ]; then
-    if [ "$INSTALL_METHOD" == "helm" ]; then
+    if [ "$RHDH_INSTALL_METHOD" == "helm" ]; then
       rhdh_route="${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}"
     else
       rhdh_route="backstage-developer-hub"
@@ -83,6 +85,7 @@ create_per_grp() {
 }
 
 clone_and_upload() {
+  ACCESS_TOKEN=$(get_token "rhdh")
   echo "[INFO][$(date --utc -Ins)] Uploading entities to GitHub"
   git_str="${GITHUB_USER}:${GITHUB_TOKEN}@github.com"
   base_name=$(basename "$GITHUB_REPO")
@@ -104,12 +107,12 @@ clone_and_upload() {
   git push -f --set-upstream origin "$tmp_branch"
   cd ..
   sleep 5
-  rhdh_token=$(curl -s -k "$(backstage_url)/api/auth/guest/refresh" | jq -r '.backstageIdentity.token')
   for filename in "${files[@]}"; do
     e_count=$(yq eval '.metadata.name | capture(".*-(?P<value>[0-9]+)").value' "$filename" | tail -n 1)
     upload_url="${GITHUB_REPO%.*}/blob/${tmp_branch}/$(basename "$filename")"
     echo "Uploading entities from $upload_url"
-    curl -k "$(backstage_url)/api/catalog/locations" -X POST -H 'Accept-Encoding: gzip, deflate, br' -H 'Authorization: Bearer '"$rhdh_token" -H 'Content-Type: application/json' --data-raw '{"type":"url","target":"'"${upload_url}"'"}'
+    curl -k "$(backstage_url)/api/catalog/locations" --cookie "$COOKIE" --cookie-jar "$COOKIE" -X POST -H 'Accept-Encoding: gzip, deflate, br' -H 'Authorization: Bearer '"$ACCESS_TOKEN" -H 'Content-Type: application/json' --data-raw '{"type":"url","target":"'"${upload_url}"'"}'
+
 
     timeout_timestamp=$(date -d "300 seconds" "+%s")
     while true; do
@@ -117,8 +120,8 @@ clone_and_upload() {
         echo "ERROR: Timeout waiting on entity count"
         exit 1
       else
-        if [[ 'component-*.yaml' == "${1}" ]]; then b_count=$(curl -s -k "$(backstage_url)/api/catalog/entity-facets?facet=kind" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$rhdh_token" | jq -r '.facets.kind[] | select(.value == "Component")| .count'); fi
-        if [[ 'api-*.yaml' == "${1}" ]]; then b_count=$(curl -s -k "$(backstage_url)/api/catalog/entity-facets?facet=kind" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$rhdh_token" | jq -r '.facets.kind[] | select(.value == "API")| .count'); fi
+        if [[ 'component-*.yaml' == "${1}" ]]; then b_count=$(curl -s -k "$(backstage_url)/api/catalog/entity-facets?facet=kind" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$ACCESS_TOKEN" | jq -r '.facets.kind[] | select(.value == "Component")| .count'); fi
+        if [[ 'api-*.yaml' == "${1}" ]]; then b_count=$(curl -s -k "$(backstage_url)/api/catalog/entity-facets?facet=kind" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$ACCESS_TOKEN" | jq -r '.facets.kind[] | select(.value == "API")| .count'); fi
         if [[ $b_count -ge $e_count ]]; then break; fi
       fi
       echo "Waiting for the entity count to be ${e_count} (current: ${b_count})"
@@ -195,8 +198,69 @@ log_token_err() {
   log_token "$1" "ERROR"
 }
 
+keycloak_token() {
+  curl -s -k "$(keycloak_url)/auth/realms/master/protocol/openid-connect/token" -d username=admin -d "password=${keycloak_pass}" -d 'grant_type=password' -d 'client_id=admin-cli' | jq -r ".expires_in_timestamp = $(date -d '30 seconds' +%s)"
+}
+
+rhdh_token() {
+  REDIRECT_URL="$(backstage_url)/oauth2/callback"
+  REFRESH_URL="$(backstage_url)/api/auth/oauth2Proxy/refresh"
+  USERNAME="test1"
+  PASSWORD=$(oc -n "${RHDH_NAMESPACE}" get secret perf-test-secrets -o template --template='{{.data.keycloak_user_pass}}' | base64 -d)
+  REALM="backstage"
+  CLIENTID="backstage"
+
+  if [[ "${AUTH_PROVIDER}" != "keycloak" ]]; then
+    ACCESS_TOKEN=$(curl -s -k --cookie "$COOKIE" --cookie-jar "$COOKIE" "$(backstage_url)/api/auth/guest/refresh" | jq -r ".backstageIdentity" | jq -r ".expires_in_timestamp = $(date -d '50 minutes' +%s)")
+    echo "$ACCESS_TOKEN"
+    return
+  fi
+
+  LOGIN_URL=$(curl -I -k -sSL --cookie "$COOKIE" --cookie-jar "$COOKIE" "$REFRESH_URL")
+  state=$(echo "$LOGIN_URL" | grep -oP 'state=\K[^ ]+' | sed 's/%2F/\//g;s/%3A/:/g')
+
+  AUTH_URL=$(curl -k -sSL --get --cookie "$COOKIE" --cookie-jar "$COOKIE" \
+    --data-urlencode "client_id=${CLIENTID}" \
+    --data-urlencode "state=${state}" \
+    --data-urlencode "redirect_uri=${REDIRECT_URL}" \
+    --data-urlencode "scope=openid email profile" \
+    --data-urlencode "response_type=code" \
+    "$(keycloak_url)/auth/realms/$REALM/protocol/openid-connect/auth" | grep -oP 'action="\K[^"]+')
+
+  execution=$(echo "$AUTH_URL" | grep -oP 'execution=\K[^&]+')
+  tab_id=$(echo "$AUTH_URL" | grep -oP 'tab_id=\K[^&]+')
+  # shellcheck disable=SC2001
+  AUTHENTICATE_URL=$(echo "$AUTH_URL" | sed -e 's/\&amp;/\&/g')
+
+  CODE_URL=$(curl -k -sS --cookie "$COOKIE" --cookie-jar "$COOKIE" \
+    --data-raw "username=${USERNAME}&password=${PASSWORD}&credentialId=" \
+    --data-urlencode "client_id=${CLIENTID}" \
+    --data-urlencode "tab_id=${tab_id}" \
+    --data-urlencode "execution=${execution}" \
+    --write-out "%{REDIRECT_URL}" \
+    "$AUTHENTICATE_URL")
+
+  code=$(echo "$CODE_URL" | grep -oP 'code=\K[^"]+')
+  session_state=$(echo "$CODE_URL" | grep -oP 'session_state=\K[^&]+')
+
+  # shellcheck disable=SC2001
+  CODE_URL=$(echo "$CODE_URL" | sed -e 's/\&amp;/\&/g')
+  ACCESS_TOKEN=$(curl -k -sSL --cookie "$COOKIE" --cookie-jar "$COOKIE" \
+    --data-urlencode "code=$code" \
+    --data-urlencode "session_state=$session_state" \
+    --data-urlencode "state=$state" \
+    "$CODE_URL" | jq -r ".backstageIdentity" | jq -r ".expires_in_timestamp = $(date -d '50 minutes' +%s)")
+  echo "$ACCESS_TOKEN"
+}
+
+
 get_token() {
-  token_file=$TMP_DIR/token.json
+  service=$1
+  if [[ ${service} == 'rhdh' ]]; then
+    token_file="$TMP_DIR/rhdh_token.json"
+  else
+    token_file="$TMP_DIR/keycloak_token.json"
+  fi
   while ! mkdir "$token_lockfile" 2>/dev/null; do
     sleep 0.5s
   done
@@ -210,16 +274,27 @@ get_token() {
       log_token_err "Timeout getting keycloak token"
       exit 1
     fi
-    keycloak_pass=$(oc -n "${RHDH_NAMESPACE}" get secret credential-example-sso -o template --template='{{.data.ADMIN_PASSWORD}}' | base64 -d)
-    if ! curl -s -k "$(keycloak_url)/auth/realms/master/protocol/openid-connect/token" -d username=admin -d "password=${keycloak_pass}" -d 'grant_type=password' -d 'client_id=admin-cli' | jq -r ".expires_in_timestamp = $(date -d '30 seconds' +%s)" >"$token_file"; then
-      log_token_err "Unable to get token, re-attempting"
+    if [[ ${service} == 'rhdh' ]]; then
+      [[ -f "$token_file" ]] && rm -rf "$token_file" && rm -rf "$TMP_DIR/cookie.jar"
+      if ! rhdh_token >"$token_file"; then
+        log_token_err "Unable to get token, re-attempting"
+      fi
+    else
+      keycloak_pass=$(oc -n "${RHDH_NAMESPACE}" get secret credential-example-sso -o template --template='{{.data.ADMIN_PASSWORD}}' | base64 -d)
+      if ! keycloak_token >"$token_file"; then
+        log_token_err "Unable to get token, re-attempting"
+      fi
     fi
     sleep 5s
   done
 
-  jq -rc '.access_token' "$token_file"
+  if [[ ${service} == 'rhdh' ]]; then
+    jq -rc '.token' "$token_file"
+  else
+    jq -rc '.access_token' "$token_file"
+  fi
   rm -rf "$token_lockfile"
 }
 
-export -f keycloak_url backstage_url backstage_url get_token create_group create_user log_token log_token_info log_token_err
+export -f keycloak_url backstage_url get_token keycloak_token rhdh_token create_group create_user log_token log_token_info log_token_err
 export kc_lockfile bs_lockfile token_lockfile
