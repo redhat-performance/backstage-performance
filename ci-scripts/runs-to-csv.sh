@@ -31,9 +31,12 @@ RHDH_DB_CPU_Avg,\
 RHDH_DB_CPU_Max,\
 RHDH_DB_Memory_Avg,\
 RHDH_DB_Memory_Max,\
-RHDH_DB_Storage_Used,\
-RHDH_DB_Storage_Available,\
-RHDH_DB_Storage_Capacity,\
+RHDH_DB_Populate_Storage_Used,\
+RHDH_DB_Populate_Storage_Available,\
+RHDH_DB_Populate_Storage_Capacity,\
+RHDH_DB_Test_Storage_Used,\
+RHDH_DB_Test_Storage_Available,\
+RHDH_DB_Test_Storage_Capacity,\
 RPS_Avg,\
 RPS_Max,\
 Failures,\
@@ -48,8 +51,8 @@ Response_Size_Avg"
 echo "$headers"
 
 find "${1:-.}" -name benchmark.json -print0 | while IFS= read -r -d '' filename; do
-    sed -Ee 's/: ([0-9]+\.[0-9]*[X]+[0-9e\+-]*|[0-9]*X+[0-9]*\.[0-9e\+-]*|[0-9]*X+[0-9]*\.[0-9]*X+[0-9e\+-]+)/: "\1"/g' "${filename}" \
-        | jq --raw-output '[
+    sed -Ee 's/: ([0-9]+\.[0-9]*[X]+[0-9e\+-]*|[0-9]*X+[0-9]*\.[0-9e\+-]*|[0-9]*X+[0-9]*\.[0-9]*X+[0-9e\+-]+)/: "\1"/g' "${filename}" |
+        jq --raw-output '[
         .metadata.env.BUILD_ID,
         .results.started,
         .results.ended,
@@ -76,9 +79,12 @@ find "${1:-.}" -name benchmark.json -print0 | while IFS= read -r -d '' filename;
         .measurements."rhdh-postgresql".cpu.max,
         .measurements."rhdh-postgresql".memory.mean,
         .measurements."rhdh-postgresql".memory.max,
-        .measurements.cluster.pv_stats.test."data-rhdh-postgresql-primary-0".used_bytes.max,
-        .measurements.cluster.pv_stats.test."data-rhdh-postgresql-primary-0".available_bytes.min,
-        .measurements.cluster.pv_stats.test."data-rhdh-postgresql-primary-0".capacity_bytes.max,
+        .measurements.cluster.pv_stats.populate."rhdh-postgresql".used_bytes.max,
+        .measurements.cluster.pv_stats.populate."rhdh-postgresql".available_bytes.min,
+        .measurements.cluster.pv_stats.populate."rhdh-postgresql".capacity_bytes.max,
+        .measurements.cluster.pv_stats.test."rhdh-postgresql".used_bytes.max,
+        .measurements.cluster.pv_stats.test."rhdh-postgresql".available_bytes.min,
+        .measurements.cluster.pv_stats.test."rhdh-postgresql".capacity_bytes.max,
         .results.Aggregated.locust_requests_current_rps.mean,
         .results.Aggregated.locust_requests_current_rps.max,
         .results.Aggregated.locust_requests_num_failures.max,

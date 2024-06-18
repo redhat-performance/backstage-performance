@@ -1,14 +1,14 @@
-{% macro pv_stats(pvc) -%}
+{% macro pv_stats(alias, pvc_regex) -%}
 # Collect data for PV stats
-- name: measurements.cluster.pv_stats.populate.{{pvc}}.capacity_bytes
-  monitoring_query: kubelet_volume_stats_capacity_bytes{persistentvolumeclaim="{{ pvc }}"}
+- name: measurements.cluster.pv_stats.populate.{{alias}}.capacity_bytes
+  monitoring_query: kubelet_volume_stats_capacity_bytes{persistentvolumeclaim=~"{{ pvc_regex }}"}
   monitoring_step: 15
-- name: measurements.cluster.pv_stats.populate.{{pvc}}.used_bytes
-  monitoring_query: kubelet_volume_stats_used_bytes{persistentvolumeclaim="{{ pvc }}"}
+- name: measurements.cluster.pv_stats.populate.{{alias}}.used_bytes
+  monitoring_query: kubelet_volume_stats_used_bytes{persistentvolumeclaim=~"{{ pvc_regex }}"}
   monitoring_step: 15
-- name: measurements.cluster.pv_stats.populate.{{pvc}}.available_bytes
-  monitoring_query: kubelet_volume_stats_available_bytes{persistentvolumeclaim="{{ pvc }}"}
+- name: measurements.cluster.pv_stats.populate.{{alias}}.available_bytes
+  monitoring_query: kubelet_volume_stats_available_bytes{persistentvolumeclaim=~"{{ pvc_regex }}"}
   monitoring_step: 15
 {%- endmacro %}
 
-{{ pv_stats('data-rhdh-postgresql-primary-0') }}
+{{ pv_stats('rhdh-postgresql', 'data-(rhdh|backstage)-(postgresql|psql)-(primary|developer-hub)-0') }}

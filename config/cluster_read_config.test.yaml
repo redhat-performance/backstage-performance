@@ -127,93 +127,97 @@
 
 
 
-{% macro monitor_pod(namespace, pod, step=15, pod_suffix_regex='-[0-9a-f]+-.*') -%}
+{% macro monitor_pod(alias, namespace_regex, pod_regex, step=15, pod_suffix_regex='-[0-9a-f]+-.*') -%}
 # Gather monitoring data about the pod
-- name: measurements.{{ pod }}.cpu
-  monitoring_query: sum(pod:container_cpu_usage:sum{namespace='{{ namespace }}', pod=~'{{ pod }}{{ pod_suffix_regex }}'})
+- name: measurements.{{ alias }}.cpu
+  monitoring_query: sum(pod:container_cpu_usage:sum{namespace=~'{{ namespace_regex }}', pod=~'{{ pod_regex }}{{ pod_suffix_regex }}'})
   monitoring_step: {{ step }}
-- name: measurements.{{ pod }}.memory
-  monitoring_query: sum(container_memory_usage_bytes{namespace='{{ namespace }}', pod=~'{{ pod }}{{ pod_suffix_regex }}', container!='POD', container!=''})
+- name: measurements.{{ alias }}.memory
+  monitoring_query: sum(container_memory_usage_bytes{namespace=~'{{ namespace_regex }}', pod=~'{{ pod_regex }}{{ pod_suffix_regex }}', container!='POD', container!=''})
   monitoring_step: {{ step }}
-- name: measurements.{{ pod }}.network_throughput
-  monitoring_query: sum( rate(container_network_transmit_bytes_total{namespace='{{ namespace }}', pod=~'{{ pod }}{{ pod_suffix_regex }}'}[{{ step * 4 }}s]) + rate(container_network_receive_bytes_total{namespace='{{ namespace }}', pod=~'{{ pod }}{{ pod_suffix_regex }}'}[{{ step * 4 }}s]) )
+- name: measurements.{{ alias }}.network_throughput
+  monitoring_query: sum( rate(container_network_transmit_bytes_total{namespace=~'{{ namespace_regex }}', pod=~'{{ pod_regex }}{{ pod_suffix_regex }}'}[{{ step * 4 }}s]) + rate(container_network_receive_bytes_total{namespace=~'{{ namespace_regex }}', pod=~'{{ pod_regex }}{{ pod_suffix_regex }}'}[{{ step * 4 }}s]) )
   monitoring_step: {{ step * 4 }}
-- name: measurements.{{ pod }}.network_drop
-  monitoring_query: sum( rate(container_network_transmit_packets_dropped_total{namespace='{{ namespace }}', pod=~'{{ pod }}{{ pod_suffix_regex }}'}[{{ step * 4 }}s]) + rate(container_network_receive_packets_dropped_total{namespace='{{ namespace }}', pod=~'{{ pod }}{{ pod_suffix_regex }}'}[{{ step * 4 }}s]) )
+- name: measurements.{{ alias }}.network_drop
+  monitoring_query: sum( rate(container_network_transmit_packets_dropped_total{namespace=~'{{ namespace_regex }}', pod=~'{{ pod_regex }}{{ pod_suffix_regex }}'}[{{ step * 4 }}s]) + rate(container_network_receive_packets_dropped_total{namespace=~'{{ namespace_regex }}', pod=~'{{ pod_regex }}{{ pod_suffix_regex }}'}[{{ step * 4 }}s]) )
   monitoring_step: {{ step * 4 }}
-- name: measurements.{{ pod }}.disk_throughput
-  monitoring_query: sum( sum(rate(container_fs_reads_bytes_total{namespace='{{ namespace }}', pod=~'{{ pod }}{{ pod_suffix_regex }}', device!='/dev/dm-0'}[{{ step * 4 }}s])) + sum(rate(container_fs_writes_bytes_total{namespace='{{ namespace }}', pod=~'{{ pod }}{{ pod_suffix_regex }}', device!='/dev/dm-0'}[{{ step * 4 }}s])) )
+- name: measurements.{{ alias }}.disk_throughput
+  monitoring_query: sum( sum(rate(container_fs_reads_bytes_total{namespace=~'{{ namespace_regex }}', pod=~'{{ pod_regex }}{{ pod_suffix_regex }}', device!='/dev/dm-0'}[{{ step * 4 }}s])) + sum(rate(container_fs_writes_bytes_total{namespace=~'{{ namespace_regex }}', pod=~'{{ pod_regex }}{{ pod_suffix_regex }}', device!='/dev/dm-0'}[{{ step * 4 }}s])) )
   monitoring_step: {{ step * 4 }}
-- name: measurements.{{ pod }}.restarts
-  monitoring_query: sum(kube_pod_container_status_restarts_total{namespace='{{ namespace }}', pod=~'{{ pod }}{{ pod_suffix_regex }}'})
+- name: measurements.{{ alias }}.restarts
+  monitoring_query: sum(kube_pod_container_status_restarts_total{namespace=~'{{ namespace_regex }}', pod=~'{{ pod_regex }}{{ pod_suffix_regex }}'})
   monitoring_step: {{ step }}
-- name: measurements.{{ pod }}.count_ready
-  monitoring_query: sum( kube_pod_status_ready{namespace='{{ namespace }}', pod=~'{{ pod }}{{ pod_suffix_regex }}'} )
+- name: measurements.{{ alias }}.count_ready
+  monitoring_query: sum( kube_pod_status_ready{namespace=~'{{ namespace_regex }}', pod=~'{{ pod_regex }}{{ pod_suffix_regex }}'} )
   monitoring_step: {{ step }}
 {%- endmacro %}
 
-{% macro pod_info(namespace, deployment, container) -%}
+{% macro pod_info(alias, namespace_regex, deployment_regex, container) -%}
 # Gather info about pod configuration
-- name: metadata.cluster.pods.{{ deployment }}-{{ container }}.count
-  command: oc -n {{ namespace }} get deployment/{{ deployment }} -o json | jq '.spec | if has("replicas") then .replicas else 1 end'
-- name: metadata.cluster.pods.{{ deployment }}-{{ container }}.resources
-  command: oc -n {{ namespace }} get deployment/{{ deployment }} -o json | jq '.spec.template.spec.containers | map(select(.name == "{{ container }}"))[0].resources'
+- name: metadata.cluster.pods.{{ alias }}.count
+  command: oc get deployments -A -o json | jq -r '.items[] | select(.metadata.namespace | match("{{ namespace_regex }}")) | select(.metadata.name | match("{{ deployment_regex }}")).spec | if has("replicas") then .replicas else 1 end'
+- name: metadata.cluster.pods.{{ alias }}.resources
+  command: oc get deployments -A -o json | jq -r '.items[] | select(.metadata.namespace | match("{{ namespace_regex }}")) | select(.metadata.name | match("{{ deployment_regex }}")).spec.template.spec.containers | map(select(.name == "{{ container }}"))[0].resources'
   output: json
-- name: metadata.cluster.pods.{{ deployment }}-{{ container }}.image
-  command: oc -n {{ namespace }} get deployment/{{ deployment }} -o json | jq --raw-output '.spec.template.spec.containers | map(select(.name == "{{ container }}"))[0].image'
-- name: metadata.cluster.pods.{{ deployment }}-{{ container }}.image_tag
-  command: oc -n {{ namespace }} get deployment/{{ deployment }} -o json | jq --raw-output '.spec.template.spec.containers | map(select(.name == "{{ container }}"))[0].image | split(":")[1]'
+- name: metadata.cluster.pods.{{ alias }}.image
+  command: oc get deployments -A -o json | jq -r '.items[] | select(.metadata.namespace | match("{{ namespace_regex }}")) | select(.metadata.name | match("{{ deployment_regex }}")).spec.template.spec.containers | map(select(.name == "{{ container }}"))[0].image'
+- name: metadata.cluster.pods.{{ alias }}.image_tag
+  command: oc get deployments -A -o json | jq -r '.items[] | select(.metadata.namespace | match("{{ namespace_regex }}")) | select(.metadata.name | match("{{ deployment_regex }}")).spec.template.spec.containers | map(select(.name == "{{ container }}"))[0].image | split(":")[1]'
 {%- endmacro %}
 
 
 
 # Collect data for relevant pods
-{{ monitor_pod('rhdh-performance', 'rhdh-developer-hub', 15) }}
-{{ monitor_pod('rhdh-performance', 'rhdh-postgresql', 15, '-.*') }}
-{{ pod_info('rhdh-performance', 'rhdh-developer-hub', 'backstage-backend') }}
+{{ monitor_pod('rhdh-developer-hub', 'rhdh-performance.*', '(rhdh|backstage)-developer-hub', 15) }}
+{{ monitor_pod('rhdh-postgresql', 'rhdh-performance.*', '(rhdh|backstage)-(postgresql|psql)', 15, '-.*') }}
+{{ pod_info('rhdh-developer-hub-backstage-backend', 'rhdh-performance.*', '(rhdh|backstage)-developer-hub', 'backstage-backend') }}
 
 
 
 # Collect data for API pods
-{{ monitor_pod('openshift-apiserver', 'apiserver', 15) }}
-{{ monitor_pod('openshift-kube-apiserver', 'kube-apiserver', 15, pod_suffix_regex='-ip-.+') }}
+{{ monitor_pod('apiserver', 'openshift-apiserver', 'apiserver', 15) }}
+{{ monitor_pod('kube-apiserver', 'openshift-kube-apiserver', 'kube-apiserver', 15, pod_suffix_regex='-ip-.+') }}
 
-{% macro pv_stats(pvc) -%}
+{% macro pv_stats(alias, pvc_regex) -%}
 # Collect data for PV stats
-- name: measurements.cluster.pv_stats.test.{{pvc}}.capacity_bytes
-  monitoring_query: kubelet_volume_stats_capacity_bytes{persistentvolumeclaim="{{ pvc }}"}
+- name: measurements.cluster.pv_stats.test.{{alias}}.capacity_bytes
+  monitoring_query: kubelet_volume_stats_capacity_bytes{persistentvolumeclaim=~"{{ pvc_regex }}"}
   monitoring_step: 15
-- name: measurements.cluster.pv_stats.test.{{pvc}}.used_bytes
-  monitoring_query: kubelet_volume_stats_used_bytes{persistentvolumeclaim="{{ pvc }}"}
+- name: measurements.cluster.pv_stats.test.{{alias}}.used_bytes
+  monitoring_query: kubelet_volume_stats_used_bytes{persistentvolumeclaim=~"{{ pvc_regex }}"}
   monitoring_step: 15
-- name: measurements.cluster.pv_stats.test.{{pvc}}.available_bytes
-  monitoring_query: kubelet_volume_stats_available_bytes{persistentvolumeclaim="{{ pvc }}"}
+- name: measurements.cluster.pv_stats.test.{{alias}}.available_bytes
+  monitoring_query: kubelet_volume_stats_available_bytes{persistentvolumeclaim=~"{{ pvc_regex }}"}
   monitoring_step: 15
 {%- endmacro %}
 
-{{ pv_stats('data-rhdh-postgresql-primary-0') }}
+{{ pv_stats('rhdh-postgresql', 'data-(rhdh|backstage)-(postgresql|psql)-(primary|developer-hub)-0') }}
 
 # Collect index usage
 #Note: It is assumed that the default value for namespace and pod name is used.
+{% macro collect_index_usage(namespace_regex, pod_regex) -%}
 - name: measurements.postgresql.backstage-plugin-catalog.index
-  command: oc exec rhdh-postgresql-primary-0 -n rhdh-performance -- psql -h localhost -U postgres backstage_plugin_catalog -c "SELECT relname, 100 * idx_scan / (seq_scan + idx_scan) percent_of_times_index_used, n_live_tup rows_in_table FROM pg_stat_user_tables ORDER BY n_live_tup DESC;" -A -F ',' |head -n -1|yq -p csv -o json
+  command: oc exec $(oc get pods -A -o json | jq -r '.items[] | select(.metadata.namespace | match("{{ namespace_regex }}")) | select(.metadata.name | match("{{ pod_regex }}")).metadata.name') -n $(oc get pods -A -o json | jq -r '.items[] | select(.metadata.namespace | match("{{ namespace_regex }}")) | select(.metadata.name | match("{{ pod_regex }}")).metadata.namespace') -- psql -h localhost -U postgres backstage_plugin_catalog -c "SELECT relname, 100 * idx_scan / (seq_scan + idx_scan) percent_of_times_index_used, n_live_tup rows_in_table FROM pg_stat_user_tables ORDER BY n_live_tup DESC;" -A -F ',' |head -n -1|yq -p csv -o json
   output: json
 
 - name: measurements.postgresql.backstage-plugin-auth.index
-  command: oc exec rhdh-postgresql-primary-0 -n rhdh-performance -- psql -h localhost -U postgres backstage_plugin_auth -c "SELECT relname, 100 * idx_scan / (seq_scan + idx_scan) percent_of_times_index_used, n_live_tup rows_in_table FROM pg_stat_user_tables ORDER BY n_live_tup DESC;" -A -F ',' |head -n -1|yq -p csv -o json
+  command: oc exec $(oc get pods -A -o json | jq -r '.items[] | select(.metadata.namespace | match("{{ namespace_regex }}")) | select(.metadata.name | match("{{ pod_regex }}")).metadata.name') -n $(oc get pods -A -o json | jq -r '.items[] | select(.metadata.namespace | match("{{ namespace_regex }}")) | select(.metadata.name | match("{{ pod_regex }}")).metadata.namespace') -- psql -h localhost -U postgres backstage_plugin_auth -c "SELECT relname, 100 * idx_scan / (seq_scan + idx_scan) percent_of_times_index_used, n_live_tup rows_in_table FROM pg_stat_user_tables ORDER BY n_live_tup DESC;" -A -F ',' |head -n -1|yq -p csv -o json
   output: json
 
 - name: measurements.postgresql.backstage-plugin-app.index
-  command: oc exec rhdh-postgresql-primary-0 -n rhdh-performance -- psql -h localhost -U postgres backstage_plugin_app -c "SELECT relname, 100 * idx_scan / (seq_scan + idx_scan) percent_of_times_index_used, n_live_tup rows_in_table FROM pg_stat_user_tables ORDER BY n_live_tup DESC;" -A -F ',' |head -n -1|yq -p csv -o json
+  command: oc exec $(oc get pods -A -o json | jq -r '.items[] | select(.metadata.namespace | match("{{ namespace_regex }}")) | select(.metadata.name | match("{{ pod_regex }}")).metadata.name') -n $(oc get pods -A -o json | jq -r '.items[] | select(.metadata.namespace | match("{{ namespace_regex }}")) | select(.metadata.name | match("{{ pod_regex }}")).metadata.namespace') -- psql -h localhost -U postgres backstage_plugin_app -c "SELECT relname, 100 * idx_scan / (seq_scan + idx_scan) percent_of_times_index_used, n_live_tup rows_in_table FROM pg_stat_user_tables ORDER BY n_live_tup DESC;" -A -F ',' |head -n -1|yq -p csv -o json
   output: json
 
 - name: measurements.postgresql.backstage-plugin-scaffolder.index
-  command: oc exec rhdh-postgresql-primary-0 -n rhdh-performance -- psql -h localhost -U postgres backstage_plugin_scaffolder -c "SELECT relname, 100 * idx_scan / (seq_scan + idx_scan) percent_of_times_index_used, n_live_tup rows_in_table FROM pg_stat_user_tables ORDER BY n_live_tup DESC;" -A -F ',' |head -n -1|yq -p csv -o json
+  command: oc exec $(oc get pods -A -o json | jq -r '.items[] | select(.metadata.namespace | match("{{ namespace_regex }}")) | select(.metadata.name | match("{{ pod_regex }}")).metadata.name') -n $(oc get pods -A -o json | jq -r '.items[] | select(.metadata.namespace | match("{{ namespace_regex }}")) | select(.metadata.name | match("{{ pod_regex }}")).metadata.namespace') -- psql -h localhost -U postgres backstage_plugin_scaffolder -c "SELECT relname, 100 * idx_scan / (seq_scan + idx_scan) percent_of_times_index_used, n_live_tup rows_in_table FROM pg_stat_user_tables ORDER BY n_live_tup DESC;" -A -F ',' |head -n -1|yq -p csv -o json
   output: json
 
 - name: measurements.postgresql.backstage-plugin-search.index
-  command: oc exec rhdh-postgresql-primary-0 -n rhdh-performance -- psql -h localhost -U postgres backstage_plugin_search -c "SELECT relname, 100 * idx_scan / (seq_scan + idx_scan) percent_of_times_index_used, n_live_tup rows_in_table FROM pg_stat_user_tables ORDER BY n_live_tup DESC;" -A -F ',' |head -n -1|yq -p csv -o json
+  command: oc exec $(oc get pods -A -o json | jq -r '.items[] | select(.metadata.namespace | match("{{ namespace_regex }}")) | select(.metadata.name | match("{{ pod_regex }}")).metadata.name') -n $(oc get pods -A -o json | jq -r '.items[] | select(.metadata.namespace | match("{{ namespace_regex }}")) | select(.metadata.name | match("{{ pod_regex }}")).metadata.namespace') -- psql -h localhost -U postgres backstage_plugin_search -c "SELECT relname, 100 * idx_scan / (seq_scan + idx_scan) percent_of_times_index_used, n_live_tup rows_in_table FROM pg_stat_user_tables ORDER BY n_live_tup DESC;" -A -F ',' |head -n -1|yq -p csv -o json
   output: json
+{%- endmacro %}
+
+{{ collect_index_usage('rhdh-performance.*', '(rhdh|backstage)-(postgresql|psql)-(primary|developer-hub)-0') }}
 
 # Results
 {%macro results_scenario(name) -%}
