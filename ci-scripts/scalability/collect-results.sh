@@ -78,9 +78,9 @@ for w in "${workers[@]}"; do
                                         + $csv_delim_quoted + (.results.Aggregated.locust_requests_avg_response_time.max | tostring) \
                                         + $csv_delim_quoted + (.results.Aggregated.locust_requests_num_failures.max | tostring) \
                                         + $csv_delim_quoted + (.results.locust_requests_fail_ratio.mean | tostring) \
-                                        + $csv_delim_quoted + (.measurements.cluster.pv_stats.test.\"data-rhdh-postgresql-primary-0\".used_bytes.max | tostring) \
-                                        + $csv_delim_quoted + (.measurements.cluster.pv_stats.test.\"data-rhdh-postgresql-primary-0\".available_bytes.min | tostring) \
-                                        + $csv_delim_quoted + (.measurements.cluster.pv_stats.test.\"data-rhdh-postgresql-primary-0\".capacity_bytes.max | tostring)"
+                                        + $csv_delim_quoted + (.measurements.cluster.pv_stats.test.\"rhdh-postgresql\".used_bytes.max | tostring) \
+                                        + $csv_delim_quoted + (.measurements.cluster.pv_stats.test.\"rhdh-postgresql\".available_bytes.min | tostring) \
+                                        + $csv_delim_quoted + (.measurements.cluster.pv_stats.test.\"rhdh-postgresql\".capacity_bytes.max | tostring)"
                                     sed -Ee 's/: ([0-9]+\.[0-9]*[X]+[0-9e\+-]*|[0-9]*X+[0-9]*\.[0-9e\+-]*|[0-9]*X+[0-9]*\.[0-9]*X+[0-9e\+-]+)/: "\1"/g' "$benchmark_json" | jq -rc "$jq_cmd" >>"$output"
                                 else
                                     echo "[$iteration] Unable to find benchmark.json"
