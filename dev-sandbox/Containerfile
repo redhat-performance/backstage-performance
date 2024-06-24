@@ -1,0 +1,9 @@
+FROM registry.access.redhat.com/ubi9/ubi
+
+ENV RHDH_BASE_URL=localhost
+
+RUN yum install -y jq && yum clean all
+
+COPY mvp.sh /tmp/mvp.sh
+
+CMD /tmp/mvp.sh

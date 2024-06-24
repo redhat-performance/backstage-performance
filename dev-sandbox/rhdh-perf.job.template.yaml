@@ -1,0 +1,21 @@
+kind: Template
+apiVersion: template.openshift.io/v1
+metadata:
+  name: user-workloads
+objects:
+  - apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: rhdh-perf
+    spec:
+      template:
+        spec:
+          containers:
+            - name: curl-container
+              image: quay.io/pmacik-testing/rhdh-perf-testing-client:v1.2
+              imagePullPolicy: Always
+              env:
+                - name: RHDH_BASE_URL
+                  value: "${RHDH_URL}"
+          restartPolicy: Never
+      backoffLimit: 4
