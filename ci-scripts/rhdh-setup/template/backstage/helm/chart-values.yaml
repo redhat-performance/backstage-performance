@@ -61,7 +61,7 @@ upstream:
         valueFrom:
           secretKeyRef:
             key: backend-secret
-            name: "{{ .Release.Name }}-auth"
+            name: '{{ include "janus-idp.backend-secret-name" $ }}'
       - name: GITHUB_TOKEN
         valueFrom:
           secretKeyRef:
