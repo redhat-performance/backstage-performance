@@ -18,6 +18,9 @@ GITHUB_USER="$(cat /usr/local/ci-secrets/backstage-performance/github.user)"
 GITHUB_REPO="$(cat /usr/local/ci-secrets/backstage-performance/github.repo)"
 QUAY_TOKEN="$(cat /usr/local/ci-secrets/backstage-performance/quay.token)"
 
+# shellcheck disable=SC1090,SC1091
+source "${PROJ_ROOT}"ci-scripts/rhdh-setup/create_resource.sh
+
 read -ra workers <<<"${SCALE_WORKERS:-5}"
 
 read -ra active_users_spawn_rate <<<"${SCALE_ACTIVE_USERS_SPAWN_RATES:-1:1 200:40}"
@@ -40,6 +43,13 @@ echo "Number of scalability matrix iterations: $((${#workers[*]} * ${#active_use
 echo
 
 wait_for_indexing() {
+    COOKIE="$TMP_DIR/cookie.jar"
+    if [ "$INSTALL_METHOD" == "helm" ]; then
+        rhdh_route="${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}"
+        #rhdh_route="rhdh-redhat-developer-hub"
+    else
+        rhdh_route="backstage-developer-hub"
+    fi
     if [ "$WAIT_FOR_SEARCH_INDEX" == "true" ]; then
         rhdh_route="${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}"
         HOST="https://$(oc get routes "${rhdh_route}" -n "${RHDH_NAMESPACE:-rhdh-performance}" -o jsonpath='{.spec.host}')"
@@ -52,7 +62,8 @@ wait_for_indexing() {
                 echo "ERROR: Timeout waiting"
                 exit 1
             else
-                count="$(curl -sk "$HOST/api/search/query?term=&types%5B0%5D=software-catalog" | jq -rc '.numberOfResults')"
+                ACCESS_TOKEN=$(get_token "rhdh")
+                count="$(curl -sk "$HOST/api/search/query?term=&types%5B0%5D=software-catalog" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Authorization: Bearer '"$ACCESS_TOKEN" | jq -rc '.numberOfResults')"
                 if [ "$count" != "null" ]; then
                     finish=$(date +%s)
                     echo "Search query returned non-empty set ($count) - indexing has finished in $((finish - start))s"

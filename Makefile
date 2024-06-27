@@ -62,6 +62,8 @@ export TMP_DIR=$(shell readlink -m .tmp)
 # Local directory to store artifacts
 export ARTIFACT_DIR ?= $(shell readlink -m .artifacts)
 
+export PROJ_ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+
 # Name of the namespace to install locust operator as well as to run Pods of master and workers.
 LOCUST_NAMESPACE=locust-operator
 
