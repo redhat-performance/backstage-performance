@@ -30,7 +30,7 @@ else
     exit 1
 fi
 export HOST
-HOST=${HOST:-"https://$(oc get routes "$rhdh_route" -n "${RHDH_NAMESPACE:-rhdh-performance}" -o jsonpath='{.spec.host}')"}
+HOST="https://$(oc get routes "$rhdh_route" -n "${RHDH_NAMESPACE:-rhdh-performance}" -o jsonpath='{.spec.host}')"
 # end-of testing env
 
 ARTIFACT_DIR=$(readlink -m "${ARTIFACT_DIR:-.artifacts}")
