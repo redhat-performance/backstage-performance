@@ -1,0 +1,11 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: rbac-policy
+data:
+  rbac-policy.csv: |
+    p, role:default/perf_admin, kubernetes.proxy, use, allow
+    p, role:default/perf_admin, catalog-entity, read, allow
+    p, role:default/perf_admin, catalog.entity.create, create, allow
+    p, role:default/perf_admin, catalog.location.create, create, allow
+    p, role:default/perf_admin, catalog.location.read, read, allow
