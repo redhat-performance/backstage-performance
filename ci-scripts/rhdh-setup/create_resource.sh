@@ -152,6 +152,7 @@ create_cmp() {
 create_group() {
   token=$(get_token)
   groupname="group${0}"
+  echo "    g, group:default/${groupname}, role:default/perf_admin" >> "$TMP_DIR/group-rbac.yaml"
   curl -s -k --location --request POST "$(keycloak_url)/auth/admin/realms/backstage/groups" \
     -H 'Content-Type: application/json' \
     -H 'Authorization: Bearer '"$token" \

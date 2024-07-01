@@ -52,6 +52,7 @@ export API_COUNT="${API_COUNT:-1}"
 export COMPONENT_COUNT="${COMPONENT_COUNT:-1}"
 export KEYCLOAK_USER_PASS=${KEYCLOAK_USER_PASS:-$(mktemp -u XXXXXXXXXX)}
 export AUTH_PROVIDER="${AUTH_PROVIDER:-''}"
+export ENABLE_RBAC="${ENABLE_RBAC:-false}"
 
 export INSTALL_METHOD=helm
 
@@ -157,7 +158,11 @@ backstage_install() {
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '. |= . + {"signInPage":"oauth2Proxy"}' "$TMP_DIR/app-config.yaml"; fi
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '. |= . + {"auth":{"environment":"production","providers":{"oauth2Proxy":{}}}}' "$TMP_DIR/app-config.yaml"; else yq -i '. |= . + {"auth":{"providers":{"guest":{"dangerouslyAllowOutsideDevelopment":true}}}}' "$TMP_DIR/app-config.yaml"; fi
     until envsubst <template/backstage/secret-rhdh-pull-secret.yaml | $clin apply -f -; do $clin delete secret rhdh-pull-secret --ignore-not-found=true; done
+    if ${ENABLE_RBAC}; then yq -i '. |= . + load("template/backstage/app-rbac-patch.yaml")' "$TMP_DIR/app-config.yaml"; fi
     until $clin create configmap app-config-rhdh --from-file "app-config.rhdh.yaml=$TMP_DIR/app-config.yaml"; do $clin delete configmap app-config-rhdh --ignore-not-found=true; done
+    cp template/backstage/rbac-config.yaml "${TMP_DIR}"
+    cat "$TMP_DIR/group-rbac.yaml">> "$TMP_DIR/rbac-config.yaml"
+    $clin apply -f "$TMP_DIR/rbac-config.yaml" --namespace="${RHDH_NAMESPACE}"
     envsubst <template/backstage/plugin-secrets.yaml | $clin apply -f -
     if [ "$INSTALL_METHOD" == "helm" ]; then
         install_rhdh_with_helm
@@ -188,6 +193,14 @@ install_rhdh_with_helm() {
     echo "Installing RHDH Helm chart $RHDH_HELM_RELEASE_NAME from $chart_origin in $RHDH_NAMESPACE namespace"
     cp "$chart_values" "$TMP_DIR/chart-values.temp.yaml"
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.backstage |= . + load("template/backstage/helm/oauth2-container-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"; fi
+    if ${ENABLE_RBAC}; then
+        if helm search repo --devel -r rhdh --version 1.2-1 --fail-on-no-result ; then
+            yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.2.yaml")' "$TMP_DIR/chart-values.temp.yaml";
+        else
+            yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.1.yaml")' "$TMP_DIR/chart-values.temp.yaml";
+        fi
+        yq -i '.global.dynamic.plugins |= . + load("template/backstage/helm/rbac-plugin-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml";
+    fi
     envsubst \
         '${OPENSHIFT_APP_DOMAIN} \
             ${RHDH_HELM_RELEASE_NAME} \
