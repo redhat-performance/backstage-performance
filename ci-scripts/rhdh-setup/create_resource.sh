@@ -114,7 +114,7 @@ clone_and_upload() {
     curl -k "$(backstage_url)/api/catalog/locations" --cookie "$COOKIE" --cookie-jar "$COOKIE" -X POST -H 'Accept-Encoding: gzip, deflate, br' -H 'Authorization: Bearer '"$ACCESS_TOKEN" -H 'Content-Type: application/json' --data-raw '{"type":"url","target":"'"${upload_url}"'"}'
 
 
-    timeout_timestamp=$(date -d "300 seconds" "+%s")
+    timeout_timestamp=$(date -d "600 seconds" "+%s")
     while true; do
       if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
         echo "ERROR: Timeout waiting on entity count"
