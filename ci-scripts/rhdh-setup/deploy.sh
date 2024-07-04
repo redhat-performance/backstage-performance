@@ -222,7 +222,7 @@ install_rhdh_with_helm() {
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.service.ports.backend = 4180' "$TMP_DIR/chart-values.yaml"; fi
     #shellcheck disable=SC2086
     helm upgrade --install "${RHDH_HELM_RELEASE_NAME}" --devel "${repo_name}/${RHDH_HELM_CHART}" ${version_arg} -n "${RHDH_NAMESPACE}" --values "$TMP_DIR/chart-values.yaml"
-    wait_to_start statefulset "${RHDH_HELM_RELEASE_NAME}-postgresql-read" 300 300
+    #wait_to_start statefulset "${RHDH_HELM_RELEASE_NAME}-postgresql-read" 300 300
     wait_to_start deployment "${RHDH_HELM_RELEASE_NAME}-developer-hub" 300 300
 }
 
