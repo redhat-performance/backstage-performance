@@ -1,4 +1,7 @@
 global:
+  auth:
+    backend:
+      enabled: true
   clusterRouterBase: ${OPENSHIFT_APP_DOMAIN}
   imagePullSecrets:
     - rhdh-pull-secret
@@ -31,21 +34,16 @@ upstream:
             password: "${POSTGRESQL_ADMIN_PASSWORD}"
             user: postgres
         auth:
+          keys:
+            - secret: '${BACKEND_SECRET}'
           externalAccess:
             - type: legacy
               options:
                 secret: ${BACKEND_SECRET}
                 subject: legacy-catalog
     args:
-      - "--config"
-      - app-config.yaml
-      - "--config"
-      - app-config.example.yaml
-      - "--config"
-      - app-config.example.production.yaml
-    command:
-      - node
-      - packages/backend
+      - '--config'
+      - dynamic-plugins-root/app-config.dynamic-plugins.yaml
     containerPorts:
       backend: 7007
     extraAppConfig:
@@ -87,7 +85,7 @@ upstream:
         value: "warn"
       - name: NODE_TLS_REJECT_UNAUTHORIZED
         value: "0"
-    installDir: /app
+    installDir: /opt/app-root/src
     replicas: ${RHDH_DEPLOYMENT_REPLICAS}
     revisionHistoryLimit: 10
   clusterDomain: cluster.local
@@ -136,25 +134,6 @@ upstream:
         size: "${RHDH_DB_STORAGE}"
       podSecurityContext:
         enabled: false
-      securityContext:
-        enabled: false
-    architecture: replication
-    replication:
-      synchronousCommit: "on"
-      numSynchronousReplicas: ${RHDH_DB_REPLICAS}
-      applicationName: "${RHDH_HELM_RELEASE_NAME}"
-    readReplicas:
-      containerSecurityContext:
-        enabled: false
-      extraEnvVars:
-        - name: POSTGRESQL_ADMIN_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              key: replication-password
-              name: "{{ .Release.Name }}-postgresql"
-      podSecurityContext:
-        enabled: false
-      replicaCount: ${RHDH_DB_REPLICAS}
       securityContext:
         enabled: false
   service:
