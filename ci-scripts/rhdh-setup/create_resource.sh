@@ -113,7 +113,6 @@ clone_and_upload() {
     echo "Uploading entities from $upload_url"
     curl -k "$(backstage_url)/api/catalog/locations" --cookie "$COOKIE" --cookie-jar "$COOKIE" -X POST -H 'Accept-Encoding: gzip, deflate, br' -H 'Authorization: Bearer '"$ACCESS_TOKEN" -H 'Content-Type: application/json' --data-raw '{"type":"url","target":"'"${upload_url}"'"}'
 
-
     timeout_timestamp=$(date -d "600 seconds" "+%s")
     while true; do
       if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
@@ -152,7 +151,7 @@ create_cmp() {
 create_group() {
   token=$(get_token)
   groupname="group${0}"
-  echo "    g, group:default/${groupname}, role:default/perf_admin" >> "$TMP_DIR/group-rbac.yaml"
+  echo "    g, group:default/${groupname}, role:default/perf_admin" >>"$TMP_DIR/group-rbac.yaml"
   curl -s -k --location --request POST "$(keycloak_url)/auth/admin/realms/backstage/groups" \
     -H 'Content-Type: application/json' \
     -H 'Authorization: Bearer '"$token" \
@@ -253,7 +252,6 @@ rhdh_token() {
     "$CODE_URL" | jq -r ".backstageIdentity" | jq -r ".expires_in_timestamp = $(date -d '50 minutes' +%s)")
   echo "$ACCESS_TOKEN"
 }
-
 
 get_token() {
   service=$1

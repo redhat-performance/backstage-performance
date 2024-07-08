@@ -9,3 +9,4 @@ data:
     p, role:default/perf_admin, catalog.entity.create, create, allow
     p, role:default/perf_admin, catalog.location.create, create, allow
     p, role:default/perf_admin, catalog.location.read, read, allow
+    g, user:development/guest, role:default/perf_admin

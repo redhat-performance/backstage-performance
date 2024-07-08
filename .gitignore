@@ -1,4 +1,6 @@
 **/.tmp/*
+.tmp
+.toolchain-e2e.git
 .venv
 .vscode
 benchmark-scenario

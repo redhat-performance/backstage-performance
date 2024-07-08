@@ -1,0 +1,3 @@
+workloads:
+  - "rhdh-operator:rhdh-operator"
+  #- "rhdh-operator:backstage-controller-manager"

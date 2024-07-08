@@ -1,0 +1,31 @@
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: rhdh-perf-catalog
+  namespace: openshift-marketplace
+spec:
+  secrets:
+    - "rhdh-pull-secret"
+  sourceType: grpc
+  image: ${RHDH_OLM_INDEX_IMAGE}
+  publisher: rhdh-perf-testing
+  displayName: RHDH perf&scale testing catalog
+---
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: rhdh-perf-operator-group
+  namespace: ${RHDH_OPERATOR_NAMESPACE}
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: ${RHDH_OLM_OPERATOR_PACKAGE}
+  namespace: ${RHDH_OPERATOR_NAMESPACE}
+spec:
+  channel: ${RHDH_OLM_CHANNEL}
+  installPlanApproval: Automatic
+  name: ${RHDH_OLM_OPERATOR_PACKAGE}
+  source: rhdh-perf-catalog
+  sourceNamespace: openshift-marketplace
