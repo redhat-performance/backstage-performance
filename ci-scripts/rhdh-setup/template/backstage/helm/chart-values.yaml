@@ -140,6 +140,7 @@ upstream:
         enabled: false
     architecture: replication
     replication:
+      enabled: true
       synchronousCommit: "on"
       numSynchronousReplicas: ${RHDH_DB_REPLICAS}
       applicationName: "${RHDH_HELM_RELEASE_NAME}"

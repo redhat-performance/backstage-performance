@@ -44,6 +44,7 @@ OCP_VER="$(oc version -o json | jq -r '.openshiftVersion' | sed -r -e "s#([0-9]+
 OCP_ARCH="$(oc version -o json | jq -r '.serverVersion.platform' | sed -r -e "s#linux/##" | sed -e 's#amd64#x86_64#')"
 export RHDH_OLM_INDEX_IMAGE="${RHDH_OLM_INDEX_IMAGE:-quay.io/rhdh/iib:1.2-v${OCP_VER}-${OCP_ARCH}}"
 export RHDH_OLM_CHANNEL=${RHDH_OLM_CHANNEL:-fast}
+export RHDH_OLM_OPERATOR_PACKAGE=${RHDH_OLM_OPERATOR_PACKAGE:-rhdh}
 
 export PRE_LOAD_DB="${PRE_LOAD_DB:-true}"
 export BACKSTAGE_USER_COUNT="${BACKSTAGE_USER_COUNT:-1}"
@@ -103,6 +104,37 @@ wait_to_start() {
     wait_to_start_in_namespace "$RHDH_NAMESPACE" "$@"
 }
 
+label() {
+    namespace=$1
+    resource=$2
+    name=$3
+    label=$4
+    $cli -n "$namespace" label "$resource" "$name" "$label"
+}
+
+label_n() {
+    label "$RHDH_NAMESPACE" "$1" "$2" "$3"
+}
+
+annotate() {
+    namespace=$1
+    resource=$2
+    name=$3
+    annotation=$4
+    $cli -n "$namespace" annotate "$resource" "$name" "$annotation"
+}
+
+annotate_n() {
+    annotate "$RHDH_NAMESPACE" "$1" "$2" "$3"
+}
+
+mark_resource_for_rhdh() {
+    resource=$1
+    name=$2
+    annotate_n "$resource" "$name" "rhdh.redhat.com/backstage-name=developer-hub"
+    label_n "$resource" "$name" "rhdh.redhat.com/ext-config-sync=true"
+}
+
 install() {
     appurl=$(oc whoami --show-console)
     export OPENSHIFT_APP_DOMAIN=${appurl#*.}
@@ -158,11 +190,13 @@ backstage_install() {
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '. |= . + {"signInPage":"oauth2Proxy"}' "$TMP_DIR/app-config.yaml"; fi
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '. |= . + {"auth":{"environment":"production","providers":{"oauth2Proxy":{}}}}' "$TMP_DIR/app-config.yaml"; else yq -i '. |= . + {"auth":{"providers":{"guest":{"dangerouslyAllowOutsideDevelopment":true}}}}' "$TMP_DIR/app-config.yaml"; fi
     until envsubst <template/backstage/secret-rhdh-pull-secret.yaml | $clin apply -f -; do $clin delete secret rhdh-pull-secret --ignore-not-found=true; done
-    if ${ENABLE_RBAC}; then yq -i '. |= . + load("template/backstage/app-rbac-patch.yaml")' "$TMP_DIR/app-config.yaml"; fi
+    if ${ENABLE_RBAC}; then yq -i '. |= . + load("template/backstage/'$INSTALL_METHOD'/app-rbac-patch.yaml")' "$TMP_DIR/app-config.yaml"; fi
     until $clin create configmap app-config-rhdh --from-file "app-config.rhdh.yaml=$TMP_DIR/app-config.yaml"; do $clin delete configmap app-config-rhdh --ignore-not-found=true; done
-    cp template/backstage/rbac-config.yaml "${TMP_DIR}"
-    cat "$TMP_DIR/group-rbac.yaml">> "$TMP_DIR/rbac-config.yaml"
-    $clin apply -f "$TMP_DIR/rbac-config.yaml" --namespace="${RHDH_NAMESPACE}"
+    if ${ENABLE_RBAC}; then
+        cp template/backstage/rbac-config.yaml "${TMP_DIR}"
+        cat "$TMP_DIR/group-rbac.yaml" >>"$TMP_DIR/rbac-config.yaml"
+        $clin apply -f "$TMP_DIR/rbac-config.yaml" --namespace="${RHDH_NAMESPACE}"
+    fi
     envsubst <template/backstage/plugin-secrets.yaml | $clin apply -f -
     if [ "$INSTALL_METHOD" == "helm" ]; then
         install_rhdh_with_helm
@@ -194,12 +228,12 @@ install_rhdh_with_helm() {
     cp "$chart_values" "$TMP_DIR/chart-values.temp.yaml"
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.backstage |= . + load("template/backstage/helm/oauth2-container-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"; fi
     if ${ENABLE_RBAC}; then
-        if helm search repo --devel -r rhdh --version 1.2-1 --fail-on-no-result ; then
-            yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.2.yaml")' "$TMP_DIR/chart-values.temp.yaml";
+        if helm search repo --devel -r rhdh --version 1.2-1 --fail-on-no-result; then
+            yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.2.yaml")' "$TMP_DIR/chart-values.temp.yaml"
         else
-            yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.1.yaml")' "$TMP_DIR/chart-values.temp.yaml";
+            yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.1.yaml")' "$TMP_DIR/chart-values.temp.yaml"
         fi
-        yq -i '.global.dynamic.plugins |= . + load("template/backstage/helm/rbac-plugin-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml";
+        yq -i '.global.dynamic.plugins |= . + load("template/backstage/helm/rbac-plugin-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"
     fi
     envsubst \
         '${OPENSHIFT_APP_DOMAIN} \
@@ -228,13 +262,23 @@ install_rhdh_with_helm() {
 
 install_rhdh_with_olm() {
     $clin create secret generic rhdh-backend-secret --from-literal=BACKEND_SECRET="$(mktemp -u XXXXXXXXXXX)"
+    mark_resource_for_rhdh secret rhdh-backend-secret
     $clin create cm app-config-backend-secret --from-file=template/backstage/olm/app-config.rhdh.backend-secret.yaml
+    mark_resource_for_rhdh cm app-config-backend-secret
     $clin apply -f template/backstage/olm/dynamic-plugins.configmap.yaml
+    mark_resource_for_rhdh cm dynamic-plugins-rhdh
     set -x
-    OLM_CHANNEL="${RHDH_OLM_CHANNEL}" UPSTREAM_IIB="${RHDH_OLM_INDEX_IMAGE}" ./install-rhdh-catalog-source.sh --install-operator rhdh
+    OLM_CHANNEL="${RHDH_OLM_CHANNEL}" UPSTREAM_IIB="${RHDH_OLM_INDEX_IMAGE}" ./install-rhdh-catalog-source.sh --install-operator "${RHDH_OLM_OPERATOR_PACKAGE:-rhdh}"
     set +x
     wait_for_crd backstages.rhdh.redhat.com
-    envsubst <template/backstage/olm/backstage.yaml | $clin apply -f -
+
+    backstage_yaml="$TMP_DIR/backstage.yaml"
+    envsubst <template/backstage/olm/backstage.yaml >"$backstage_yaml"
+    if ${ENABLE_RBAC}; then
+        rbac_policy='[{"name": "rbac-policy"}]'
+        yq -i '(.spec.application.extraFiles.configMaps |= (. // []) + '"$rbac_policy" "$backstage_yaml"
+    fi
+    $clin apply -f "$backstage_yaml"
 
     wait_to_start statefulset "backstage-psql-developer-hub" 300 300
     wait_to_start deployment "backstage-developer-hub" 300 300

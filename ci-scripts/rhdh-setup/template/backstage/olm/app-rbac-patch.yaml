@@ -1,0 +1,8 @@
+---
+permission:
+  enabled: true
+  rbac:
+    policies-csv-file: "./rbac-policy.csv"
+    admin:
+      users:
+        - name: user:default/test1
