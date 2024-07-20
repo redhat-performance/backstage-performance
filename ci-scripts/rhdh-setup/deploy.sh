@@ -293,18 +293,27 @@ install_rhdh_with_olm() {
 # shellcheck disable=SC2016,SC1001,SC2086
 psql_debug() {
     if [ "$INSTALL_METHOD" == "helm" ]; then
-        psql_db=rhdh-postgresql-primary-0
+        psql_db_ss="${RHDH_HELM_RELEASE_NAME}-postgresql-primary"
+        psql_db="${psql_db_ss}-0"
+        rhdh_deployment="${RHDH_HELM_RELEASE_NAME}-developer-hub"
     elif [ "$INSTALL_METHOD" == "olm" ]; then
-        psql_db=backstage-psql-developer-hub-0
+        psql_db_ss=backstage-psql-developer-hub
+        psql_db="${psql_db_ss}-0"
+        rhdh_deployment=backstage-developer-hub
     fi
     if ${PSQL_LOG}; then
-       oc exec "${psql_db}" -n "${RHDH_NAMESPACE}" -- sh -c "sed -i "s/^\s*#log_min_duration_statement.*/log_min_duration_statement=${LOG_MIN_DURATION_STATEMENT}/" /var/lib/pgsql/data/userdata/postgresql.conf "
-       oc exec "${psql_db}" -n "${RHDH_NAMESPACE}" -- sh -c "sed -i "s/^\s*#log_min_duration_sample.*/log_min_duration_sample=${LOG_MIN_DURATION_SAMPLE}/" /var/lib/pgsql/data/userdata/postgresql.conf "
-       oc exec "${psql_db}" -n "${RHDH_NAMESPACE}" -- sh -c "sed -i "s/^\s*#log_statement_sample_rate.*/log_statement_sample_rate=${LOG_STATEMENT_SAMPLE_RATE}/" /var/lib/pgsql/data/userdata/postgresql.conf "
+        $clin exec "${psql_db}" -- sh -c "sed -i "s/^\s*#log_min_duration_statement.*/log_min_duration_statement=${LOG_MIN_DURATION_STATEMENT}/" /var/lib/pgsql/data/userdata/postgresql.conf "
+        $clin exec "${psql_db}" -- sh -c "sed -i "s/^\s*#log_min_duration_sample.*/log_min_duration_sample=${LOG_MIN_DURATION_SAMPLE}/" /var/lib/pgsql/data/userdata/postgresql.conf "
+        $clin exec "${psql_db}" -- sh -c "sed -i "s/^\s*#log_statement_sample_rate.*/log_statement_sample_rate=${LOG_STATEMENT_SAMPLE_RATE}/" /var/lib/pgsql/data/userdata/postgresql.conf "
     fi
-    oc exec "${psql_db}" -n "${RHDH_NAMESPACE}" -- sh -c 'pg_ctl -D $PGDATA restart -mf'
-}
+    echo "Restarting RHDH DB..."
+    $clin exec "${psql_db}" -- sh -c 'pg_ctl -D $PGDATA restart -mf'
+    wait_to_start statefulset "$psql_db_ss" 300 300
 
+    echo "Restarting RHDH..."
+    $clin rollout restart deployment/"$rhdh_deployment"
+    wait_to_start deployment "$rhdh_deployment" 300 300
+}
 setup_monitoring() {
     echo "Enabling user workload monitoring"
     rm -f config.yaml
