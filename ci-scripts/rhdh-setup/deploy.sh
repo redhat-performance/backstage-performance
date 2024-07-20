@@ -55,6 +55,11 @@ export KEYCLOAK_USER_PASS=${KEYCLOAK_USER_PASS:-$(mktemp -u XXXXXXXXXX)}
 export AUTH_PROVIDER="${AUTH_PROVIDER:-''}"
 export ENABLE_RBAC="${ENABLE_RBAC:-false}"
 
+export PSQL_LOG="${PSQL_LOG:-true}"
+export LOG_MIN_DURATION_STATEMENT="${LOG_MIN_DURATION_STATEMENT:-65}"
+export LOG_MIN_DURATION_SAMPLE="${LOG_MIN_DURATION_SAMPLE:-50}"
+export LOG_STATEMENT_SAMPLE_RATE="${LOG_STATEMENT_SAMPLE_RATE:-0.7}"
+
 export INSTALL_METHOD=helm
 
 TMP_DIR=$(readlink -m "${TMP_DIR:-.tmp}")
@@ -147,6 +152,7 @@ install() {
     fi
 
     backstage_install
+    psql_debug
     setup_monitoring
 }
 
@@ -284,6 +290,30 @@ install_rhdh_with_olm() {
     wait_to_start deployment "backstage-developer-hub" 300 300
 }
 
+# shellcheck disable=SC2016,SC1001,SC2086
+psql_debug() {
+    if [ "$INSTALL_METHOD" == "helm" ]; then
+        psql_db_ss="${RHDH_HELM_RELEASE_NAME}-postgresql-primary"
+        psql_db="${psql_db_ss}-0"
+        rhdh_deployment="${RHDH_HELM_RELEASE_NAME}-developer-hub"
+    elif [ "$INSTALL_METHOD" == "olm" ]; then
+        psql_db_ss=backstage-psql-developer-hub
+        psql_db="${psql_db_ss}-0"
+        rhdh_deployment=backstage-developer-hub
+    fi
+    if ${PSQL_LOG}; then
+        $clin exec "${psql_db}" -- sh -c "sed -i "s/^\s*#log_min_duration_statement.*/log_min_duration_statement=${LOG_MIN_DURATION_STATEMENT}/" /var/lib/pgsql/data/userdata/postgresql.conf "
+        $clin exec "${psql_db}" -- sh -c "sed -i "s/^\s*#log_min_duration_sample.*/log_min_duration_sample=${LOG_MIN_DURATION_SAMPLE}/" /var/lib/pgsql/data/userdata/postgresql.conf "
+        $clin exec "${psql_db}" -- sh -c "sed -i "s/^\s*#log_statement_sample_rate.*/log_statement_sample_rate=${LOG_STATEMENT_SAMPLE_RATE}/" /var/lib/pgsql/data/userdata/postgresql.conf "
+    fi
+    echo "Restarting RHDH DB..."
+    $clin exec "${psql_db}" -- sh -c 'pg_ctl -D $PGDATA restart -mf'
+    wait_to_start statefulset "$psql_db_ss" 300 300
+
+    echo "Restarting RHDH..."
+    $clin rollout restart deployment/"$rhdh_deployment"
+    wait_to_start deployment "$rhdh_deployment" 300 300
+}
 setup_monitoring() {
     echo "Enabling user workload monitoring"
     rm -f config.yaml

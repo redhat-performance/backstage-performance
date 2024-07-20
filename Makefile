@@ -192,6 +192,11 @@ endif
 	@echo "Getting locust master log:"
 	kubectl logs --namespace $(LOCUST_NAMESPACE) -f -l performance-test-pod-name=$(SCENARIO)-test-master | tee load-test.log
 	date --utc -Ins>$(TMP_DIR)/benchmark-after
+ifeq ($(RHDH_INSTALL_METHOD),helm)
+	oc exec rhdh-postgresql-primary-0 -n $(RHDH_NAMESPACE) -- sh -c 'cat  /var/lib/pgsql/data/userdata/log/postgresql*.log'>postgresql.log
+else
+	oc exec backstage-psql-developer-hub-0 -n $(RHDH_NAMESPACE) -- sh -c 'cat  /var/lib/pgsql/data/userdata/log/postgresql*.log'>postgresql.log
+endif
 	@echo "All done!!!"
 
 ## Run the scalability test
