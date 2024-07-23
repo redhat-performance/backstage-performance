@@ -307,7 +307,7 @@ psql_debug() {
         $clin exec "${psql_db}" -- sh -c "sed -i "s/^\s*#log_statement_sample_rate.*/log_statement_sample_rate=${LOG_STATEMENT_SAMPLE_RATE}/" /var/lib/pgsql/data/userdata/postgresql.conf "
     fi
     echo "Restarting RHDH DB..."
-    $clin exec "${psql_db}" -- sh -c 'pg_ctl -D $PGDATA restart -mf'
+    $clin rollout restart statefulset/"$psql_db_ss"
     wait_to_start statefulset "$psql_db_ss" 300 300
 
     echo "Restarting RHDH..."
