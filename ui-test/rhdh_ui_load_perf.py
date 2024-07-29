@@ -66,10 +66,9 @@ def main():
 
         page.goto(rhdh_endpoint)
 
-        guest_enter_button = page.wait_for_selector(
-            '//span[@class="MuiButton-label-222" and text()="Enter"]'
-        )
-        guest_enter_button.click()
+        expect(page.get_by_role("button", name="Enter")).to_be_visible()
+        page.get_by_role("button", name="Enter").click()
+
 
         current_pid = os.getpid()
         process = psutil.Process(pid=current_pid)
@@ -89,7 +88,7 @@ def main():
                 # capture timestamp before we start reload
                 before_reload_timestamp = dt.now()
                 page.reload()
-                page.wait_for_selector('//h1[contains(text(),"Welcome back!")]')
+                expect(page.get_by_role("heading", name="Welcome back!")).to_be_visible()
                 paint_info = page.evaluate(
                     "window.performance.getEntriesByType('paint')"
                 )
