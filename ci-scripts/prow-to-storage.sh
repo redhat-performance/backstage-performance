@@ -62,7 +62,7 @@ function download() {
 
 function check_json() {
     local f="$1"
-    if cat "$f" | jq --exit-status >/dev/null; then
+    if jq --exit-status "." "$f" >/dev/null; then
         debug "File is valid JSON, good"
         return 0
     else
@@ -74,7 +74,7 @@ function check_json() {
 
 function check_json_string() {
     local data="$1"
-    if echo "$data" | jq --exit-status >/dev/null; then
+    if echo "$data" | jq --exit-status "." >/dev/null; then
         return 0
     else
         error "String is not a valid JSON, bad"
@@ -100,13 +100,14 @@ function enritch_stuff() {
     local f="$1"
     local key="$2"
     local value="$3"
-    local current_in_file=$( cat "$f" | jq --raw-output "$key" )
+    local current_in_file
+    current_in_file=$( jq --raw-output "$key" "$f" )
     if [[ "$current_in_file" == "None" ]]; then
         debug "Adding $key to JSON file"
-        cat $f | jq "$key = \"$value\"" >"$$.json" && mv -f "$$.json" "$f"
+        jq "$key = \"$value\"" "$f" >"$$.json" && mv -f "$$.json" "$f"
     elif [[ "$current_in_file" != "$value" ]]; then
         debug "Changing $key in JSON file"
-        cat $f | jq "$key = \"$value\"" >"$$.json" && mv -f "$$.json" "$f"
+        jq "$key = \"$value\"" "$f" >"$$.json" && mv -f "$$.json" "$f"
     else
         debug "Key $key already in file, skipping enritchment"
     fi
@@ -118,9 +119,10 @@ function upload_es() {
 
     debug "Considering file for upload to ES"
 
-    local current_doc_in_es="$( curl --silent -X GET $ES_HOST/$ES_INDEX/_search -H 'Content-Type: application/json' -d '{"query":{"term":{"metadata.env.BUILD_ID.keyword":{"value":"'$build_id'"}}}}' )"
-    local current_count_in_es="$( echo $current_doc_in_es"" | jq --raw-output .hits.total.value )"
-    local current_error_in_es="$( echo $current_doc_in_es"" | jq --raw-output .error.type )"
+    local current_doc_in_es current_count_in_es current_error_in_es
+    current_doc_in_es="$( curl --silent -X GET $ES_HOST/$ES_INDEX/_search -H 'Content-Type: application/json' -d '{"query":{"term":{"metadata.env.BUILD_ID.keyword":{"value":"'"$build_id"'"}}}}' )"
+    current_count_in_es="$( echo "$current_doc_in_es" | jq --raw-output .hits.total.value )"
+    current_error_in_es="$( echo "$current_doc_in_es" | jq --raw-output .error.type )"
 
     if [[ "$current_error_in_es" == "index_not_found_exception" ]]; then
         info "Index does not exist yet, going on"
@@ -145,26 +147,28 @@ function upload_horreum() {
     local test_matcher="$3"
     local build_id="$4"
 
-    if [ ! -f "$f" -o -z "$test_name" -o -z "$test_matcher" -o -z "$build_id" ]; then
+    if [ ! -f "$f" ] || [ -z "$test_name" ] || [ -z "$test_matcher" ] || [ -z "$build_id" ]; then
         error "Insufficient parameters when uploading to Horreum"
         return 1
     fi
 
-    local test_start="$( format_date $( cat "$f" | jq --raw-output '.results.started | if . == "" then "-" else . end' ) )"
-    local test_end="$( format_date $( cat "$f" | jq --raw-output '.results.ended | if . == "" then "-" else . end' ) )"
+    local test_start test_end TOKEN test_id exists ids_list is_fail
 
-    if [ -z "$test_start" -o -z "$test_end" -o "$test_start" == "null" -o "$test_end" == "null" ]; then
+    test_start="$( format_date "$( jq --raw-output '.results.started | if . == "" then "-" else . end' "$f" )" )"
+    test_end="$( format_date "$( jq --raw-output '.results.ended | if . == "" then "-" else . end' "$f" )" )"
+
+    if [ -z "$test_start" ] || [ -z "$test_end" ] || [ "$test_start" == "null" ] || [ "$test_end" == "null" ]; then
         error "We need start ($test_start) and end ($test_end) time in the JSON we are supposed to upload"
         return 1
     fi
 
     debug "Considering file upload to Horreum: start: $test_start, end: $test_end, $test_matcher: $build_id"
 
-    local TOKEN=$( curl -s $HORREUM_KEYCLOAK_HOST/realms/horreum/protocol/openid-connect/token -d "username=jhutar@redhat.com" -d "password=$HORREUM_JHUTAR_PASSWORD" -d "grant_type=password" -d "client_id=horreum-ui" | jq --raw-output .access_token )
+    TOKEN=$( curl -s $HORREUM_KEYCLOAK_HOST/realms/horreum/protocol/openid-connect/token -d "username=jhutar@redhat.com" -d "password=$HORREUM_JHUTAR_PASSWORD" -d "grant_type=password" -d "client_id=horreum-ui" | jq --raw-output .access_token )
 
-    local test_id=$( curl --silent --get -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" "$HORREUM_HOST/api/test/byName/$test_name" | jq --raw-output .id )
+    test_id=$( curl --silent --get -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" "$HORREUM_HOST/api/test/byName/$test_name" | jq --raw-output .id )
 
-    local exists=$( curl --silent --get -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" "$HORREUM_HOST/api/dataset/list/$test_id" --data-urlencode "filter={\"$test_matcher\":\"$build_id\"}" | jq --raw-output '.datasets | length' )
+    exists=$( curl --silent --get -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" "$HORREUM_HOST/api/dataset/list/$test_id" --data-urlencode "filter={\"$test_matcher\":\"$build_id\"}" | jq --raw-output '.datasets | length' )
 
     if [[ $exists -gt 0 ]]; then
         info "Test result ($test_matcher=$build_id) found in Horreum ($exists), skipping upload"
@@ -180,8 +184,8 @@ function upload_horreum() {
     echo
 
     info "Getting pass/fail for file from Horreum"
-    local ids_list=$( curl --silent "https://horreum.corp.redhat.com/api/alerting/variables?test=$test_id" | jq -r '.[] | .id' )
-    local is_fail=0
+    ids_list=$( curl --silent "https://horreum.corp.redhat.com/api/alerting/variables?test=$test_id" | jq -r '.[] | .id' )
+    is_fail=0
     for i in $ids_list; do
         data='{
             "range": {
@@ -209,6 +213,7 @@ function upload_horreum() {
 counter=0
 
 # Fetch JSON files from main test that runs every 12 hours
+# shellcheck disable=SC2043
 for job in "mvp-cpt"; do
     job_history="$JOB_BASE/periodic-ci-redhat-performance-backstage-performance-main-$job/"
     for i in $(curl -SsL "$job_history" | grep -Eo '[0-9]{19}' | sort -V | uniq | tail -n 5); do
@@ -218,10 +223,10 @@ for job in "mvp-cpt"; do
         download "$f" "$out"
         check_json "$out" || continue
         check_result "$out" || continue
-        enritch_stuff "$out" '."$schema"' "$HORREUM_TEST_SCHEMA"
+        enritch_stuff "$out" ".\"\$schema\"" "$HORREUM_TEST_SCHEMA"
         upload_horreum "$out" "$HORREUM_TEST_NAME" ".metadata.env.BUILD_ID" "$i"
         upload_es "$out" "$i"
-        let counter+=1
+        (( counter++ )) || true
     done
 done
 
