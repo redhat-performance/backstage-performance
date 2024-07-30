@@ -1,0 +1,443 @@
+{
+  "labels": [
+    {
+      "id": 13664,
+      "name": ".measurements.apiserver.count_ready.max",
+      "extractors": [
+        {
+          "name": ".measurements.apiserver.count_ready.max",
+          "jsonpath": "$.measurements.apiserver.count_ready.max",
+          "isarray": false
+        }
+      ],
+      "filtering": false,
+      "metrics": true,
+      "schemaId": 186,
+      "access": "PUBLIC",
+      "owner": "hybrid-cloud-experience-perfscale-team"
+    },
+    {
+      "id": 13665,
+      "name": ".measurements.apiserver.cpu.mean",
+      "extractors": [
+        {
+          "name": ".measurements.apiserver.cpu.mean",
+          "jsonpath": "$.measurements.apiserver.cpu.mean",
+          "isarray": false
+        }
+      ],
+      "filtering": false,
+      "metrics": true,
+      "schemaId": 186,
+      "access": "PUBLIC",
+      "owner": "hybrid-cloud-experience-perfscale-team"
+    },
+    {
+      "id": 13667,
+      "name": ".measurements.apiserver.memory.mean",
+      "extractors": [
+        {
+          "name": ".measurements.apiserver.memory.mean",
+          "jsonpath": "$.measurements.apiserver.memory.mean",
+          "isarray": false
+        }
+      ],
+      "filtering": false,
+      "metrics": true,
+      "schemaId": 186,
+      "access": "PUBLIC",
+      "owner": "hybrid-cloud-experience-perfscale-team"
+    },
+    {
+      "id": 13677,
+      "name": ".measurements.apiserver.restarts.max",
+      "extractors": [
+        {
+          "name": ".measurements.apiserver.restarts.max",
+          "jsonpath": "$.measurements.apiserver.restarts.max",
+          "isarray": false
+        }
+      ],
+      "filtering": false,
+      "metrics": true,
+      "schemaId": 186,
+      "access": "PUBLIC",
+      "owner": "hybrid-cloud-experience-perfscale-team"
+    },
+    {
+      "id": 13666,
+      "name": ".measurements.cluster.pv_stats.test.rhdh-postgresql.used_bytes.mean",
+      "extractors": [
+        {
+          "name": ".measurements.cluster.pv_stats.test.rhdh-postgresql.used_bytes.mean",
+          "jsonpath": "$.measurements.cluster.pv_stats.test.\"rhdh-postgresql\".used_bytes.mean",
+          "isarray": false
+        }
+      ],
+      "filtering": false,
+      "metrics": true,
+      "schemaId": 186,
+      "access": "PUBLIC",
+      "owner": "hybrid-cloud-experience-perfscale-team"
+    },
+    {
+      "id": 13669,
+      "name": ".measurements.rhdh-developer-hub.count_ready.max",
+      "extractors": [
+        {
+          "name": ".measurements.rhdh-developer-hub.count_ready.max",
+          "jsonpath": "$.measurements.\"rhdh-developer-hub\".count_ready.max",
+          "isarray": false
+        }
+      ],
+      "filtering": false,
+      "metrics": true,
+      "schemaId": 186,
+      "access": "PUBLIC",
+      "owner": "hybrid-cloud-experience-perfscale-team"
+    },
+    {
+      "id": 13675,
+      "name": ".measurements.rhdh-developer-hub.cpu.mean",
+      "extractors": [
+        {
+          "name": ".measurements.rhdh-developer-hub.cpu.mean",
+          "jsonpath": "$.measurements.\"rhdh-developer-hub\".cpu.mean",
+          "isarray": false
+        }
+      ],
+      "filtering": false,
+      "metrics": true,
+      "schemaId": 186,
+      "access": "PUBLIC",
+      "owner": "hybrid-cloud-experience-perfscale-team"
+    },
+    {
+      "id": 13672,
+      "name": ".measurements.rhdh-developer-hub.memory.mean",
+      "extractors": [
+        {
+          "name": ".measurements.rhdh-developer-hub.memory.mean",
+          "jsonpath": "$.measurements.\"rhdh-developer-hub\".memory.mean",
+          "isarray": false
+        }
+      ],
+      "filtering": false,
+      "metrics": true,
+      "schemaId": 186,
+      "access": "PUBLIC",
+      "owner": "hybrid-cloud-experience-perfscale-team"
+    },
+    {
+      "id": 13671,
+      "name": ".measurements.rhdh-developer-hub.restarts.max",
+      "extractors": [
+        {
+          "name": ".measurements.rhdh-developer-hub.restarts.max",
+          "jsonpath": "$.measurements.\"rhdh-developer-hub\".restarts.max",
+          "isarray": false
+        }
+      ],
+      "filtering": false,
+      "metrics": true,
+      "schemaId": 186,
+      "access": "PUBLIC",
+      "owner": "hybrid-cloud-experience-perfscale-team"
+    },
+    {
+      "id": 13673,
+      "name": ".measurements.rhdh-postgresql.count_ready.max",
+      "extractors": [
+        {
+          "name": ".measurements.rhdh-postgresql.count_ready.max",
+          "jsonpath": "$.measurements.\"rhdh-postgresql\".count_ready.max",
+          "isarray": false
+        }
+      ],
+      "filtering": false,
+      "metrics": true,
+      "schemaId": 186,
+      "access": "PUBLIC",
+      "owner": "hybrid-cloud-experience-perfscale-team"
+    },
+    {
+      "id": 13674,
+      "name": ".measurements.rhdh-postgresql.cpu.mean",
+      "extractors": [
+        {
+          "name": ".measurements.rhdh-postgresql.cpu.mean",
+          "jsonpath": "$.measurements.\"rhdh-postgresql\".cpu.mean",
+          "isarray": false
+        }
+      ],
+      "filtering": false,
+      "metrics": true,
+      "schemaId": 186,
+      "access": "PUBLIC",
+      "owner": "hybrid-cloud-experience-perfscale-team"
+    },
+    {
+      "id": 13670,
+      "name": ".measurements.rhdh-postgresql.memory.mean",
+      "extractors": [
+        {
+          "name": ".measurements.rhdh-postgresql.memory.mean",
+          "jsonpath": "$.measurements.\"rhdh-postgresql\".memory.mean",
+          "isarray": false
+        }
+      ],
+      "filtering": false,
+      "metrics": true,
+      "schemaId": 186,
+      "access": "PUBLIC",
+      "owner": "hybrid-cloud-experience-perfscale-team"
+    },
+    {
+      "id": 13676,
+      "name": ".measurements.rhdh-postgresql.restarts.max",
+      "extractors": [
+        {
+          "name": ".measurements.rhdh-postgresql.restarts.max",
+          "jsonpath": "$.measurements.\"rhdh-postgresql\".restarts.max",
+          "isarray": false
+        }
+      ],
+      "filtering": false,
+      "metrics": true,
+      "schemaId": 186,
+      "access": "PUBLIC",
+      "owner": "hybrid-cloud-experience-perfscale-team"
+    },
+    {
+      "id": 13681,
+      "name": ".metadata.cluster.compute-nodes.count",
+      "extractors": [
+        {
+          "name": ".metadata.cluster.compute-nodes.count",
+          "jsonpath": "$.metadata.cluster.\"compute-nodes\".count",
+          "isarray": false
+        }
+      ],
+      "filtering": true,
+      "metrics": true,
+      "schemaId": 186,
+      "access": "PUBLIC",
+      "owner": "hybrid-cloud-experience-perfscale-team"
+    },
+    {
+      "id": 13678,
+      "name": ".metadata.cluster.pods.rhdh-developer-hub-backstage-backend.image_tag",
+      "extractors": [
+        {
+          "name": ".metadata.cluster.pods.rhdh-developer-hub-backstage-backend.image_tag",
+          "jsonpath": "$.metadata.cluster.pods.\"rhdh-developer-hub-backstage-backend\".image_tag",
+          "isarray": false
+        }
+      ],
+      "filtering": true,
+      "metrics": false,
+      "schemaId": 186,
+      "access": "PUBLIC",
+      "owner": "hybrid-cloud-experience-perfscale-team"
+    },
+    {
+      "id": 13682,
+      "name": ".metadata.env.API_COUNT",
+      "extractors": [
+        {
+          "name": ".metadata.env.API_COUNT",
+          "jsonpath": "$.metadata.env.API_COUNT",
+          "isarray": false
+        }
+      ],
+      "filtering": true,
+      "metrics": false,
+      "schemaId": 186,
+      "access": "PUBLIC",
+      "owner": "hybrid-cloud-experience-perfscale-team"
+    },
+    {
+      "id": 2961,
+      "name": ".metadata.env.BUILD_ID",
+      "extractors": [
+        {
+          "name": ".metadata.env.BUILD_ID",
+          "jsonpath": "$.metadata.env.BUILD_ID",
+          "isarray": false
+        }
+      ],
+      "filtering": true,
+      "metrics": false,
+      "schemaId": 186,
+      "access": "PUBLIC",
+      "owner": "hybrid-cloud-experience-perfscale-team"
+    },
+    {
+      "id": 13683,
+      "name": ".metadata.env.COMPONENT_COUNT",
+      "extractors": [
+        {
+          "name": ".metadata.env.COMPONENT_COUNT",
+          "jsonpath": "$.metadata.env.COMPONENT_COUNT",
+          "isarray": false
+        }
+      ],
+      "filtering": true,
+      "metrics": false,
+      "schemaId": 186,
+      "access": "PUBLIC",
+      "owner": "hybrid-cloud-experience-perfscale-team"
+    },
+    {
+      "id": 13659,
+      "name": ".metadata.scenario.name",
+      "extractors": [
+        {
+          "name": ".metadata.scenario.name",
+          "jsonpath": "$.metadata.scenario.name",
+          "isarray": false
+        }
+      ],
+      "filtering": true,
+      "metrics": false,
+      "schemaId": 186,
+      "access": "PUBLIC",
+      "owner": "hybrid-cloud-experience-perfscale-team"
+    },
+    {
+      "id": 2959,
+      "name": ".name",
+      "extractors": [
+        {
+          "name": ".name",
+          "jsonpath": "$.name",
+          "isarray": false
+        }
+      ],
+      "filtering": true,
+      "metrics": false,
+      "schemaId": 186,
+      "access": "PUBLIC",
+      "owner": "hybrid-cloud-experience-perfscale-team"
+    },
+    {
+      "id": 13662,
+      "name": ".results.Aggregated.locust_requests_avg_content_length.mean",
+      "extractors": [
+        {
+          "name": ".results.Aggregated.locust_requests_avg_content_length.mean",
+          "jsonpath": "$.results.Aggregated.locust_requests_avg_content_length.mean",
+          "isarray": false
+        }
+      ],
+      "filtering": false,
+      "metrics": true,
+      "schemaId": 186,
+      "access": "PUBLIC",
+      "owner": "hybrid-cloud-experience-perfscale-team"
+    },
+    {
+      "id": 13661,
+      "name": ".results.Aggregated.locust_requests_avg_response_time.mean",
+      "extractors": [
+        {
+          "name": ".results.Aggregated.locust_requests_avg_response_time.mean",
+          "jsonpath": "$.results.Aggregated.locust_requests_avg_response_time.mean",
+          "isarray": false
+        }
+      ],
+      "filtering": false,
+      "metrics": true,
+      "schemaId": 186,
+      "access": "PUBLIC",
+      "owner": "hybrid-cloud-experience-perfscale-team"
+    },
+    {
+      "id": 13663,
+      "name": ".results.Aggregated.locust_requests_current_fail_per_sec.mean",
+      "extractors": [
+        {
+          "name": ".results.Aggregated.locust_requests_current_fail_per_sec.mean",
+          "jsonpath": "$.results.Aggregated.locust_requests_current_fail_per_sec.mean",
+          "isarray": false
+        }
+      ],
+      "filtering": false,
+      "metrics": true,
+      "schemaId": 186,
+      "access": "PUBLIC",
+      "owner": "hybrid-cloud-experience-perfscale-team"
+    },
+    {
+      "id": 2958,
+      "name": ".results.Aggregated.locust_requests_current_rps.mean",
+      "extractors": [
+        {
+          "name": ".results.Aggregated.locust_requests_current_rps.mean",
+          "jsonpath": "$.results.Aggregated.locust_requests_current_rps.mean",
+          "isarray": false
+        }
+      ],
+      "filtering": false,
+      "metrics": true,
+      "schemaId": 186,
+      "access": "PUBLIC",
+      "owner": "hybrid-cloud-experience-perfscale-team"
+    },
+    {
+      "id": 13668,
+      "name": ".results.Aggregated.locust_requests_fail_ratio.mean",
+      "extractors": [
+        {
+          "name": ".results.Aggregated.locust_requests_fail_ratio.mean",
+          "jsonpath": "$.results.Aggregated.locust_requests_fail_ratio.mean",
+          "isarray": false
+        }
+      ],
+      "filtering": false,
+      "metrics": true,
+      "schemaId": 186,
+      "access": "PUBLIC",
+      "owner": "hybrid-cloud-experience-perfscale-team"
+    },
+    {
+      "id": 13660,
+      "name": ".results.Aggregated.locust_requests_num_failures.mean",
+      "extractors": [
+        {
+          "name": ".results.Aggregated.locust_requests_num_failures.mean",
+          "jsonpath": "$.results.Aggregated.locust_requests_num_failures.mean",
+          "isarray": false
+        }
+      ],
+      "filtering": false,
+      "metrics": true,
+      "schemaId": 186,
+      "access": "PUBLIC",
+      "owner": "hybrid-cloud-experience-perfscale-team"
+    },
+    {
+      "id": 2960,
+      "name": ".results.started",
+      "extractors": [
+        {
+          "name": ".results.started",
+          "jsonpath": "$.results.started",
+          "isarray": false
+        }
+      ],
+      "filtering": false,
+      "metrics": false,
+      "schemaId": 186,
+      "access": "PUBLIC",
+      "owner": "hybrid-cloud-experience-perfscale-team"
+    }
+  ],
+  "transformers": [],
+  "id": 186,
+  "uri": "urn:rhdh-perf-team-load-test:1.0",
+  "name": "rhdh-load-test schema for benchmark.json",
+  "description": "",
+  "access": "PUBLIC",
+  "owner": "rhdh-perf-test-team"
+}
