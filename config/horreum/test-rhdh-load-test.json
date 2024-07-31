@@ -1,0 +1,461 @@
+{
+  "variables": [
+    {
+      "id": 394,
+      "testId": 306,
+      "name": ".results.Aggregated.locust_requests_avg_response_time.mean",
+      "order": 2,
+      "labels": [
+        ".results.Aggregated.locust_requests_avg_response_time.mean"
+      ],
+      "changeDetection": [
+        {
+          "id": 808,
+          "model": "relativeDifference",
+          "config": {
+            "model": "relativeDifference",
+            "filter": "mean",
+            "window": 1,
+            "threshold": 0.3,
+            "minPrevious": 5
+          }
+        },
+        {
+          "id": 807,
+          "model": "relativeDifference",
+          "config": {
+            "model": "relativeDifference",
+            "filter": "mean",
+            "window": 5,
+            "threshold": 0.1,
+            "minPrevious": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": 395,
+      "testId": 306,
+      "name": ".results.Aggregated.locust_requests_avg_content_length.mean",
+      "order": 3,
+      "labels": [
+        ".results.Aggregated.locust_requests_avg_content_length.mean"
+      ],
+      "changeDetection": [
+        {
+          "id": 809,
+          "model": "relativeDifference",
+          "config": {
+            "model": "relativeDifference",
+            "filter": "mean",
+            "window": 1,
+            "threshold": 0.2,
+            "minPrevious": 5
+          }
+        },
+        {
+          "id": 810,
+          "model": "relativeDifference",
+          "config": {
+            "model": "relativeDifference",
+            "filter": "mean",
+            "window": 5,
+            "threshold": 0.1,
+            "minPrevious": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": 396,
+      "testId": 306,
+      "name": ".results.Aggregated.locust_requests_current_fail_per_sec.mean",
+      "order": 4,
+      "labels": [
+        ".results.Aggregated.locust_requests_current_fail_per_sec.mean"
+      ],
+      "changeDetection": [
+        {
+          "id": 812,
+          "model": "relativeDifference",
+          "config": {
+            "model": "relativeDifference",
+            "filter": "mean",
+            "window": 5,
+            "threshold": 0.1,
+            "minPrevious": 5
+          }
+        },
+        {
+          "id": 811,
+          "model": "relativeDifference",
+          "config": {
+            "model": "relativeDifference",
+            "filter": "mean",
+            "window": 1,
+            "threshold": 0.2,
+            "minPrevious": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": 401,
+      "testId": 306,
+      "name": ".measurements.rhdh-postgresql.cpu.mean",
+      "order": 10,
+      "labels": [
+        ".measurements.rhdh-postgresql.cpu.mean"
+      ],
+      "changeDetection": [
+        {
+          "id": 822,
+          "model": "relativeDifference",
+          "config": {
+            "model": "relativeDifference",
+            "filter": "mean",
+            "window": 5,
+            "threshold": 0.1,
+            "minPrevious": 5
+          }
+        },
+        {
+          "id": 821,
+          "model": "relativeDifference",
+          "config": {
+            "model": "relativeDifference",
+            "filter": "mean",
+            "window": 1,
+            "threshold": 0.2,
+            "minPrevious": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": 402,
+      "testId": 306,
+      "name": ".measurements.rhdh-postgresql.memory.mean",
+      "order": 9,
+      "labels": [
+        ".measurements.rhdh-postgresql.memory.mean"
+      ],
+      "changeDetection": [
+        {
+          "id": 824,
+          "model": "relativeDifference",
+          "config": {
+            "model": "relativeDifference",
+            "filter": "mean",
+            "window": 1,
+            "threshold": 0.2,
+            "minPrevious": 5
+          }
+        },
+        {
+          "id": 823,
+          "model": "relativeDifference",
+          "config": {
+            "model": "relativeDifference",
+            "filter": "mean",
+            "window": 5,
+            "threshold": 0.1,
+            "minPrevious": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": 405,
+      "testId": 306,
+      "name": ".measurements.rhdh-developer-hub.cpu.mean",
+      "order": 16,
+      "labels": [
+        ".measurements.rhdh-developer-hub.cpu.mean"
+      ],
+      "changeDetection": [
+        {
+          "id": 830,
+          "model": "relativeDifference",
+          "config": {
+            "model": "relativeDifference",
+            "filter": "mean",
+            "window": 1,
+            "threshold": 0.2,
+            "minPrevious": 5
+          }
+        },
+        {
+          "id": 829,
+          "model": "relativeDifference",
+          "config": {
+            "model": "relativeDifference",
+            "filter": "mean",
+            "window": 5,
+            "threshold": 0.1,
+            "minPrevious": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": 406,
+      "testId": 306,
+      "name": ".measurements.rhdh-developer-hub.memory.mean",
+      "order": 15,
+      "labels": [
+        ".measurements.rhdh-developer-hub.memory.mean"
+      ],
+      "changeDetection": [
+        {
+          "id": 831,
+          "model": "relativeDifference",
+          "config": {
+            "model": "relativeDifference",
+            "filter": "mean",
+            "window": 5,
+            "threshold": 0.1,
+            "minPrevious": 5
+          }
+        },
+        {
+          "id": 832,
+          "model": "relativeDifference",
+          "config": {
+            "model": "relativeDifference",
+            "filter": "mean",
+            "window": 1,
+            "threshold": 0.2,
+            "minPrevious": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": 116,
+      "testId": 306,
+      "name": "results.Aggregated.locust_requests_current_rps.mean",
+      "order": 0,
+      "labels": [
+        ".results.Aggregated.locust_requests_current_rps.mean"
+      ],
+      "changeDetection": [
+        {
+          "id": 191,
+          "model": "relativeDifference",
+          "config": {
+            "model": "relativeDifference",
+            "filter": "mean",
+            "window": 1,
+            "threshold": 0.2,
+            "minPrevious": 5
+          }
+        },
+        {
+          "id": 192,
+          "model": "relativeDifference",
+          "config": {
+            "model": "relativeDifference",
+            "filter": "mean",
+            "window": 5,
+            "threshold": 0.1,
+            "minPrevious": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": 403,
+      "testId": 306,
+      "name": ".measurements.rhdh-postgresql.restarts.max",
+      "order": 8,
+      "labels": [
+        ".measurements.rhdh-postgresql.restarts.max"
+      ],
+      "changeDetection": [
+        {
+          "id": 825,
+          "model": "relativeDifference",
+          "config": {
+            "model": "relativeDifference",
+            "filter": "mean",
+            "window": 1,
+            "threshold": 0.2,
+            "minPrevious": 5
+          }
+        },
+        {
+          "id": 826,
+          "model": "relativeDifference",
+          "config": {
+            "model": "relativeDifference",
+            "filter": "mean",
+            "window": 5,
+            "threshold": 0.1,
+            "minPrevious": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": 404,
+      "testId": 306,
+      "name": ".measurements.rhdh-postgresql.count_ready.max",
+      "order": 7,
+      "labels": [
+        ".measurements.rhdh-postgresql.count_ready.max"
+      ],
+      "changeDetection": [
+        {
+          "id": 827,
+          "model": "relativeDifference",
+          "config": {
+            "model": "relativeDifference",
+            "filter": "mean",
+            "window": 5,
+            "threshold": 0.1,
+            "minPrevious": 5
+          }
+        },
+        {
+          "id": 828,
+          "model": "relativeDifference",
+          "config": {
+            "model": "relativeDifference",
+            "filter": "mean",
+            "window": 1,
+            "threshold": 0.2,
+            "minPrevious": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": 407,
+      "testId": 306,
+      "name": ".measurements.rhdh-developer-hub.restarts.max",
+      "order": 14,
+      "labels": [
+        ".measurements.rhdh-developer-hub.restarts.max"
+      ],
+      "changeDetection": [
+        {
+          "id": 833,
+          "model": "relativeDifference",
+          "config": {
+            "model": "relativeDifference",
+            "filter": "mean",
+            "window": 5,
+            "threshold": 0.1,
+            "minPrevious": 5
+          }
+        },
+        {
+          "id": 834,
+          "model": "relativeDifference",
+          "config": {
+            "model": "relativeDifference",
+            "filter": "mean",
+            "window": 1,
+            "threshold": 0.2,
+            "minPrevious": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": 408,
+      "testId": 306,
+      "name": ".measurements.rhdh-developer-hub.count_ready.max",
+      "order": 13,
+      "labels": [
+        ".measurements.rhdh-developer-hub.count_ready.max"
+      ],
+      "changeDetection": [
+        {
+          "id": 836,
+          "model": "relativeDifference",
+          "config": {
+            "model": "relativeDifference",
+            "filter": "mean",
+            "window": 1,
+            "threshold": 0.2,
+            "minPrevious": 5
+          }
+        },
+        {
+          "id": 835,
+          "model": "relativeDifference",
+          "config": {
+            "model": "relativeDifference",
+            "filter": "mean",
+            "window": 5,
+            "threshold": 0.1,
+            "minPrevious": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": 393,
+      "testId": 306,
+      "name": ".results.Aggregated.locust_requests_num_failures.mean",
+      "order": 1,
+      "labels": [
+        ".results.Aggregated.locust_requests_num_failures.mean"
+      ],
+      "changeDetection": [
+        {
+          "id": 806,
+          "model": "relativeDifference",
+          "config": {
+            "model": "relativeDifference",
+            "filter": "mean",
+            "window": 5,
+            "threshold": 0.1,
+            "minPrevious": 5
+          }
+        },
+        {
+          "id": 805,
+          "model": "relativeDifference",
+          "config": {
+            "model": "relativeDifference",
+            "filter": "mean",
+            "window": 1,
+            "threshold": 0.2,
+            "minPrevious": 5
+          }
+        }
+      ]
+    }
+  ],
+  "missingDataRules": [],
+  "experiments": [],
+  "actions": [],
+  "subscriptions": {
+    "id": 13,
+    "users": [
+      "jhutar@redhat.com"
+    ],
+    "optout": [],
+    "teams": [],
+    "testId": 306
+  },
+  "id": 306,
+  "name": "rhdh-load-test",
+  "folder": "rhdh-perf-test-team",
+  "description": "",
+  "datastoreId": null,
+  "tokens": [],
+  "timelineLabels": [
+    ".results.started"
+  ],
+  "fingerprintLabels": [
+    ".metadata.scenario.name"
+  ],
+  "transformers": [],
+  "notificationsEnabled": true,
+  "access": "PUBLIC",
+  "owner": "hybrid-cloud-experience-perfscale-team"
+}
