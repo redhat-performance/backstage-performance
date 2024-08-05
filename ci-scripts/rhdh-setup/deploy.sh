@@ -54,6 +54,7 @@ export COMPONENT_COUNT="${COMPONENT_COUNT:-1}"
 export KEYCLOAK_USER_PASS=${KEYCLOAK_USER_PASS:-$(mktemp -u XXXXXXXXXX)}
 export AUTH_PROVIDER="${AUTH_PROVIDER:-''}"
 export ENABLE_RBAC="${ENABLE_RBAC:-false}"
+export ENABLE_PROFILING="${ENABLE_PROFILING:-false}"
 
 export PSQL_LOG="${PSQL_LOG:-true}"
 export LOG_MIN_DURATION_STATEMENT="${LOG_MIN_DURATION_STATEMENT:-65}"
@@ -260,6 +261,15 @@ install_rhdh_with_helm() {
     if [ -n "${RHDH_RESOURCES_MEMORY_LIMITS}" ]; then yq -i '.upstream.backstage.resources.limits.memory = "'"${RHDH_RESOURCES_MEMORY_LIMITS}"'"' "$TMP_DIR/chart-values.yaml"; fi
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.service.ports.targetPort = "oauth2-proxy"' "$TMP_DIR/chart-values.yaml"; fi
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.service.ports.backend = 4180' "$TMP_DIR/chart-values.yaml"; fi
+    if ${ENABLE_PROFILING}; then
+        yq -i '.upstream.backstage.command |= ["node", "--prof", "--heapsnapshot-signal=SIGUSR1", "packages/backend"]' "$TMP_DIR/chart-values.yaml"
+        # Collecting the heap snapshot freezes the RHDH while getting and writting the heap snapshot to a file
+        # which makes the out-of-the-box liveness/readiness probes (set to 10s period) unhappy
+        # and makes the scheduler to restart the Pod(s).
+        # The following patch prolongs the period to 5 minutes to avoid that to happen.
+        yq -i '.upstream.backstage.readinessProbe |= {"httpGet":{"path":"/healthcheck","port":7007,"scheme":"HTTP"},"initialDelaySeconds":30,"timeoutSeconds":2,"periodSeconds":300,"successThreshold":1,"failureThreshold":3}' "$TMP_DIR/chart-values.yaml"
+        yq -i '.upstream.backstage.livenessProbe |= {"httpGet":{"path":"/healthcheck","port":7007,"scheme":"HTTP"},"initialDelaySeconds":30,"timeoutSeconds":2,"periodSeconds":300,"successThreshold":1,"failureThreshold":3}' "$TMP_DIR/chart-values.yaml"
+    fi
     #shellcheck disable=SC2086
     helm upgrade --install "${RHDH_HELM_RELEASE_NAME}" --devel "${repo_name}/${RHDH_HELM_CHART}" ${version_arg} -n "${RHDH_NAMESPACE}" --values "$TMP_DIR/chart-values.yaml"
     wait_to_start statefulset "${RHDH_HELM_RELEASE_NAME}-postgresql-read" 300 300

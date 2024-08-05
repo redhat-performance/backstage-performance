@@ -56,7 +56,7 @@ done &
 rate_limit_exit=$!
 kill_rate_limits() {
     echo "Stopping the watch for GH rate limits remainig (setup)"
-    kill $rate_limit_exit
+    kill $rate_limit_exit || true
 }
 trap kill_rate_limits EXIT
 
