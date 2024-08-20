@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    release: pglabel
+  name: prometheus-pglabel
+spec:
+  endpoints:
+  - interval: 30s
+    port: http
+    scheme: http
+    path: /metrics
+  namespaceSelector:
+    matchNames:
+      - pgnamespace
+  selector:
+    matchLabels:
+      release: pglabel
