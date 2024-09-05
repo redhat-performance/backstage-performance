@@ -57,6 +57,7 @@ export ENABLE_RBAC="${ENABLE_RBAC:-false}"
 export ENABLE_PROFILING="${ENABLE_PROFILING:-false}"
 
 export PSQL_LOG="${PSQL_LOG:-true}"
+export RHDH_METRIC="${RHDH_METRIC:-true}"
 export LOG_MIN_DURATION_STATEMENT="${LOG_MIN_DURATION_STATEMENT:-65}"
 export LOG_MIN_DURATION_SAMPLE="${LOG_MIN_DURATION_SAMPLE:-50}"
 export LOG_STATEMENT_SAMPLE_RATE="${LOG_STATEMENT_SAMPLE_RATE:-0.7}"
@@ -213,6 +214,8 @@ backstage_install() {
         echo "Invalid install method: $INSTALL_METHOD, currently allowed methods are helm or olm"
         return 1
     fi
+    if [ "${AUTH_PROVIDER}" == "keycloak" ] && ${RHDH_METRIC}; then $clin create -f template/backstage/rhdh-metrics-service.yaml; fi
+    if ${RHDH_METRIC}; then envsubst <template/backstage/rhdh-servicemonitor.yaml| $clin create -f -; fi
 }
 
 # shellcheck disable=SC2016,SC1004
@@ -253,6 +256,7 @@ install_rhdh_with_helm() {
             ${RHDH_IMAGE_REPO} \
             ${RHDH_IMAGE_TAG} \
             ${RHDH_NAMESPACE} \
+            ${RHDH_METRIC} \
             ${COOKIE_SECRET} \
             ' <"$TMP_DIR/chart-values.temp.yaml" >"$TMP_DIR/chart-values.yaml"
     if [ -n "${RHDH_RESOURCES_CPU_REQUESTS}" ]; then yq -i '.upstream.backstage.resources.requests.cpu = "'"${RHDH_RESOURCES_CPU_REQUESTS}"'"' "$TMP_DIR/chart-values.yaml"; fi
