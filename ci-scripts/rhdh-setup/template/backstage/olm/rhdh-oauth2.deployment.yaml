@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rhdh
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: oauth2
+      app.kubernetes.io/instance: rhdh
+      app.kubernetes.io/name: developer-hub
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: oauth2
+        app.kubernetes.io/instance: rhdh
+        app.kubernetes.io/name: developer-hub
+    spec:
+      containers:
+        - args:
+            - --provider=oidc
+            - --email-domain=*
+            - --upstream=http://backstage-developer-hub:80
+            - --http-address=0.0.0.0:4180
+            - --skip-provider-button
+          env:
+            - name: OAUTH2_PROXY_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  key: CLIENT_ID
+                  name: keycloak-client-secret-backstage
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  key: CLIENT_SECRET
+                  name: keycloak-client-secret-backstage
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  key: keycloak_cookie_secret
+                  name: perf-test-secrets
+            - name: OAUTH2_PROXY_OIDC_ISSUER_URL
+              value: https://keycloak-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}/auth/realms/backstage
+            - name: OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY
+              value: "true"
+          image: quay.io/oauth2-proxy/oauth2-proxy:latest
+          imagePullPolicy: IfNotPresent
+          name: oauth2-proxy
+          ports:
+            - containerPort: 4180
+              name: oauth2-proxy
+              protocol: TCP
+          resources: {}
+      imagePullSecrets:
+        - name: rhdh-pull-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rhdh
+spec:
+  ports:
+    - name: oauth2-proxy
+      port: 4180
+      protocol: TCP
+      targetPort: oauth2-proxy
+  selector:
+    app.kubernetes.io/component: oauth2
+    app.kubernetes.io/instance: rhdh
+    app.kubernetes.io/name: developer-hub
+  type: ClusterIP
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: rhdh
+spec:
+  path: /
+  port:
+    targetPort: 4180
+  tls:
+    insecureEdgeTerminationPolicy: Redirect
+    termination: edge
+  to:
+    kind: Service
+    name: rhdh
+    weight: 100
+  wildcardPolicy: None

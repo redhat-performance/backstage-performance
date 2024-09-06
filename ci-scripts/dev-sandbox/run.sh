@@ -44,7 +44,11 @@ collect_counts "baseline-counts-post"
 
 # testing env
 if [ "$RHDH_INSTALL_METHOD" == "olm" ]; then
-    rhdh_route="backstage-developer-hub"
+    if [ "$AUTH_PROVIDER" == "keycloak" ]; then
+        rhdh_route="rhdh"
+    else
+        rhdh_route="backstage-developer-hub"
+    fi
 elif [ "$RHDH_INSTALL_METHOD" == "helm" ]; then
     export RHDH_HELM_RELEASE_NAME RHDH_HELM_CHART
 

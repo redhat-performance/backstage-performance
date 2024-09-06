@@ -4,7 +4,7 @@ metadata:
   name: ${SCENARIO}.test
 spec:
   image: quay.io/backstage-performance/locust:latest
-  imagePullPolicy: IfNotPresent
+  imagePullPolicy: Always
   masterCommandSeed: --locustfile /lotest/src/${SCENARIO}.py
     --host ${HOST}
     --users ${USERS}
@@ -12,5 +12,6 @@ spec:
     --run-time ${DURATION}
     ${LOCUST_EXTRA_CMD}
   workerCommandSeed: --locustfile /lotest/src/${SCENARIO}.py
+    ${LOCUST_EXTRA_CMD}
   workerReplicas: ${WORKERS}
   configMap: locust.${SCENARIO}

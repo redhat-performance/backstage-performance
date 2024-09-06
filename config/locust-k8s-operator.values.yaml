@@ -1,6 +1,7 @@
 image:
   repository: "quay.io/backstage-performance/locust-k8s-operator"
   tag: "latest"
+  pullPolicy: Always
 
 k8s:
   clusterRole:
@@ -17,3 +18,4 @@ config:
       ephemeralLimit: 100Mi
     metricsExporter:
       image: "quay.io/backstage-performance/locust_exporter:latest"
+      pullPolicy: Always

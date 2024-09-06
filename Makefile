@@ -35,8 +35,8 @@ export RHDH_HELM_CHART_VERSION ?=
 export RHDH_HELM_RELEASE_NAME ?= rhdh
 
 # RHDH OLM subscription to deploy
-export RHDH_OLM_INDEX_IMAGE ?= quay.io/rhdh/iib:1.2-v$(shell oc version -o json | jq -r '.openshiftVersion' | sed -r -e "s,([0-9]+\.[0-9]+)\..+,\1,")-$(shell oc version -o json | jq -r '.serverVersion.platform' | sed -r -e "s,linux/,," | sed -e 's,amd64,x86_64,')
-export RHDH_OLM_CHANNEL ?= fast
+export RHDH_OLM_INDEX_IMAGE ?= registry.redhat.io/redhat/redhat-operator-index:v$(shell oc version -o json | jq -r '.openshiftVersion' | sed -r -e "s,([0-9]+\.[0-9]+)\..+,\1,")
+export RHDH_OLM_CHANNEL ?= fast-1.2
 
 # RHDH horizontal scaling
 export RHDH_DEPLOYMENT_REPLICAS ?= 1
@@ -48,7 +48,7 @@ export RHDH_RESOURCES_MEMORY_REQUESTS ?=
 export RHDH_RESOURCES_MEMORY_LIMITS ?=
 export RHDH_KEYCLOAK_REPLICAS ?= 1
 export LOCUST_EXTRA_CMD ?=
-export AUTH_PROVIDER ?=
+export AUTH_PROVIDER ?= keycloak
 
 # RHDH install method - one of 'helm' or 'olm'
 export RHDH_INSTALL_METHOD ?= helm
@@ -175,7 +175,7 @@ test: $(TMP_DIR) $(ARTIFACT_DIR)
 ifneq ($(shell test '$(AUTH_PROVIDER)' == 'keycloak' && echo 1 || echo 0),0)
 	$(eval key_pass := $(shell oc -n  rhdh-performance  get secret perf-test-secrets -o template --template='{{.data.keycloak_user_pass}}' | base64 -d))
 	$(eval key_host := $(shell oc  -n  rhdh-performance  get routes/keycloak -o template  --template='{{.spec.host}}' ))
-	$(eval LOCUST_EXTRA_CMD := --keycloak-host $(key_host) --keycloak-password $(key_pass)  )
+	$(eval LOCUST_EXTRA_CMD := $(LOCUST_EXTRA_CMD) --keycloak-host $(key_host) --keycloak-password $(key_pass)  )
 ifneq ($(shell test $(USERS) -gt $(WORKERS) && echo 1 || echo 0),0)
 	@echo "users greater than  workers "
 else
