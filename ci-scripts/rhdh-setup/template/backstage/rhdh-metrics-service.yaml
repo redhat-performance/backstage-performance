@@ -1,0 +1,18 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: rhdh-metrics
+  labels:
+    app.kubernetes.io/component: backstage
+    app.kubernetes.io/instance: rhdh
+    app.kubernetes.io/name: developer-hub
+spec:
+  ports:
+    - name: backend
+      protocol: TCP
+      port: 7007
+      targetPort: backend
+  selector:
+    app.kubernetes.io/component: backstage
+    app.kubernetes.io/instance: rhdh
+    app.kubernetes.io/name: developer-hub

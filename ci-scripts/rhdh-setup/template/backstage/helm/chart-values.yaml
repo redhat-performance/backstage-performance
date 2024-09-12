@@ -104,7 +104,7 @@ upstream:
       enabled: false
   metrics:
     serviceMonitor:
-      enabled: false
+      enabled: ${RHDH_METRIC}
       path: /metrics
   nameOverride: developer-hub
   networkPolicy:
