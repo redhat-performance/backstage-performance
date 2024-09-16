@@ -361,7 +361,7 @@ psql_debug() {
         $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#wal_buffers.*/wal_buffers = 16MB/" /var/lib/pgsql/data/userdata/postgresql.conf'
         $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#default_statistics_target.*/default_statistics_target = 100/" /var/lib/pgsql/data/userdata/postgresql.conf'
         $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#random_page_cost.*/random_page_cost = 1.1/" /var/lib/pgsql/data/userdata/postgresql.conf'
-        $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#effective_io_concurrency.*/effective_io_concurrency = 200/" /var/lib/pgsql/data/userdata/postgresql.conf'
+        $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#effective_io_concurrency.*/effective_io_concurrency = 300/" /var/lib/pgsql/data/userdata/postgresql.conf'
         $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#work_mem.*/work_mem = 2621kB/" /var/lib/pgsql/data/userdata/postgresql.conf'
         $clin exec "${psql_db}" -- sh -c "echo shared_preload_libraries = \'pgaudit,auto_explain,pg_stat_statements\' >> /var/lib/pgsql/data/userdata/postgresql.conf"
     fi
