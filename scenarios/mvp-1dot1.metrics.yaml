@@ -20,22 +20,11 @@
   monitoring_step: 15
 {%- endmacro %}
 
-{{ results_scenario('/api/auth/oauth2Proxy/refresh') }}
-{{ results_scenario('/auth/realms/backstage/login-actions/authenticate\\\\?session_code=.*&.*&client_id=backstage&.*&execution=.*')}}
-{{ results_scenario('/api/catalog/entities/by-query\\\\?limit=0&filter=kind%3Dapi') }}
-{{ results_scenario('/api/catalog/entities/by-query\\\\?limit=0&filter=kind%3Dapi%2Crelations\\\\.ownedBy%3D.+%2Crelations\\\\.ownedBy%3Dgroup%3A.+') }}
-{{ results_scenario('/api/catalog/entities/by-query\\\\?limit=0&filter=kind%3Dcomponent') }}
-{{ results_scenario('/api/catalog/entities/by-query\\\\?limit=0&filter=kind%3Dcomponent%2Crelations\\\\.ownedBy%3Dgroup%3A.+') }}
-{{ results_scenario('/api/catalog/entities/by-query\\\\?limit=0&filter=kind%3Dcomponent%2Crelations\\\\.ownedBy%3Duser%3A.+%2Crelations\\\\.ownedBy%3Dgroup%3A.+') }}
-{{ results_scenario('/api/catalog/entities/by-query\\\\?limit=0&filter=kind%3Dcomponent%2Crelations\\\\.ownedBy%3Duser%3A.+%2Crelations\\\\.ownedBy%3Dgroup%3A.+%2Cspec_type%3Dlibrary') }}
-{{ results_scenario('/api/catalog/entities/by-query\\\\?limit=0&filter=kind%3Dcomponent%2Cspec_type%3Dlibrary') }}
-{{ results_scenario('/api/catalog/entities/by-query\\\\?limit=20&orderField=metadata\\\\.name%2Casc&cursor=.+') }}
-{{ results_scenario('/api/catalog/entities/by-query\\\\?limit=20&orderField=metadata\\\\.name%2Casc&filter=kind%3Dapi%2Crelations\\\\.ownedBy%3Duser%3A.+%2Crelations\\\\.ownedBy%3Dgroup%3A.+') }}
-{{ results_scenario('/api/catalog/entities/by-query\\\\?limit=20&orderField=metadata\\\\.name%2Casc&filter=kind%3Dcomponent') }}
-{{ results_scenario('/api/catalog/entities/by-query\\\\?limit=20&orderField=metadata\\\\.name%2Casc&filter=kind%3Dcomponent%2Crelations\\\\.ownedBy%3Dgroup%3A.+') }}
-{{ results_scenario('/api/catalog/entities/by-query\\\\?limit=20&orderField=metadata\\\\.name%2Casc&filter=kind%3Dcomponent%2Crelations\\\\.ownedBy%3Duser%3A.+%2Crelations\\\\.ownedBy%3Dgroup%3A.+') }}
-{{ results_scenario('/api/catalog/entities/by-query\\\\?limit=20&orderField=metadata\\\\.name%2Casc&filter=kind%3Dcomponent%2Crelations\\\\.ownedBy%3Duser%3A.+%2Crelations\\\\.ownedBy%3Dgroup%3A.+%2Cspec_type%3Dlibrary') }}
-{{ results_scenario('/api/catalog/entities/by-refs') }}
+{{ results_scenario('/api/catalog/entities') }}
+{{ results_scenario('/api/catalog/entities\\\\?filter=kind%3Dapi') }}
+{{ results_scenario('/api/catalog/entities\\\\?filter=kind%3Dcomponent') }}
+{{ results_scenario('/api/catalog/entities\\\\?filter=kind%3Dcomponent%2Cspec\\\\.type%3Dlibrary') }}
+{{ results_scenario('/api/catalog/entity-facets') }}
 {{ results_scenario('/api/catalog/entity-facets\\\\?facet=kind') }}
 {{ results_scenario('/api/catalog/entity-facets\\\\?facet=metadata\\\\.namespace') }}
 {{ results_scenario('/api/catalog/entity-facets\\\\?facet=metadata\\\\.namespace&filter=kind%3Dapi') }}

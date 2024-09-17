@@ -46,12 +46,14 @@ wait_for_indexing() {
     COOKIE="$TMP_DIR/cookie.jar"
     if [ "$INSTALL_METHOD" == "helm" ]; then
         rhdh_route="${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}"
-        #rhdh_route="rhdh-redhat-developer-hub"
     else
-        rhdh_route="backstage-developer-hub"
+        if [ "$AUTH_PROVIDER" == "keycloak" ]; then
+            rhdh_route="rhdh"
+        else
+            rhdh_route="backstage-developer-hub"
+        fi
     fi
     if [ "$WAIT_FOR_SEARCH_INDEX" == "true" ]; then
-        rhdh_route="${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}"
         HOST="https://$(oc get routes "${rhdh_route}" -n "${RHDH_NAMESPACE:-rhdh-performance}" -o jsonpath='{.spec.host}')"
 
         start=$(date +%s)

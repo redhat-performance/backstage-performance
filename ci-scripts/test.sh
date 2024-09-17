@@ -13,11 +13,15 @@ source "$(readlink -m "$SCRIPT_DIR"/../test.env)"
 export SCENARIO RHDH_INSTALL_METHOD AUTH_PROVIDER
 
 RHDH_INSTALL_METHOD=${RHDH_INSTALL_METHOD:-helm}
-AUTH_PROVIDER=${AUTH_PROVIDER:-}
+AUTH_PROVIDER=${AUTH_PROVIDER:-keycloak}
 
 # testing env
 if [ "$RHDH_INSTALL_METHOD" == "olm" ]; then
-    rhdh_route="backstage-developer-hub"
+    if [ "$AUTH_PROVIDER" == "keycloak" ]; then
+        rhdh_route="rhdh"
+    else
+        rhdh_route="backstage-developer-hub"
+    fi
 elif [ "$RHDH_INSTALL_METHOD" == "helm" ]; then
     export RHDH_HELM_RELEASE_NAME RHDH_HELM_CHART
 

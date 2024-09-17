@@ -45,7 +45,11 @@ backstage_url() {
     if [ "$RHDH_INSTALL_METHOD" == "helm" ]; then
       rhdh_route="${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}"
     else
-      rhdh_route="backstage-developer-hub"
+      if [ "$AUTH_PROVIDER" == "keycloak" ]; then
+        rhdh_route="rhdh"
+      else
+        rhdh_route="backstage-developer-hub"
+      fi
     fi
     echo -n "https://$(oc get routes "${rhdh_route}" -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')" >"$f"
   fi
@@ -149,14 +153,27 @@ create_cmp() {
 }
 
 create_group() {
-  token=$(get_token)
-  groupname="group${0}"
-  echo "    g, group:default/${groupname}, role:default/perf_admin" >>"$TMP_DIR/group-rbac.yaml"
-  curl -s -k --location --request POST "$(keycloak_url)/auth/admin/realms/backstage/groups" \
-    -H 'Content-Type: application/json' \
-    -H 'Authorization: Bearer '"$token" \
-    --data-raw '{"name": "'"${groupname}"'"}' |& tee -a "$TMP_DIR/create_group.log"
-  echo "[INFO][$(date --utc -Ins)] Group $groupname created" >>"$TMP_DIR/create_group.log"
+  max_attempts=5
+  attempt=1
+  while ((attempt <= max_attempts)); do
+    token=$(get_token)
+    groupname="group${0}"
+    echo "    g, group:default/${groupname}, role:default/perf_admin" >>"$TMP_DIR/group-rbac.yaml"
+    curl -s -k --location --request POST "$(keycloak_url)/auth/admin/realms/backstage/groups" \
+      -H 'Content-Type: application/json' \
+      -H 'Authorization: Bearer '"$token" \
+      --data-raw '{"name": "'"${groupname}"'"}' |& tee -a "$TMP_DIR/create_group.log"
+    if [ "${PIPESTATUS[0]}" -eq 0 ]; then
+      echo "[INFO][$(date --utc -Ins)] Group $groupname created" >>"$TMP_DIR/create_group.log"
+      return
+    else
+      echo "[WARNING][$(date --utc -Ins)] Unable to create the $groupname group at $attempt. attempt. Trying again up to $max_attempts times." >>"$TMP_DIR/create_group.log"
+      ((attempt++))
+    fi
+  done
+  if [[ $attempt -gt $max_attempts ]]; then
+    echo "[ERROR][$(date --utc -Ins)] Unable to create the $groupname group in $max_attempts attempts, giving up!" |& tee -a "$TMP_DIR/create_group.log"
+  fi
 }
 
 create_groups() {
@@ -166,16 +183,29 @@ create_groups() {
 }
 
 create_user() {
-  token=$(get_token)
-  grp=$(echo "${0}%${GROUP_COUNT}" | bc)
-  [[ $grp -eq 0 ]] && grp=${GROUP_COUNT}
-  username="test${0}"
-  groupname="group${grp}"
-  curl -s -k --location --request POST "$(keycloak_url)/auth/admin/realms/backstage/users" \
-    -H 'Content-Type: application/json' \
-    -H 'Authorization: Bearer '"$token" \
-    --data-raw '{"firstName":"'"${username}"'","lastName":"tester", "email":"'"${username}"'@test.com","emailVerified":"true", "enabled":"true", "username":"'"${username}"'","groups":["/'"${groupname}"'"],"credentials":[{"type":"password","value":"'"${KEYCLOAK_USER_PASS}"'","temporary":false}]}' |& tee -a "$TMP_DIR/create_user.log"
-  echo "[INFO][$(date --utc -Ins)] User $username ($groupname) created" >>"$TMP_DIR/create_user.log"
+  max_attempts=5
+  attempt=1
+  while ((attempt <= max_attempts)); do
+    token=$(get_token)
+    grp=$(echo "${0}%${GROUP_COUNT}" | bc)
+    [[ $grp -eq 0 ]] && grp=${GROUP_COUNT}
+    username="test${0}"
+    groupname="group${grp}"
+    curl -s -k --location --request POST "$(keycloak_url)/auth/admin/realms/backstage/users" \
+      -H 'Content-Type: application/json' \
+      -H 'Authorization: Bearer '"$token" \
+      --data-raw '{"firstName":"'"${username}"'","lastName":"tester", "email":"'"${username}"'@test.com","emailVerified":"true", "enabled":"true", "username":"'"${username}"'","groups":["/'"${groupname}"'"],"credentials":[{"type":"password","value":"'"${KEYCLOAK_USER_PASS}"'","temporary":false}]}' |& tee -a "$TMP_DIR/create_user.log"
+    if [ "${PIPESTATUS[0]}" -eq 0 ]; then
+      echo "[INFO][$(date --utc -Ins)] User $username ($groupname) created" >>"$TMP_DIR/create_user.log"
+      return
+    else
+      echo "[WARNING][$(date --utc -Ins)] Unable to create the $username user at $attempt. attempt. Trying again up to $max_attempts times." >>"$TMP_DIR/create_user.log"
+      ((attempt++))
+    fi
+  done
+  if [[ $attempt -gt $max_attempts ]]; then
+    echo "[ERROR][$(date --utc -Ins)] Unable to create the $username user in $max_attempts attempts, giving up!" |& tee -a "$TMP_DIR/create_user.log"
+  fi
 }
 
 create_users() {
@@ -267,19 +297,20 @@ get_token() {
   trap "rm -rf $token_lockfile; exit" INT TERM EXIT HUP
 
   timeout_timestamp=$(date -d "60 seconds" "+%s")
-  while [ ! -f "$token_file" ] || [ ! -s "$token_file" ] || [ "$(date +%s)" -gt "$(jq -rc '.expires_in_timestamp' "$token_file")" ]; do
+  while [ ! -f "$token_file" ] || [ ! -s "$token_file" ] || [ -z "$(jq -rc '.expires_in_timestamp' "$token_file")" ] || [ "$(date +%s)" -gt "$(jq -rc '.expires_in_timestamp' "$token_file")" ]; do
     log_token_info "Refreshing keycloak token"
     if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
       log_token_err "Timeout getting keycloak token"
       exit 1
     fi
     if [[ ${service} == 'rhdh' ]]; then
+      log_token_info "Refreshing RHDH token"
       [[ -f "$token_file" ]] && rm -rf "$token_file" && rm -rf "$TMP_DIR/cookie.jar"
       if ! rhdh_token >"$token_file"; then
         log_token_err "Unable to get token, re-attempting"
       fi
     else
-      keycloak_pass=$(oc -n "${RHDH_NAMESPACE}" get secret credential-example-sso -o template --template='{{.data.ADMIN_PASSWORD}}' | base64 -d)
+      keycloak_pass=$(oc -n "${RHDH_NAMESPACE}" get secret credential-rhdh-sso -o template --template='{{.data.ADMIN_PASSWORD}}' | base64 -d)
       if ! keycloak_token >"$token_file"; then
         log_token_err "Unable to get token, re-attempting"
       fi

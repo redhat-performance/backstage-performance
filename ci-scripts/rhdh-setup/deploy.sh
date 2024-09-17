@@ -41,9 +41,9 @@ export RHDH_HELM_CHART=${RHDH_HELM_CHART:-redhat-developer-hub}
 export RHDH_HELM_CHART_VERSION=${RHDH_HELM_CHART_VERSION:-}
 
 OCP_VER="$(oc version -o json | jq -r '.openshiftVersion' | sed -r -e "s#([0-9]+\.[0-9]+)\..+#\1#")"
-OCP_ARCH="$(oc version -o json | jq -r '.serverVersion.platform' | sed -r -e "s#linux/##" | sed -e 's#amd64#x86_64#')"
-export RHDH_OLM_INDEX_IMAGE="${RHDH_OLM_INDEX_IMAGE:-quay.io/rhdh/iib:1.2-v${OCP_VER}-${OCP_ARCH}}"
-export RHDH_OLM_CHANNEL=${RHDH_OLM_CHANNEL:-fast}
+#OCP_ARCH="$(oc version -o json | jq -r '.serverVersion.platform' | sed -r -e "s#linux/##" | sed -e 's#amd64#x86_64#')"
+export RHDH_OLM_INDEX_IMAGE="${RHDH_OLM_INDEX_IMAGE:-registry.redhat.io/redhat/redhat-operator-index:v${OCP_VER}}"
+export RHDH_OLM_CHANNEL=${RHDH_OLM_CHANNEL:-fast-1.2}
 export RHDH_OLM_OPERATOR_PACKAGE=${RHDH_OLM_OPERATOR_PACKAGE:-rhdh}
 
 export PRE_LOAD_DB="${PRE_LOAD_DB:-true}"
@@ -173,6 +173,15 @@ keycloak_install() {
     envsubst <template/keycloak/keycloak.yaml | $clin apply -f -
     wait_to_start statefulset keycloak 450 600
     envsubst <template/keycloak/keycloakRealm.yaml | $clin apply -f -
+    if [ "$INSTALL_METHOD" == "helm" ]; then
+        export OAUTH2_REDIRECT_URI=https://${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}/oauth2/callback
+    elif [ "$INSTALL_METHOD" == "olm" ]; then
+        if [ "$AUTH_PROVIDER" == "keycloak" ]; then
+            export OAUTH2_REDIRECT_URI=https://rhdh-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}/oauth2/callback
+        else
+            export OAUTH2_REDIRECT_URI=https://backstage-developer-hub-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}/oauth2/callback
+        fi
+    fi
     envsubst <template/keycloak/keycloakClient.yaml | $clin apply -f -
     envsubst <template/keycloak/keycloakUser.yaml | $clin apply -f -
 }
@@ -197,6 +206,18 @@ backstage_install() {
     cp "template/backstage/app-config.yaml" "$TMP_DIR/app-config.yaml"
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '. |= . + {"signInPage":"oauth2Proxy"}' "$TMP_DIR/app-config.yaml"; fi
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '. |= . + {"auth":{"environment":"production","providers":{"oauth2Proxy":{}}}}' "$TMP_DIR/app-config.yaml"; else yq -i '. |= . + {"auth":{"providers":{"guest":{"dangerouslyAllowOutsideDevelopment":true}}}}' "$TMP_DIR/app-config.yaml"; fi
+    if [ "$INSTALL_METHOD" == "helm" ]; then
+        base_url="https://${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}"
+    elif [ "$INSTALL_METHOD" == "olm" ]; then
+        if [ "$AUTH_PROVIDER" == "keycloak" ]; then
+            base_url="https://rhdh-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}"
+        else
+            base_url="https://backstage-developer-hub-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}"
+        fi
+    fi
+    yq -i '.app.baseUrl="'"$base_url"'"' "$TMP_DIR/app-config.yaml"
+    yq -i '.backend.baseUrl="'"$base_url"'"' "$TMP_DIR/app-config.yaml"
+    yq -i '.backend.cors.origin="'"$base_url"'"' "$TMP_DIR/app-config.yaml"
     until envsubst <template/backstage/secret-rhdh-pull-secret.yaml | $clin apply -f -; do $clin delete secret rhdh-pull-secret --ignore-not-found=true; done
     if ${ENABLE_RBAC}; then yq -i '. |= . + load("template/backstage/'$INSTALL_METHOD'/app-rbac-patch.yaml")' "$TMP_DIR/app-config.yaml"; fi
     until $clin create configmap app-config-rhdh --from-file "app-config.rhdh.yaml=$TMP_DIR/app-config.yaml"; do $clin delete configmap app-config-rhdh --ignore-not-found=true; done
@@ -215,7 +236,7 @@ backstage_install() {
         return 1
     fi
     if [ "${AUTH_PROVIDER}" == "keycloak" ] && ${RHDH_METRIC}; then $clin create -f template/backstage/rhdh-metrics-service.yaml; fi
-    if ${RHDH_METRIC}; then envsubst <template/backstage/rhdh-servicemonitor.yaml| $clin create -f -; fi
+    if ${RHDH_METRIC}; then envsubst <template/backstage/rhdh-servicemonitor.yaml | $clin create -f -; fi
 }
 
 # shellcheck disable=SC2016,SC1004
@@ -291,6 +312,10 @@ install_rhdh_with_olm() {
     OLM_CHANNEL="${RHDH_OLM_CHANNEL}" UPSTREAM_IIB="${RHDH_OLM_INDEX_IMAGE}" ./install-rhdh-catalog-source.sh --install-operator "${RHDH_OLM_OPERATOR_PACKAGE:-rhdh}"
     set +x
     wait_for_crd backstages.rhdh.redhat.com
+
+    if [ "$AUTH_PROVIDER" == "keycloak" ]; then
+        envsubst <template/backstage/olm/rhdh-oauth2.deployment.yaml | $clin apply -f -
+    fi
 
     backstage_yaml="$TMP_DIR/backstage.yaml"
     envsubst <template/backstage/olm/backstage.yaml >"$backstage_yaml"
