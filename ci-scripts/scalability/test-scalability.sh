@@ -125,7 +125,7 @@ for w in "${workers[@]}"; do
                             index="${r}r-db_${s}-${bu}bu-${bg}bg-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c"
                             set +x
                             oc login "$OPENSHIFT_API" -u "$OPENSHIFT_USERNAME" -p "$OPENSHIFT_PASSWORD" --insecure-skip-tls-verify=true
-                            make undeploy-rhdh
+                            make clean-local undeploy-rhdh
                             setup_artifacts="$SCALABILITY_ARTIFACTS/$index/setup"
                             mkdir -p "$setup_artifacts"
                             ARTIFACT_DIR=$setup_artifacts ./ci-scripts/setup.sh |& tee "$setup_artifacts/setup.log"
