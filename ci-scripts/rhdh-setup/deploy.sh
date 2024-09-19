@@ -353,8 +353,8 @@ psql_debug() {
         $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#stats_fetch_consistency.*/stats_fetch_consistency = cache/" /var/lib/pgsql/data/userdata/postgresql.conf'
 
         $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*shared_buffers.*/shared_buffers = 512MB/" /var/lib/pgsql/data/userdata/postgresql.conf'
-        $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*min_wal_size.*/min_wal_size = 1GB/" /var/lib/pgsql/data/userdata/postgresql.conf'
-        $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*max_wal_size.*/max_wal_size = 4GB/" /var/lib/pgsql/data/userdata/postgresql.conf'
+        $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*min_wal_size.*/min_wal_size = 2GB/" /var/lib/pgsql/data/userdata/postgresql.conf'
+        $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*max_wal_size.*/max_wal_size = 8GB/" /var/lib/pgsql/data/userdata/postgresql.conf'
         $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#effective_cache_size.*/effective_cache_size = 1536MB/" /var/lib/pgsql/data/userdata/postgresql.conf'
         $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#maintenance_work_mem.*/maintenance_work_mem = 128MB/" /var/lib/pgsql/data/userdata/postgresql.conf'
         $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#checkpoint_completion_target.*/checkpoint_completion_target = 0.9/" /var/lib/pgsql/data/userdata/postgresql.conf'
