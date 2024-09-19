@@ -58,7 +58,7 @@ backstage_url() {
 }
 
 create_per_grp() {
-  echo "[INFO][$(date --utc -Ins)] Creating entity YAML files"
+  log_info "Creating entity YAML files"
   varname=$2
   obj_count=${!varname}
   if [[ -z ${!varname} ]]; then
@@ -89,7 +89,7 @@ create_per_grp() {
 }
 
 clone_and_upload() {
-  echo "[INFO][$(date --utc -Ins)] Uploading entities to GitHub"
+  log_info "Uploading entities to GitHub"
   git_str="${GITHUB_USER}:${GITHUB_TOKEN}@github.com"
   base_name=$(basename "$GITHUB_REPO")
   git_dir=$TMP_DIR/${base_name}
@@ -113,22 +113,32 @@ clone_and_upload() {
   for filename in "${files[@]}"; do
     e_count=$(yq eval '.metadata.name | capture(".*-(?P<value>[0-9]+)").value' "$filename" | tail -n 1)
     upload_url="${GITHUB_REPO%.*}/blob/${tmp_branch}/$(basename "$filename")"
-    echo "Uploading entities from $upload_url"
+    log_info "Uploading entities from $upload_url"
     ACCESS_TOKEN=$(get_token "rhdh")
     curl -k "$(backstage_url)/api/catalog/locations" --cookie "$COOKIE" --cookie-jar "$COOKIE" -X POST -H 'Accept-Encoding: gzip, deflate, br' -H 'Authorization: Bearer '"$ACCESS_TOKEN" -H 'Content-Type: application/json' --data-raw '{"type":"url","target":"'"${upload_url}"'"}'
 
-    timeout_timestamp=$(date -d "600 seconds" "+%s")
+    timeout=600
+    timeout_timestamp=$(date -d "$timeout seconds" "+%s")
+    last_count=-1
     while true; do
       if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
-        echo "ERROR: Timeout waiting on entity count"
+        log_error "Timeout waiting on entity count"
         exit 1
       else
         ACCESS_TOKEN=$(get_token "rhdh")
         if [[ 'component-*.yaml' == "${1}" ]]; then b_count=$(curl -s -k "$(backstage_url)/api/catalog/entity-facets?facet=kind" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$ACCESS_TOKEN" | jq -r '.facets.kind[] | select(.value == "Component")| .count'); fi
         if [[ 'api-*.yaml' == "${1}" ]]; then b_count=$(curl -s -k "$(backstage_url)/api/catalog/entity-facets?facet=kind" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$ACCESS_TOKEN" | jq -r '.facets.kind[] | select(.value == "API")| .count'); fi
-        if [[ $b_count -ge $e_count ]]; then break; fi
+        if [[ "$last_count" != "$b_count" ]] && [[ $last_count -ge 0 ]]; then # reset the timeout if current count changes
+          log_info "The current count changed, resetting entity waiting timeout to $timeout seconds"
+          timeout_timestamp=$(date -d "$timeout seconds" "+%s")
+          last_count=$b_count
+        fi
+        if [[ $b_count -ge $e_count ]]; then
+          log_info "The entity count reached expected value ($b_count)"
+          break
+        fi
       fi
-      echo "Waiting for the entity count to be ${e_count} (current: ${b_count})"
+      log_info "Waiting for the entity count to be ${e_count} (current: ${b_count})"
       sleep 10s
     done
   done
@@ -159,26 +169,28 @@ create_group() {
   while ((attempt <= max_attempts)); do
     token=$(get_token)
     groupname="group${0}"
-    echo "    g, group:default/${groupname}, role:default/perf_admin" >>"$TMP_DIR/group-rbac.yaml"
-    curl -s -k --location --request POST "$(keycloak_url)/auth/admin/realms/backstage/groups" \
+    response="$(curl -s -k --location --request POST "$(keycloak_url)/auth/admin/realms/backstage/groups" \
       -H 'Content-Type: application/json' \
       -H 'Authorization: Bearer '"$token" \
-      --data-raw '{"name": "'"${groupname}"'"}' |& tee -a "$TMP_DIR/create_group.log"
-    if [ "${PIPESTATUS[0]}" -eq 0 ]; then
-      echo "[INFO][$(date --utc -Ins)] Group $groupname created" >>"$TMP_DIR/create_group.log"
+      --data-raw '{"name": "'"${groupname}"'"}' 2>&1)"
+    if [ "${PIPESTATUS[0]}" -eq 0 ] && ! echo "$response" | grep -q 'error' >&/dev/null; then
+      log_info "Group $groupname created" >>"$TMP_DIR/create_group.log"
       return
     else
-      echo "[WARNING][$(date --utc -Ins)] Unable to create the $groupname group at $attempt. attempt. Trying again up to $max_attempts times." >>"$TMP_DIR/create_group.log"
+      log_warn "Unable to create the $groupname group at $attempt. attempt. [$response]. Trying again up to $max_attempts times." >>"$TMP_DIR/create_group.log"
       ((attempt++))
     fi
   done
   if [[ $attempt -gt $max_attempts ]]; then
-    echo "[ERROR][$(date --utc -Ins)] Unable to create the $groupname group in $max_attempts attempts, giving up!" |& tee -a "$TMP_DIR/create_group.log"
+    log_error "Unable to create the $groupname group in $max_attempts attempts, giving up!" |& tee -a "$TMP_DIR/create_group.log"
   fi
 }
 
 create_groups() {
-  echo "Creating Groups in Keycloak"
+  log_info "Creating Groups in Keycloak"
+  for i in $(seq 1 "$GROUP_COUNT"); do
+    echo "    g, group:default/group${i}, role:default/perf_admin" >>"$TMP_DIR/group-rbac.yaml"
+  done
   sleep 5
   seq 1 "${GROUP_COUNT}" | xargs -n1 -P"${POPULATION_CONCURRENCY}" bash -c 'create_group'
 }
@@ -192,45 +204,61 @@ create_user() {
     [[ $grp -eq 0 ]] && grp=${GROUP_COUNT}
     username="test${0}"
     groupname="group${grp}"
-    curl -s -k --location --request POST "$(keycloak_url)/auth/admin/realms/backstage/users" \
+    response="$(curl -s -k --location --request POST "$(keycloak_url)/auth/admin/realms/backstage/users" \
       -H 'Content-Type: application/json' \
       -H 'Authorization: Bearer '"$token" \
-      --data-raw '{"firstName":"'"${username}"'","lastName":"tester", "email":"'"${username}"'@test.com","emailVerified":"true", "enabled":"true", "username":"'"${username}"'","groups":["/'"${groupname}"'"],"credentials":[{"type":"password","value":"'"${KEYCLOAK_USER_PASS}"'","temporary":false}]}' |& tee -a "$TMP_DIR/create_user.log"
-    if [ "${PIPESTATUS[0]}" -eq 0 ]; then
-      echo "[INFO][$(date --utc -Ins)] User $username ($groupname) created" >>"$TMP_DIR/create_user.log"
+      --data-raw '{"firstName":"'"${username}"'","lastName":"tester", "email":"'"${username}"'@test.com","emailVerified":"true", "enabled":"true", "username":"'"${username}"'","groups":["/'"${groupname}"'"],"credentials":[{"type":"password","value":"'"${KEYCLOAK_USER_PASS}"'","temporary":false}]}' 2>&1)"
+    if [ "${PIPESTATUS[0]}" -eq 0 ] && ! echo "$response" | grep -q 'error' >&/dev/null; then
+      log_info "User $username ($groupname) created" >>"$TMP_DIR/create_user.log"
       return
     else
-      echo "[WARNING][$(date --utc -Ins)] Unable to create the $username user at $attempt. attempt. Trying again up to $max_attempts times." >>"$TMP_DIR/create_user.log"
+      log_warn "Unable to create the $username user at $attempt. attempt. [$response].  Trying again up to $max_attempts times." >>"$TMP_DIR/create_user.log"
       ((attempt++))
     fi
   done
   if [[ $attempt -gt $max_attempts ]]; then
-    echo "[ERROR][$(date --utc -Ins)] Unable to create the $username user in $max_attempts attempts, giving up!" |& tee -a "$TMP_DIR/create_user.log"
+    log_error "Unable to create the $username user in $max_attempts attempts, giving up!" |& tee -a "$TMP_DIR/create_user.log"
   fi
 }
 
 create_users() {
-  echo "Creating Users in Keycloak"
+  log_info "Creating Users in Keycloak"
   export GROUP_COUNT
   sleep 5
   seq 1 "${BACKSTAGE_USER_COUNT}" | xargs -n1 -P"${POPULATION_CONCURRENCY}" bash -c 'create_user'
 }
 
 token_lockfile="$TMP_DIR/token.lockfile"
+log() {
+  echo "{\"level\":\"${2:-info}\",\"ts\":\"$(date --utc -Ins)\",\"message\":\"$1\"}"
+}
+
+log_info() {
+  log "$1" "info"
+}
+
+log_warn() {
+  log "$1" "warn"
+}
+
+log_error() {
+  log "$1" "error"
+}
+
 log_token() {
-  echo "[${2:-INFO}][$(date --utc -Ins)] $1" >>"$TMP_DIR/get_token.log"
+  log "$1" "$2" >>"$TMP_DIR/get_token.log"
 }
 
 log_token_info() {
-  log_token "$1" "INFO"
+  log_token "$1" "info"
 }
 
 log_token_err() {
-  log_token "$1" "ERROR"
+  log_token "$1" "error"
 }
 
 keycloak_token() {
-  curl -s -k "$(keycloak_url)/auth/realms/master/protocol/openid-connect/token" -d username=admin -d "password=${keycloak_pass}" -d 'grant_type=password' -d 'client_id=admin-cli' | jq -r ".expires_in_timestamp = $(date -d '30 seconds' +%s)"
+  curl -s -k "$(keycloak_url)/auth/realms/master/protocol/openid-connect/token" -d username=admin -d "password=$1" -d 'grant_type=password' -d 'client_id=admin-cli' | jq -r ".expires_in_timestamp = $(date -d '30 seconds' +%s)"
 }
 
 rhdh_token() {
@@ -280,7 +308,7 @@ rhdh_token() {
     --data-urlencode "code=$code" \
     --data-urlencode "session_state=$session_state" \
     --data-urlencode "state=$state" \
-    "$CODE_URL" | jq -r ".backstageIdentity" | jq -r ".expires_in_timestamp = $(date -d '50 minutes' +%s)")
+    "$CODE_URL" | jq -r ".backstageIdentity" | jq -r ".expires_in_timestamp = $(date -d '30 minutes' +%s)")
   echo "$ACCESS_TOKEN"
 }
 
@@ -288,8 +316,14 @@ get_token() {
   service=$1
   if [[ ${service} == 'rhdh' ]]; then
     token_file="$TMP_DIR/rhdh_token.json"
+    token_field=".token"
+    token_type="RHDH"
+    token_timeout="3600"
   else
     token_file="$TMP_DIR/keycloak_token.json"
+    token_field=".access_token"
+    token_type="Keycloak"
+    token_timeout="60"
   fi
   while ! mkdir "$token_lockfile" 2>/dev/null; do
     sleep 0.5s
@@ -297,35 +331,30 @@ get_token() {
   #shellcheck disable=SC2064
   trap "rm -rf $token_lockfile; exit" INT TERM EXIT HUP
 
-  timeout_timestamp=$(date -d "60 seconds" "+%s")
-  while [ ! -f "$token_file" ] || [ ! -s "$token_file" ] || [ -z "$(jq -rc '.expires_in_timestamp' "$token_file")" ] || [ "$(date +%s)" -gt "$(jq -rc '.expires_in_timestamp' "$token_file")" ]; do
-    log_token_info "Refreshing keycloak token"
+  timeout_timestamp=$(date -d "$token_timeout seconds" "+%s")
+  while [ ! -f "$token_file" ] || [ ! -s "$token_file" ] || [ -z "$(jq -rc '.expires_in_timestamp' "$token_file")" ] || [ "$(date +%s)" -gt "$(jq -rc '.expires_in_timestamp' "$token_file")" ] || [ "$(jq -rc "$token_field" "$token_file")" == "null" ]; do
     if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
-      log_token_err "Timeout getting keycloak token"
+      log_token_err "Timeout getting $token_type token"
       exit 1
     fi
+    log_token_info "Refreshing $token_type token"
     if [[ ${service} == 'rhdh' ]]; then
-      log_token_info "Refreshing RHDH token"
       [[ -f "$token_file" ]] && rm -rf "$token_file" && rm -rf "$TMP_DIR/cookie.jar"
-      if ! rhdh_token >"$token_file"; then
-        log_token_err "Unable to get token, re-attempting"
+      if ! rhdh_token >"$token_file" || [ "$(jq -rc "$token_field" "$token_file")" == "null" ]; then
+        log_token_err "Unable to get $token_type token, re-attempting"
       fi
     else
       keycloak_pass=$(oc -n "${RHDH_NAMESPACE}" get secret credential-rhdh-sso -o template --template='{{.data.ADMIN_PASSWORD}}' | base64 -d)
-      if ! keycloak_token >"$token_file"; then
-        log_token_err "Unable to get token, re-attempting"
+      if ! keycloak_token "$keycloak_pass" >"$token_file"; then
+        log_token_err "Unable to get $token_type token, re-attempting"
       fi
     fi
     sleep 5s
   done
 
-  if [[ ${service} == 'rhdh' ]]; then
-    jq -rc '.token' "$token_file"
-  else
-    jq -rc '.access_token' "$token_file"
-  fi
+  jq -rc "$token_field" "$token_file"
   rm -rf "$token_lockfile"
 }
 
-export -f keycloak_url backstage_url get_token keycloak_token rhdh_token create_group create_user log_token log_token_info log_token_err
+export -f keycloak_url backstage_url get_token keycloak_token rhdh_token create_group create_user log log_info log_warn log_error log_token log_token_info log_token_err
 export kc_lockfile bs_lockfile token_lockfile

@@ -14,10 +14,10 @@ catalog:
         loginRealm: ${KEYCLOAK_LOGIN_REALM}
         clientId: ${CLIENT_ID}
         clientSecret: ${CLIENT_SECRET}
-        userQuerySize: 500
-        groupQuerySize: 500
+        userQuerySize: 1000
+        groupQuerySize: 1000
         schedule:
-          frequency: { minutes: 1 }
+          frequency: { seconds: 30 }
           timeout: { minutes: 1 }
           initialDelay: { seconds: 15 }
 enabled:

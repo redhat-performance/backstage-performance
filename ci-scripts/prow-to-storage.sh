@@ -21,7 +21,7 @@ if [ -z "$HORREUM_JHUTAR_PASSWORD" ]; then
 fi
 
 function _log() {
-    echo "$( date -Ins --utc ) $1 $2" >&1
+    echo "$(date -Ins --utc) $1 $2" >&1
 }
 
 function debug() {
@@ -85,8 +85,8 @@ function check_json_string() {
 function check_result() {
     # Ensure benchmark.json have all the required fields => test finished
     local f="$1"
-    if jq -e '.results.ended == null' "$f" >/dev/null; then
-        error "File is missing .results.ended, skipping"
+    if jq -e '.measurements.timings.benchmark.ended == null' "$f" >/dev/null; then
+        error "File is missing .measurements.timings.benchmark.ended, skipping"
         return 1
     fi
     if jq -e '.results | length == 0' "$f" >/dev/null; then
@@ -101,7 +101,7 @@ function enritch_stuff() {
     local key="$2"
     local value="$3"
     local current_in_file
-    current_in_file=$( jq --raw-output "$key" "$f" )
+    current_in_file=$(jq --raw-output "$key" "$f")
     if [[ "$current_in_file" == "None" ]]; then
         debug "Adding $key to JSON file"
         jq "$key = \"$value\"" "$f" >"$$.json" && mv -f "$$.json" "$f"
@@ -120,9 +120,9 @@ function upload_es() {
     debug "Considering file for upload to ES"
 
     local current_doc_in_es current_count_in_es current_error_in_es
-    current_doc_in_es="$( curl --silent -X GET $ES_HOST/$ES_INDEX/_search -H 'Content-Type: application/json' -d '{"query":{"term":{"metadata.env.BUILD_ID.keyword":{"value":"'"$build_id"'"}}}}' )"
-    current_count_in_es="$( echo "$current_doc_in_es" | jq --raw-output .hits.total.value )"
-    current_error_in_es="$( echo "$current_doc_in_es" | jq --raw-output .error.type )"
+    current_doc_in_es="$(curl --silent -X GET $ES_HOST/$ES_INDEX/_search -H 'Content-Type: application/json' -d '{"query":{"term":{"metadata.env.BUILD_ID.keyword":{"value":"'"$build_id"'"}}}}')"
+    current_count_in_es="$(echo "$current_doc_in_es" | jq --raw-output .hits.total.value)"
+    current_error_in_es="$(echo "$current_doc_in_es" | jq --raw-output .error.type)"
 
     if [[ "$current_error_in_es" == "index_not_found_exception" ]]; then
         info "Index does not exist yet, going on"
@@ -154,8 +154,8 @@ function upload_horreum() {
 
     local test_start test_end TOKEN test_id exists ids_list is_fail
 
-    test_start="$( format_date "$( jq --raw-output '.results.started | if . == "" then "-" else . end' "$f" )" )"
-    test_end="$( format_date "$( jq --raw-output '.results.ended | if . == "" then "-" else . end' "$f" )" )"
+    test_start="$(format_date "$(jq --raw-output '.measurements.timings.benchmark.started | if . == "" then "-" else . end' "$f")")"
+    test_end="$(format_date "$(jq --raw-output '.measurements.timings.benchmark.ended | if . == "" then "-" else . end' "$f")")"
 
     if [ -z "$test_start" ] || [ -z "$test_end" ] || [ "$test_start" == "null" ] || [ "$test_end" == "null" ]; then
         error "We need start ($test_start) and end ($test_end) time in the JSON we are supposed to upload"
@@ -164,11 +164,11 @@ function upload_horreum() {
 
     debug "Considering file upload to Horreum: start: $test_start, end: $test_end, $test_matcher: $build_id"
 
-    TOKEN=$( curl -s $HORREUM_KEYCLOAK_HOST/realms/horreum/protocol/openid-connect/token -d "username=jhutar@redhat.com" -d "password=$HORREUM_JHUTAR_PASSWORD" -d "grant_type=password" -d "client_id=horreum-ui" | jq --raw-output .access_token )
+    TOKEN=$(curl -s $HORREUM_KEYCLOAK_HOST/realms/horreum/protocol/openid-connect/token -d "username=jhutar@redhat.com" -d "password=$HORREUM_JHUTAR_PASSWORD" -d "grant_type=password" -d "client_id=horreum-ui" | jq --raw-output .access_token)
 
-    test_id=$( curl --silent --get -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" "$HORREUM_HOST/api/test/byName/$test_name" | jq --raw-output .id )
+    test_id=$(curl --silent --get -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" "$HORREUM_HOST/api/test/byName/$test_name" | jq --raw-output .id)
 
-    exists=$( curl --silent --get -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" "$HORREUM_HOST/api/dataset/list/$test_id" --data-urlencode "filter={\"$test_matcher\":\"$build_id\"}" | jq --raw-output '.datasets | length' )
+    exists=$(curl --silent --get -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" "$HORREUM_HOST/api/dataset/list/$test_id" --data-urlencode "filter={\"$test_matcher\":\"$build_id\"}" | jq --raw-output '.datasets | length')
 
     if [[ $exists -gt 0 ]]; then
         info "Test result ($test_matcher=$build_id) found in Horreum ($exists), skipping upload"
@@ -184,7 +184,7 @@ function upload_horreum() {
     echo
 
     info "Getting pass/fail for file from Horreum"
-    ids_list=$( curl --silent "https://horreum.corp.redhat.com/api/alerting/variables?test=$test_id" | jq -r '.[] | .id' )
+    ids_list=$(curl --silent "https://horreum.corp.redhat.com/api/alerting/variables?test=$test_id" | jq -r '.[] | .id')
     is_fail=0
     for i in $ids_list; do
         data='{
@@ -198,7 +198,7 @@ function upload_horreum() {
             }
         }'
 
-        count=$( curl --silent -H "Content-Type: application/json" "https://horreum.corp.redhat.com/api/changes/annotations" -d "$data"  | jq -r '. | length' )
+        count=$(curl --silent -H "Content-Type: application/json" "https://horreum.corp.redhat.com/api/changes/annotations" -d "$data" | jq -r '. | length')
         if [ "$count" -gt 0 ]; then
             is_fail=1
             enritch_stuff "$f" ".result" "FAIL"
@@ -226,7 +226,7 @@ for job in "mvp-cpt"; do
         enritch_stuff "$out" ".\"\$schema\"" "$HORREUM_TEST_SCHEMA"
         upload_horreum "$out" "$HORREUM_TEST_NAME" ".metadata.env.BUILD_ID" "$i"
         upload_es "$out" "$i"
-        (( counter++ )) || true
+        ((counter++)) || true
     done
 done
 

@@ -6,8 +6,21 @@ set -o pipefail
 
 # Just a helper script to output CSV file based on all found benchmark.json files
 headers="Build_ID,\
+DeployStarted,\
+DeployEnded,\
+DeployDuration,\
+PopulateUsersGroupsStarted,\
+PopulateUsersGroupsEnded,\
+PopulateUsersGroupsDuration,\
+PopulateStarted,\
+PopulateEnded,\
+PopulateDuration,\
+PopulateCatalogStarted,\
+PopulateCatalogEnded,\
+PopulateCatalogDuration,\
 Started,\
 Ended,\
+Duration,\
 Scenario,\
 USERS,\
 SPAWN_RATE,\
@@ -47,15 +60,32 @@ Response_Time_Perc90,\
 Response_Time_Perc99,\
 Response_Time_Perc999,\
 Response_Time_Max,\
-Response_Size_Avg"
+Response_Size_Avg,\
+Components_Response_Time_Avg,\
+Components_Response_Time_Max,\
+ComponentsOwnedByUserGroup_Response_Time_Avg,\
+ComponentsOwnedByUserGroup_Response_Time_Max"
 echo "$headers"
 
 find "${1:-.}" -name benchmark.json -print0 | while IFS= read -r -d '' filename; do
     sed -Ee 's/: ([0-9]+\.[0-9]*[X]+[0-9e\+-]*|[0-9]*X+[0-9]*\.[0-9e\+-]*|[0-9]*X+[0-9]*\.[0-9]*X+[0-9e\+-]+)/: "\1"/g' "${filename}" |
         jq --raw-output '[
         .metadata.env.BUILD_ID,
-        .results.started,
-        .results.ended,
+        .measurements.timings.deploy.started,
+        .measurements.timings.deploy.ended,
+        .measurements.timings.deploy.duration,
+        .measurements.timings.populate_users_groups.ended,
+        .measurements.timings.populate_users_groups.started,
+        .measurements.timings.populate_users_groups.duration,
+        .measurements.timings.populate.started,
+        .measurements.timings.populate.ended,
+        .measurements.timings.populate.duration,
+        .measurements.timings.populate_catalog.started,
+        .measurements.timings.populate_catalog.ended,
+        .measurements.timings.populate_catalog.duration,
+        .measurements.timings.benchmark.started,
+        .measurements.timings.benchmark.ended,
+        .measurements.timings.benchmark.duration,
         .metadata.scenario.name,
         .metadata.env.USERS,
         .metadata.env.SPAWN_RATE,
@@ -95,7 +125,11 @@ find "${1:-.}" -name benchmark.json -print0 | while IFS= read -r -d '' filename;
         .results.Aggregated.locust_requests_avg_response_time.percentile99,
         .results.Aggregated.locust_requests_avg_response_time.percentile999,
         .results.Aggregated.locust_requests_avg_response_time.max,
-        .results.Aggregated.locust_requests_avg_content_length.max
+        .results.Aggregated.locust_requests_avg_content_length.max,
+        .results."/api/catalog/entities/by-query\\\\?limit=20&orderField=metadata\\\\_name%2Casc&filter=kind%3Dcomponent".locust_requests_avg_response_time.mean,
+        .results."/api/catalog/entities/by-query\\\\?limit=20&orderField=metadata\\\\_name%2Casc&filter=kind%3Dcomponent".locust_requests_avg_response_time.max,
+        .results."/api/catalog/entities/by-query\\\\?limit=20&orderField=metadata\\\\_name%2Casc&filter=kind%3Dapi%2Crelations\\\\_ownedBy%3Duser%3A_+%2Crelations\\\\_ownedBy%3Dgroup%3A_+".locust_requests_avg_response_time.mean,
+        .results."/api/catalog/entities/by-query\\\\?limit=20&orderField=metadata\\\\_name%2Casc&filter=kind%3Dapi%2Crelations\\\\_ownedBy%3Duser%3A_+%2Crelations\\\\_ownedBy%3Dgroup%3A_+".locust_requests_avg_response_time.max
         ] | @csv' &&
         rc=0 || rc=1
     if [[ "$rc" -ne 0 ]]; then
