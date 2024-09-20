@@ -242,19 +242,27 @@ update-locust-images:
 	skopeo copy --src-no-creds docker://docker.io/containersol/locust_exporter:latest docker://quay.io/backstage-performance/locust_exporter:latest
 	skopeo copy --src-no-creds docker://docker.io/lotest/locust-k8s-operator:latest docker://quay.io/backstage-performance/locust-k8s-operator:latest
 
+## Undeploy RHDH
+.PHONY: undeploy-rhdh
+ifeq ($(RHDH_INSTALL_METHOD),helm)
+undeploy-rhdh: undeploy-rhdh-helm
+else ifeq ($(RHDH_INSTALL_METHOD),olm)
+undeploy-rhdh: undeploy-rhdh-olm
+endif
+
 ## Clean local resources
 .PHONY: clean-local
 clean-local:
-	rm -rvf *.log shellcheck $(TMP_DIR) $(ARTIFACT_DIR)
+	rm -rvf *.log shellcheck $(TMP_DIR)
+
+## Clean artifacts
+.PHONY: clean-artifacts
+clean-artifacts:
+	rm -rvf $(ARTIFACT_DIR)
 
 ## Clean all
 .PHONY: clean-all
-clean-all: namespace clean clean-local
-ifeq ($(RHDH_INSTALL_METHOD),helm)
-clean-all: undeploy-rhdh-helm
-else ifeq ($(RHDH_INSTALL_METHOD),olm)
-clean-all: undeploy-rhdh-olm
-endif
+clean-all: namespace clean clean-local clean-artifacts undeploy-rhdh
 
 ##	=== Help ===
 

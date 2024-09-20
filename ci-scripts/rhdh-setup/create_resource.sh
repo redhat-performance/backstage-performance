@@ -89,7 +89,6 @@ create_per_grp() {
 }
 
 clone_and_upload() {
-  ACCESS_TOKEN=$(get_token "rhdh")
   echo "[INFO][$(date --utc -Ins)] Uploading entities to GitHub"
   git_str="${GITHUB_USER}:${GITHUB_TOKEN}@github.com"
   base_name=$(basename "$GITHUB_REPO")
@@ -115,6 +114,7 @@ clone_and_upload() {
     e_count=$(yq eval '.metadata.name | capture(".*-(?P<value>[0-9]+)").value' "$filename" | tail -n 1)
     upload_url="${GITHUB_REPO%.*}/blob/${tmp_branch}/$(basename "$filename")"
     echo "Uploading entities from $upload_url"
+    ACCESS_TOKEN=$(get_token "rhdh")
     curl -k "$(backstage_url)/api/catalog/locations" --cookie "$COOKIE" --cookie-jar "$COOKIE" -X POST -H 'Accept-Encoding: gzip, deflate, br' -H 'Authorization: Bearer '"$ACCESS_TOKEN" -H 'Content-Type: application/json' --data-raw '{"type":"url","target":"'"${upload_url}"'"}'
 
     timeout_timestamp=$(date -d "600 seconds" "+%s")
@@ -123,6 +123,7 @@ clone_and_upload() {
         echo "ERROR: Timeout waiting on entity count"
         exit 1
       else
+        ACCESS_TOKEN=$(get_token "rhdh")
         if [[ 'component-*.yaml' == "${1}" ]]; then b_count=$(curl -s -k "$(backstage_url)/api/catalog/entity-facets?facet=kind" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$ACCESS_TOKEN" | jq -r '.facets.kind[] | select(.value == "Component")| .count'); fi
         if [[ 'api-*.yaml' == "${1}" ]]; then b_count=$(curl -s -k "$(backstage_url)/api/catalog/entity-facets?facet=kind" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$ACCESS_TOKEN" | jq -r '.facets.kind[] | select(.value == "API")| .count'); fi
         if [[ $b_count -ge $e_count ]]; then break; fi
