@@ -36,14 +36,13 @@ export RHDH_IMAGE_REGISTRY=${RHDH_IMAGE_REGISTRY:-}
 export RHDH_IMAGE_REPO=${RHDH_IMAGE_REPO:-}
 export RHDH_IMAGE_TAG=${RHDH_IMAGE_TAG:-}
 
-export RHDH_HELM_REPO=${RHDH_HELM_REPO:-https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/rhdh-1.2-rhel-9/installation}
+export RHDH_HELM_REPO=${RHDH_HELM_REPO:-https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/rhdh-1.3-rhel-9/installation}
 export RHDH_HELM_CHART=${RHDH_HELM_CHART:-redhat-developer-hub}
 export RHDH_HELM_CHART_VERSION=${RHDH_HELM_CHART_VERSION:-}
 
 OCP_VER="$(oc version -o json | jq -r '.openshiftVersion' | sed -r -e "s#([0-9]+\.[0-9]+)\..+#\1#")"
-#OCP_ARCH="$(oc version -o json | jq -r '.serverVersion.platform' | sed -r -e "s#linux/##" | sed -e 's#amd64#x86_64#')"
-export RHDH_OLM_INDEX_IMAGE="${RHDH_OLM_INDEX_IMAGE:-registry.redhat.io/redhat/redhat-operator-index:v${OCP_VER}}"
-export RHDH_OLM_CHANNEL=${RHDH_OLM_CHANNEL:-fast-1.2}
+export RHDH_OLM_INDEX_IMAGE="${RHDH_OLM_INDEX_IMAGE:-quay.io/rhdh/iib:1.3-v${OCP_VER}-x86_64}"
+export RHDH_OLM_CHANNEL=${RHDH_OLM_CHANNEL:-fast}
 export RHDH_OLM_OPERATOR_PACKAGE=${RHDH_OLM_OPERATOR_PACKAGE:-rhdh}
 
 export PRE_LOAD_DB="${PRE_LOAD_DB:-true}"
