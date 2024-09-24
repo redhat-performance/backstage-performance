@@ -116,7 +116,7 @@ for w in "${workers[@]}"; do
                             export RHDH_RESOURCES_CPU_LIMITS="$cl"
                             export RHDH_RESOURCES_MEMORY_REQUESTS="$mr"
                             export RHDH_RESOURCES_MEMORY_LIMITS="$ml"
-                            export RHDH_KEYCLOAK_REPLICAS=$r
+                            export RHDH_KEYCLOAK_REPLICAS="${RHDH_KEYCLOAK_REPLICAS:-$r}"
                             export BACKSTAGE_USER_COUNT=$bu
                             export GROUP_COUNT=$bg
                             export WORKERS=$w
