@@ -259,7 +259,9 @@ install_rhdh_with_helm() {
     cp "$chart_values" "$TMP_DIR/chart-values.temp.yaml"
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.backstage |= . + load("template/backstage/helm/oauth2-container-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"; fi
     if ${ENABLE_RBAC}; then
-        if helm search repo --devel -r rhdh --version 1.2-1 --fail-on-no-result; then
+        if helm search repo --devel -r rhdh --version 1.3-1 --fail-on-no-result; then
+            yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.3.yaml")' "$TMP_DIR/chart-values.temp.yaml"
+        elif helm search repo --devel -r rhdh --version 1.2-1 --fail-on-no-result; then
             yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.2.yaml")' "$TMP_DIR/chart-values.temp.yaml"
         else
             yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.1.yaml")' "$TMP_DIR/chart-values.temp.yaml"
