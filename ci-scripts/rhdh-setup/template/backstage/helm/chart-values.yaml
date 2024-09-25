@@ -21,11 +21,11 @@ upstream:
   backstage:
     appConfig:
       app:
-        baseUrl: 'https://{{- include "janus-idp.hostname" . }}'
+        baseUrl: "https://${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}"
       backend:
-        baseUrl: 'https://{{- include "janus-idp.hostname" . }}'
+        baseUrl: "https://${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}"
         cors:
-          origin: 'https://{{- include "janus-idp.hostname" . }}'
+          origin: "https://${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}"
         database:
           connection:
             password: "${POSTGRESQL_ADMIN_PASSWORD}"
