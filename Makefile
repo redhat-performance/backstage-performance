@@ -29,14 +29,14 @@ export RHDH_IMAGE_TAG ?=
 
 # RHDH Helm chart to deploy
 export RHDH_NAMESPACE ?= rhdh-performance
-export RHDH_HELM_REPO ?= https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/rhdh-1.2-rhel-9/installation
+export RHDH_HELM_REPO ?= https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/rhdh-1.3-rhel-9/installation
 export RHDH_HELM_CHART ?= redhat-developer-hub
 export RHDH_HELM_CHART_VERSION ?=
 export RHDH_HELM_RELEASE_NAME ?= rhdh
 
 # RHDH OLM subscription to deploy
-export RHDH_OLM_INDEX_IMAGE ?= registry.redhat.io/redhat/redhat-operator-index:v$(shell oc version -o json | jq -r '.openshiftVersion' | sed -r -e "s,([0-9]+\.[0-9]+)\..+,\1,")
-export RHDH_OLM_CHANNEL ?= fast-1.2
+export RHDH_OLM_INDEX_IMAGE ?= quay.io/rhdh/iib:1.3-v$(shell oc version -o json | jq -r '.openshiftVersion' | sed -r -e "s,([0-9]+\.[0-9]+)\..+,\1,")-x86_64
+export RHDH_OLM_CHANNEL ?= fast
 
 # RHDH horizontal scaling
 export RHDH_DEPLOYMENT_REPLICAS ?= 1
