@@ -240,7 +240,7 @@ value }}
 
 {% macro rhdh_nodejs_rate( query ) -%}
 # Gather nodejs monitoring data about the {{ query }}
-- name: measurements.nodejs.populate.{{ query }}
+- name: measurements.nodejs.test.{{ query }}
   monitoring_query: sum(rate({{ query }}{ job="rhdh-metrics" }[5m]))
   monitoring_step: 15
 {%- endmacro %}
@@ -284,15 +284,15 @@ value }}
 {{ rhdh_nodejs(query) }}
 {% endfor %}
 
-- name: measurements.nodejs.populate.catalog_processing_queue_delay_seconds_average
+- name: measurements.nodejs.test.catalog_processing_queue_delay_seconds_average
   monitoring_query: sum(rate(catalog_processing_queue_delay_seconds_sum{job="rhdh-metrics"}[5m]))/sum(rate(catalog_processing_queue_delay_seconds_count{job="rhdh-metrics"}[5m]))
   monitoring_step: 15
 
-- name: measurements.nodejs.populate.catalog_processors_duration_seconds_failed_average
+- name: measurements.nodejs.test.catalog_processors_duration_seconds_failed_average
   monitoring_query: sum(rate(catalog_processors_duration_seconds_sum{result="failed",job="rhdh-metrics"}[5m]))/sum(rate(catalog_processors_duration_seconds_count{result="failed",job="rhdh-metrics"}[5m]))
   monitoring_step: 15
 
-- name: measurements.nodejs.populate.nodejs_gc_duration_seconds_major_average
+- name: measurements.nodejs.test.nodejs_gc_duration_seconds_major_average
   monitoring_query: sum(rate(nodejs_gc_duration_seconds_sum{kind="major",job="rhdh-metrics"}[5m]))/sum(rate(nodejs_gc_duration_seconds_count{kind="major",job="rhdh-metrics"}[5m]))
   monitoring_step: 15
 
