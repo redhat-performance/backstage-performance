@@ -1,0 +1,34 @@
+podSecurityContext:
+  runAsGroup: uid
+  runAsUser: uid
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+securityContext: {}
+config:
+  logLevel: 'debug'
+  extraArgs:
+    - --no-collector.database
+    - --no-collector.database_wraparound
+    - --no-collector.locks
+    - --no-collector.long_running_transactions
+    - --no-collector.postmaster
+    - --no-collector.process_idle
+    - --no-collector.replication
+    - --no-collector.replication_slot
+    - --no-collector.stat_activity_autovacuum
+    - --no-collector.stat_bgwriter
+    - --no-collector.stat_database
+    - --no-collector.stat_statements
+    - --no-collector.stat_wal_receiver
+    - --no-collector.wal
+    - --no-collector.xlog_location
+    - --collector.stat_user_tables
+    - --collector.statio_user_indexes
+    - --collector.statio_user_tables
+  datasource:
+    host: 'rhdh-postgresql-primary'
+    user: 'postgres'
+    password: pg_password
+    port: "5432"
+    database: 'dbname'
