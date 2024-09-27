@@ -58,6 +58,7 @@ export ENABLE_PROFILING="${ENABLE_PROFILING:-false}"
 
 export PSQL_LOG="${PSQL_LOG:-true}"
 export RHDH_METRIC="${RHDH_METRIC:-true}"
+export PSQL_EXPORT="${PSQL_EXPORT:-false}"
 export LOG_MIN_DURATION_STATEMENT="${LOG_MIN_DURATION_STATEMENT:-65}"
 export LOG_MIN_DURATION_SAMPLE="${LOG_MIN_DURATION_SAMPLE:-50}"
 export LOG_STATEMENT_SAMPLE_RATE="${LOG_STATEMENT_SAMPLE_RATE:-0.7}"
@@ -345,13 +346,49 @@ psql_debug() {
         $clin exec "${psql_db}" -- sh -c "sed -i "s/^\s*#log_min_duration_sample.*/log_min_duration_sample=${LOG_MIN_DURATION_SAMPLE}/" /var/lib/pgsql/data/userdata/postgresql.conf "
         $clin exec "${psql_db}" -- sh -c "sed -i "s/^\s*#log_statement_sample_rate.*/log_statement_sample_rate=${LOG_STATEMENT_SAMPLE_RATE}/" /var/lib/pgsql/data/userdata/postgresql.conf "
     fi
+    if ${PSQL_EXPORT}; then
+        $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#track_io_timing.*/track_io_timing = on/" /var/lib/pgsql/data/userdata/postgresql.conf'
+        $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#track_wal_io_timing.*/track_wal_io_timing = on/" /var/lib/pgsql/data/userdata/postgresql.conf'
+        $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#track_functions.*/track_functions = all/" /var/lib/pgsql/data/userdata/postgresql.conf'
+        $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#stats_fetch_consistency.*/stats_fetch_consistency = cache/" /var/lib/pgsql/data/userdata/postgresql.conf'
+        $clin exec "${psql_db}" -- sh -c "echo shared_preload_libraries = \'pgaudit,auto_explain,pg_stat_statements\' >> /var/lib/pgsql/data/userdata/postgresql.conf"
+    fi
     echo "Restarting RHDH DB..."
     $clin rollout restart statefulset/"$psql_db_ss"
     wait_to_start statefulset "$psql_db_ss" 300 300
 
+    if ${PSQL_EXPORT}; then
+        $clin exec "${psql_db}" -- sh -c 'psql -c "CREATE EXTENSION pg_stat_statements;"'
+        uid=$(oc get namespace "${RHDH_NAMESPACE}" -o go-template='{{ index .metadata.annotations "openshift.io/sa.scc.supplemental-groups" }}'| cut -d '/' -f 1)
+        pg_pass=$(${clin} get secret rhdh-postgresql -o jsonpath='{.data.postgres-password}'|base64 -d)
+        plugins=("backstage_plugin_permission" "backstage_plugin_auth" "backstage_plugin_catalog" "backstage_plugin_scaffolder" "backstage_plugin_search" "backstage_plugin_app")
+        helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+        cp template/postgres-exporter/chart-values.yaml  "$TMP_DIR/pg-exporter.yaml"
+        sed -i "s/uid/$uid/g"  "$TMP_DIR/pg-exporter.yaml"
+        sed -i "s/pg_password/'$pg_pass'/g"  "$TMP_DIR/pg-exporter.yaml"
+        helm install pg-exporter prometheus-community/prometheus-postgres-exporter -n "${RHDH_NAMESPACE}" -f "$TMP_DIR/pg-exporter.yaml"
+        for plugin in "${plugins[@]}"; do
+            cp template/postgres-exporter/values-template.yaml "${TMP_DIR}/${plugin}.yaml"
+            sed -i "s/'dbname'/'$plugin'/" "${TMP_DIR}/${plugin}.yaml"
+            sed -i "s/uid/$uid/g"  "${TMP_DIR}/${plugin}.yaml"
+            sed -i "s/pg_password/'$pg_pass'/g"  "${TMP_DIR}/${plugin}.yaml"
+            helm_name=${plugin//_/-}
+            helm install "${helm_name}" prometheus-community/prometheus-postgres-exporter -n "${RHDH_NAMESPACE}" -f "${TMP_DIR}/${plugin}.yaml"
+        done
+    fi
+
     echo "Restarting RHDH..."
     $clin rollout restart deployment/"$rhdh_deployment"
     wait_to_start deployment "$rhdh_deployment" 300 300
+    if ${PSQL_EXPORT}; then
+        plugins=("pg-exporter" "backstage-plugin-permission" "backstage-plugin-auth" "backstage-plugin-catalog" "backstage-plugin-scaffolder" "backstage-plugin-search" "backstage-plugin-app")
+        for plugin in "${plugins[@]}"; do
+            cp template/postgres-exporter/service-monitor-template.yaml "${TMP_DIR}/${plugin}-monitor.yaml"
+            sed -i "s/pglabel/$plugin/" "${TMP_DIR}/${plugin}-monitor.yaml"
+            sed -i "s/pgnamespace/$RHDH_NAMESPACE/g"  "${TMP_DIR}/${plugin}-monitor.yaml"
+            $clin create -f "${TMP_DIR}/${plugin}-monitor.yaml"
+        done
+    fi
 }
 setup_monitoring() {
     echo "Enabling user workload monitoring"
