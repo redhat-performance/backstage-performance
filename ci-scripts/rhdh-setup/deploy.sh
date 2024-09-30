@@ -80,10 +80,10 @@ wait_to_start_in_namespace() {
     interval=10s
     while ! /bin/bash -c "$cli -n $namespace get $rn -o name"; do
         if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
-            echo "[ERROR][$(date --utc -Ins)] Timeout waiting for $description to start"
+            log_error "Timeout waiting for $description to start"
             exit 1
         else
-            echo "[INFO][$(date --utc -Ins)] Waiting $interval for $description to start..."
+            log_info "Waiting $interval for $description to start..."
             sleep "$interval"
         fi
     done
@@ -99,10 +99,10 @@ wait_for_crd() {
     interval=10s
     while ! /bin/bash -c "$cli get $rn"; do
         if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
-            echo "[ERROR][$(date --utc -Ins)] Timeout waiting for $description to exist"
+            log_error "Timeout waiting for $description to exist"
             exit 1
         else
-            echo "[INFO][$(date --utc -Ins)] Waiting $interval for $description to exist..."
+            log_info "Waiting $interval for $description to exist..."
             sleep "$interval"
         fi
     done
@@ -150,13 +150,16 @@ install() {
     keycloak_install
 
     if $PRE_LOAD_DB; then
-        create_groups
-        create_users
+        log_info "Creating users and groups in Keycloak in background"
+        create_users_groups |& tee -a "${TMP_DIR}/create-users-groups.log" &
     fi
 
-    backstage_install
+    backstage_install |& tee -a "${TMP_DIR}/backstage-install.log"
     psql_debug
     setup_monitoring
+
+    log_info "Waiting for all the users and groups to be created in Keycloak"
+    wait
 }
 
 keycloak_install() {
@@ -187,23 +190,31 @@ keycloak_install() {
     envsubst <template/keycloak/keycloakUser.yaml | $clin apply -f -
 }
 
+create_users_groups() {
+    date --utc -Ins >"${TMP_DIR}/populate-users-groups-before"
+    create_groups
+    create_users
+    date --utc -Ins >"${TMP_DIR}/populate-users-groups-after"
+}
+
 create_objs() {
     if ! $PRE_LOAD_DB; then
-        create_groups
-        create_users
+        create_users_groups
     fi
 
     if [[ ${GITHUB_USER} ]] && [[ ${GITHUB_REPO} ]]; then
+        date --utc -Ins >"${TMP_DIR}/populate-catalog-before"
         create_per_grp create_cmp COMPONENT_COUNT
         create_per_grp create_api API_COUNT
+        date --utc -Ins >"${TMP_DIR}/populate-catalog-after"
     else
-        echo "skipping component creating. GITHUB_REPO and GITHUB_USER not set"
+        log_warn "skipping component creating. GITHUB_REPO and GITHUB_USER not set"
         exit 1
     fi
 }
 
 backstage_install() {
-    echo "Installing RHDH with install method: $INSTALL_METHOD"
+    log_info "Installing RHDH with install method: $INSTALL_METHOD"
     cp "template/backstage/app-config.yaml" "$TMP_DIR/app-config.yaml"
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '. |= . + {"signInPage":"oauth2Proxy"}' "$TMP_DIR/app-config.yaml"; fi
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '. |= . + {"auth":{"environment":"production","providers":{"oauth2Proxy":{}}}}' "$TMP_DIR/app-config.yaml"; else yq -i '. |= . + {"auth":{"providers":{"guest":{"dangerouslyAllowOutsideDevelopment":true}}}}' "$TMP_DIR/app-config.yaml"; fi
@@ -233,7 +244,7 @@ backstage_install() {
     elif [ "$INSTALL_METHOD" == "olm" ]; then
         install_rhdh_with_olm
     else
-        echo "Invalid install method: $INSTALL_METHOD, currently allowed methods are helm or olm"
+        log_error "Invalid install method: $INSTALL_METHOD, currently allowed methods are helm or olm"
         return 1
     fi
     if [ "${AUTH_PROVIDER}" == "keycloak" ] && ${RHDH_METRIC}; then $clin create -f template/backstage/rhdh-metrics-service.yaml; fi
@@ -256,7 +267,7 @@ install_rhdh_with_helm() {
         version_arg="--version $RHDH_HELM_CHART_VERSION"
         chart_origin="$chart_origin@$RHDH_HELM_CHART_VERSION"
     fi
-    echo "Installing RHDH Helm chart $RHDH_HELM_RELEASE_NAME from $chart_origin in $RHDH_NAMESPACE namespace"
+    log_info "Installing RHDH Helm chart $RHDH_HELM_RELEASE_NAME from $chart_origin in $RHDH_NAMESPACE namespace"
     cp "$chart_values" "$TMP_DIR/chart-values.temp.yaml"
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.backstage |= . + load("template/backstage/helm/oauth2-container-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"; fi
     if ${ENABLE_RBAC}; then
@@ -307,7 +318,12 @@ install_rhdh_with_olm() {
     mark_resource_for_rhdh secret rhdh-backend-secret
     $clin create cm app-config-backend-secret --from-file=template/backstage/olm/app-config.rhdh.backend-secret.yaml
     mark_resource_for_rhdh cm app-config-backend-secret
-    $clin apply -f template/backstage/olm/dynamic-plugins.configmap.yaml
+    cp template/backstage/olm/dynamic-plugins.configmap.yaml "$TMP_DIR/dynamic-plugins.configmap.yaml"
+    if ${ENABLE_RBAC}; then
+        echo "      - package: ./dynamic-plugins/dist/janus-idp-backstage-plugin-rbac
+        disabled: false" >>"$TMP_DIR/dynamic-plugins.configmap.yaml"
+    fi
+    $clin apply -f "$TMP_DIR/dynamic-plugins.configmap.yaml"
     mark_resource_for_rhdh cm dynamic-plugins-rhdh
     set -x
     OLM_CHANNEL="${RHDH_OLM_CHANNEL}" UPSTREAM_IIB="${RHDH_OLM_INDEX_IMAGE}" ./install-rhdh-catalog-source.sh --install-operator "${RHDH_OLM_OPERATOR_PACKAGE:-rhdh}"
@@ -353,31 +369,31 @@ psql_debug() {
         $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#stats_fetch_consistency.*/stats_fetch_consistency = cache/" /var/lib/pgsql/data/userdata/postgresql.conf'
         $clin exec "${psql_db}" -- sh -c "echo shared_preload_libraries = \'pgaudit,auto_explain,pg_stat_statements\' >> /var/lib/pgsql/data/userdata/postgresql.conf"
     fi
-    echo "Restarting RHDH DB..."
+    log_info "Restarting RHDH DB..."
     $clin rollout restart statefulset/"$psql_db_ss"
     wait_to_start statefulset "$psql_db_ss" 300 300
 
     if ${PSQL_EXPORT}; then
         $clin exec "${psql_db}" -- sh -c 'psql -c "CREATE EXTENSION pg_stat_statements;"'
-        uid=$(oc get namespace "${RHDH_NAMESPACE}" -o go-template='{{ index .metadata.annotations "openshift.io/sa.scc.supplemental-groups" }}'| cut -d '/' -f 1)
-        pg_pass=$(${clin} get secret rhdh-postgresql -o jsonpath='{.data.postgres-password}'|base64 -d)
+        uid=$(oc get namespace "${RHDH_NAMESPACE}" -o go-template='{{ index .metadata.annotations "openshift.io/sa.scc.supplemental-groups" }}' | cut -d '/' -f 1)
+        pg_pass=$(${clin} get secret rhdh-postgresql -o jsonpath='{.data.postgres-password}' | base64 -d)
         plugins=("backstage_plugin_permission" "backstage_plugin_auth" "backstage_plugin_catalog" "backstage_plugin_scaffolder" "backstage_plugin_search" "backstage_plugin_app")
         helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-        cp template/postgres-exporter/chart-values.yaml  "$TMP_DIR/pg-exporter.yaml"
-        sed -i "s/uid/$uid/g"  "$TMP_DIR/pg-exporter.yaml"
-        sed -i "s/pg_password/'$pg_pass'/g"  "$TMP_DIR/pg-exporter.yaml"
+        cp template/postgres-exporter/chart-values.yaml "$TMP_DIR/pg-exporter.yaml"
+        sed -i "s/uid/$uid/g" "$TMP_DIR/pg-exporter.yaml"
+        sed -i "s/pg_password/'$pg_pass'/g" "$TMP_DIR/pg-exporter.yaml"
         helm install pg-exporter prometheus-community/prometheus-postgres-exporter -n "${RHDH_NAMESPACE}" -f "$TMP_DIR/pg-exporter.yaml"
         for plugin in "${plugins[@]}"; do
             cp template/postgres-exporter/values-template.yaml "${TMP_DIR}/${plugin}.yaml"
             sed -i "s/'dbname'/'$plugin'/" "${TMP_DIR}/${plugin}.yaml"
-            sed -i "s/uid/$uid/g"  "${TMP_DIR}/${plugin}.yaml"
-            sed -i "s/pg_password/'$pg_pass'/g"  "${TMP_DIR}/${plugin}.yaml"
+            sed -i "s/uid/$uid/g" "${TMP_DIR}/${plugin}.yaml"
+            sed -i "s/pg_password/'$pg_pass'/g" "${TMP_DIR}/${plugin}.yaml"
             helm_name=${plugin//_/-}
             helm install "${helm_name}" prometheus-community/prometheus-postgres-exporter -n "${RHDH_NAMESPACE}" -f "${TMP_DIR}/${plugin}.yaml"
         done
     fi
 
-    echo "Restarting RHDH..."
+    log_info "Restarting RHDH..."
     $clin rollout restart deployment/"$rhdh_deployment"
     wait_to_start deployment "$rhdh_deployment" 300 300
     if ${PSQL_EXPORT}; then
@@ -385,13 +401,14 @@ psql_debug() {
         for plugin in "${plugins[@]}"; do
             cp template/postgres-exporter/service-monitor-template.yaml "${TMP_DIR}/${plugin}-monitor.yaml"
             sed -i "s/pglabel/$plugin/" "${TMP_DIR}/${plugin}-monitor.yaml"
-            sed -i "s/pgnamespace/$RHDH_NAMESPACE/g"  "${TMP_DIR}/${plugin}-monitor.yaml"
+            sed -i "s/pgnamespace/$RHDH_NAMESPACE/g" "${TMP_DIR}/${plugin}-monitor.yaml"
             $clin create -f "${TMP_DIR}/${plugin}-monitor.yaml"
         done
     fi
 }
+
 setup_monitoring() {
-    echo "Enabling user workload monitoring"
+    log_info "Enabling user workload monitoring"
     rm -f config.yaml
     if oc -n openshift-monitoring get cm cluster-monitoring-config; then
         oc -n openshift-monitoring extract configmap/cluster-monitoring-config --to=. --keys=config.yaml
@@ -417,7 +434,7 @@ EOD
         [ "$count" -gt 0 ] && break
         now=$(date --utc +%s)
         if [[ $((now - before)) -ge "300" ]]; then
-            echo "Required StatefulSet did not appeared before timeout"
+            log_error "Required StatefulSet did not appeared before timeout"
             exit 1
         fi
         sleep 3
@@ -427,7 +444,7 @@ EOD
     kubectl -n openshift-user-workload-monitoring wait --for=condition=ready pod -l app.kubernetes.io/component=prometheus
     kubectl -n openshift-user-workload-monitoring get pod
 
-    echo "Setup monitoring"
+    log_info "Setup monitoring"
     cat <<EOF | kubectl -n locust-operator apply -f -
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
@@ -452,9 +469,9 @@ EOF
 }
 
 delete() {
-    echo "Remove RHDH with install method: $INSTALL_METHOD"
+    log_info "Remove RHDH with install method: $INSTALL_METHOD"
     if ! $cli get ns "$RHDH_NAMESPACE" >/dev/null; then
-        echo "$RHDH_NAMESPACE namespace does not exit... Skipping. "
+        log_info "$RHDH_NAMESPACE namespace does not exit... Skipping. "
     else
         for cr in keycloakusers keycloakclients keycloakrealms keycloaks; do
             for res in $($clin get "$cr.keycloak.org" -o name); do
@@ -504,7 +521,7 @@ while getopts "oi:crd" flag; do
         install
         ;;
     \?)
-        echo "WARNING: Invalid option: ${flag} - defaulting to -i (install)"
+        log_warn "Invalid option: ${flag} - defaulting to -i (install)"
         install
         ;;
     esac

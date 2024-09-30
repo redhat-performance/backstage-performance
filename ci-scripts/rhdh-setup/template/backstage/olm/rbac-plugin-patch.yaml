@@ -1,0 +1,3 @@
+---
+- package: ./dynamic-plugins/dist/janus-idp-backstage-plugin-rbac
+  disabled: false
