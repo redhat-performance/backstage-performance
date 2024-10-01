@@ -7,5 +7,5 @@ metadata:
 spec:
   type: library
   lifecycle: experimental
-  owner: group${grp_indx}
+  owner: g${grp_indx}
   system: audio-playback

@@ -7,6 +7,6 @@ metadata:
 spec:
   type: openapi
   lifecycle: production
-  owner: group${grp_indx}
+  owner: g${grp_indx}
   definition:
     $text: https://github.com/APIs-guru/openapi-directory/blob/main/APIs/archive.org/wayback/1.0.0/openapi.yaml

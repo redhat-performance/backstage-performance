@@ -187,7 +187,8 @@ keycloak_install() {
         fi
     fi
     envsubst <template/keycloak/keycloakClient.yaml | $clin apply -f -
-    envsubst <template/keycloak/keycloakUser.yaml | $clin apply -f -
+    # shellcheck disable=SC2016
+    envsubst '${KEYCLOAK_USER_PASS}' <template/keycloak/keycloakUser.yaml | $clin apply -f -
 }
 
 create_users_groups() {
@@ -236,7 +237,7 @@ backstage_install() {
     if ${ENABLE_RBAC}; then
         cp template/backstage/rbac-config.yaml "${TMP_DIR}"
         cat "$TMP_DIR/group-rbac.yaml" >>"$TMP_DIR/rbac-config.yaml"
-        $clin apply -f "$TMP_DIR/rbac-config.yaml" --namespace="${RHDH_NAMESPACE}"
+        until $clin create -f "$TMP_DIR/rbac-config.yaml"; do $clin delete configmap rbac-policy --ignore-not-found=true; done
     fi
     envsubst <template/backstage/plugin-secrets.yaml | $clin apply -f -
     if [ "$INSTALL_METHOD" == "helm" ]; then
