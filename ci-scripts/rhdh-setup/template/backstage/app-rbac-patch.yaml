@@ -2,7 +2,7 @@
 permission:
   enabled: true
   rbac:
-    policies-csv-file: './rbac/rbac-policy.csv'
+    policies-csv-file: "./rbac/rbac-policy.csv"
     admin:
       users:
-        - name: user:default/test1
+        - name: user:default/guru
