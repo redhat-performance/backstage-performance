@@ -168,7 +168,7 @@ create_group() {
   attempt=1
   while ((attempt <= max_attempts)); do
     token=$(get_token)
-    groupname="group${0}"
+    groupname="g${0}"
     response="$(curl -s -k --location --request POST "$(keycloak_url)/auth/admin/realms/backstage/groups" \
       -H 'Content-Type: application/json' \
       -H 'Authorization: Bearer '"$token" \
@@ -189,7 +189,7 @@ create_group() {
 create_groups() {
   log_info "Creating Groups in Keycloak"
   for i in $(seq 1 "$GROUP_COUNT"); do
-    echo "    g, group:default/group${i}, role:default/perf_admin" >>"$TMP_DIR/group-rbac.yaml"
+    echo "    g, group:default/g${i}, role:default/a" >>"$TMP_DIR/group-rbac.yaml"
   done
   sleep 5
   seq 1 "${GROUP_COUNT}" | xargs -n1 -P"${POPULATION_CONCURRENCY}" bash -c 'create_group'
@@ -202,8 +202,8 @@ create_user() {
     token=$(get_token)
     grp=$(echo "${0}%${GROUP_COUNT}" | bc)
     [[ $grp -eq 0 ]] && grp=${GROUP_COUNT}
-    username="test${0}"
-    groupname="group${grp}"
+    username="t${0}"
+    groupname="g${grp}"
     response="$(curl -s -k --location --request POST "$(keycloak_url)/auth/admin/realms/backstage/users" \
       -H 'Content-Type: application/json' \
       -H 'Authorization: Bearer '"$token" \
@@ -264,7 +264,7 @@ keycloak_token() {
 rhdh_token() {
   REDIRECT_URL="$(backstage_url)/oauth2/callback"
   REFRESH_URL="$(backstage_url)/api/auth/oauth2Proxy/refresh"
-  USERNAME="test1"
+  USERNAME="guru"
   PASSWORD=$(oc -n "${RHDH_NAMESPACE}" get secret perf-test-secrets -o template --template='{{.data.keycloak_user_pass}}' | base64 -d)
   REALM="backstage"
   CLIENTID="backstage"

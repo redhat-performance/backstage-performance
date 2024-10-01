@@ -1,7 +1,7 @@
 apiVersion: keycloak.org/v1alpha1
 kind: KeycloakUser
 metadata:
-  name: demo
+  name: guru
   labels:
     app: sso
 spec:
@@ -9,9 +9,13 @@ spec:
     matchLabels:
       app: sso
   user:
-    username: demo
-    firstName: John
-    lastName: Doe
-    email: demo@example.com
+    username: guru
+    firstName: Guru
+    lastName: RHDH Admin
+    email: guru@test.com
     enabled: true
-    emailVerified: false
+    emailVerified: true
+    temporary: false
+    credentials:
+      - type: password
+        value: ${KEYCLOAK_USER_PASS}
