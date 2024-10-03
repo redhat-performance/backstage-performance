@@ -111,7 +111,7 @@ def on_test_start(environment, **_kwargs):
     if not isinstance(environment.runner, WorkerRunner):
         users = []
         for i in range(1, int(environment.runner.target_user_count)+1):
-            users.append(f"test{i}")
+            users.append(f"t{i}")
 
         worker_count = environment.runner.worker_count
         chunk_size = int(len(users) / worker_count)
