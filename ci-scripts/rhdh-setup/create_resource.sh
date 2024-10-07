@@ -117,7 +117,7 @@ clone_and_upload() {
     ACCESS_TOKEN=$(get_token "rhdh")
     curl -k "$(backstage_url)/api/catalog/locations" --cookie "$COOKIE" --cookie-jar "$COOKIE" -X POST -H 'Accept-Encoding: gzip, deflate, br' -H 'Authorization: Bearer '"$ACCESS_TOKEN" -H 'Content-Type: application/json' --data-raw '{"type":"url","target":"'"${upload_url}"'"}'
 
-    timeout=600
+    timeout=1800
     timeout_timestamp=$(date -d "$timeout seconds" "+%s")
     last_count=-1
     while true; do
@@ -126,8 +126,8 @@ clone_and_upload() {
         exit 1
       else
         ACCESS_TOKEN=$(get_token "rhdh")
-        if [[ 'component-*.yaml' == "${1}" ]]; then b_count=$(curl -s -k "$(backstage_url)/api/catalog/entity-facets?facet=kind" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$ACCESS_TOKEN" | jq -r '.facets.kind[] | select(.value == "Component")| .count'); fi
-        if [[ 'api-*.yaml' == "${1}" ]]; then b_count=$(curl -s -k "$(backstage_url)/api/catalog/entity-facets?facet=kind" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$ACCESS_TOKEN" | jq -r '.facets.kind[] | select(.value == "API")| .count'); fi
+        if [[ 'component-*.yaml' == "${1}" ]]; then b_count=$(curl -s -k "$(backstage_url)/api/catalog/entity-facets?facet=kind" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$ACCESS_TOKEN" | tee -a "$TMP_DIR/get_component_count.log" | jq -r '.facets.kind[] | select(.value == "Component")| .count'); fi
+        if [[ 'api-*.yaml' == "${1}" ]]; then b_count=$(curl -s -k "$(backstage_url)/api/catalog/entity-facets?facet=kind" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$ACCESS_TOKEN" | tee -a "$TMP_DIR/get_api_count.log" | jq -r '.facets.kind[] | select(.value == "API")| .count'); fi
         if [[ "$last_count" != "$b_count" ]] && [[ $last_count -ge 0 ]]; then # reset the timeout if current count changes
           log_info "The current count changed, resetting entity waiting timeout to $timeout seconds"
           timeout_timestamp=$(date -d "$timeout seconds" "+%s")
@@ -308,7 +308,7 @@ rhdh_token() {
     --data-urlencode "code=$code" \
     --data-urlencode "session_state=$session_state" \
     --data-urlencode "state=$state" \
-    "$CODE_URL" | jq -r ".backstageIdentity" | jq -r ".expires_in_timestamp = $(date -d '30 minutes' +%s)")
+    "$CODE_URL" | tee -a "$TMP_DIR/get_rhdh_token.log" | jq -r ".backstageIdentity" | jq -r ".expires_in_timestamp = $(date -d '30 minutes' +%s)")
   echo "$ACCESS_TOKEN"
 }
 
