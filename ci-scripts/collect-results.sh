@@ -75,6 +75,9 @@ try_gather_file "${TMP_DIR}/benchmark-scenario"
 try_gather_file "${TMP_DIR}/create_group.log"
 try_gather_file "${TMP_DIR}/create_user.log"
 try_gather_file "${TMP_DIR}/get_token.log"
+try_gather_file "${TMP_DIR}/get_rhdh_token.log"
+try_gather_file "${TMP_DIR}/get_api_count.log"
+try_gather_file "${TMP_DIR}/get_component_count.log"
 try_gather_file load-test.log
 try_gather_file postgresql.log
 
