@@ -27,6 +27,8 @@ read -ra active_users_spawn_rate <<<"${SCALE_ACTIVE_USERS_SPAWN_RATES:-1:1 200:4
 
 read -ra bs_users_groups <<<"${SCALE_BS_USERS_GROUPS:-1:1 10000:2500}"
 
+read -ra rbac_policy_size <<<"${SCALE_RBAC_POLICY_SIZE:-10000}"
+
 read -ra catalog_apis_components <<<"${SCALE_CATALOG_SIZES:-1:1 10000:10000}"
 
 read -ra replicas <<<"${SCALE_REPLICAS:-5}"
@@ -91,64 +93,67 @@ for w in "${workers[@]}"; do
         IFS=":" read -ra tokens <<<"${bu_bg}"
         bu="${tokens[0]}"                                        # backstage users
         [[ "${#tokens[@]}" == 1 ]] && bg="" || bg="${tokens[1]}" # backstage components
-        for cr_cl in "${cpu_requests_limits[@]}"; do
-            IFS=":" read -ra tokens <<<"${cr_cl}"
-            cr="${tokens[0]}"                                        # cpu requests
-            [[ "${#tokens[@]}" == 1 ]] && cl="" || cl="${tokens[1]}" # cpu limits
-            for mr_ml in "${memory_requests_limits[@]}"; do
-                IFS=":" read -ra tokens <<<"${mr_ml}"
-                mr="${tokens[0]}"                                        # memory requests
-                [[ "${#tokens[@]}" == 1 ]] && ml="" || ml="${tokens[1]}" # memory limits
-                for a_c in "${catalog_apis_components[@]}"; do
-                    IFS=":" read -ra tokens <<<"${a_c}"
-                    a="${tokens[0]}"                                       # apis
-                    [[ "${#tokens[@]}" == 1 ]] && c="" || c="${tokens[1]}" # components
-                    for r in "${replicas[@]}"; do
-                        for s in "${db_storages[@]}"; do
-                            echo
-                            echo "/// Setting up RHDH for scalability test ///"
-                            echo
-                            set -x
-                            export RHDH_DEPLOYMENT_REPLICAS="$r"
-                            export RHDH_DB_REPLICAS="$r"
-                            export RHDH_DB_STORAGE="$s"
-                            export RHDH_RESOURCES_CPU_REQUESTS="$cr"
-                            export RHDH_RESOURCES_CPU_LIMITS="$cl"
-                            export RHDH_RESOURCES_MEMORY_REQUESTS="$mr"
-                            export RHDH_RESOURCES_MEMORY_LIMITS="$ml"
-                            export RHDH_KEYCLOAK_REPLICAS="${RHDH_KEYCLOAK_REPLICAS:-$r}"
-                            export BACKSTAGE_USER_COUNT=$bu
-                            export GROUP_COUNT=$bg
-                            export WORKERS=$w
-                            export API_COUNT=$a
-                            export COMPONENT_COUNT=$c
-                            index="${r}r-db_${s}-${bu}bu-${bg}bg-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c"
-                            set +x
-                            oc login "$OPENSHIFT_API" -u "$OPENSHIFT_USERNAME" -p "$OPENSHIFT_PASSWORD" --insecure-skip-tls-verify=true
-                            make clean-local undeploy-rhdh
-                            setup_artifacts="$SCALABILITY_ARTIFACTS/$index/setup"
-                            mkdir -p "$setup_artifacts"
-                            ARTIFACT_DIR=$setup_artifacts ./ci-scripts/setup.sh |& tee "$setup_artifacts/setup.log"
-                            wait_for_indexing |& tee "$setup_artifacts/after-setup-search.log"
-                            for au_sr in "${active_users_spawn_rate[@]}"; do
-                                IFS=":" read -ra tokens <<<"${au_sr}"
-                                au=${tokens[0]}                                          # active users
-                                [[ "${#tokens[@]}" == 1 ]] && sr="" || sr="${tokens[1]}" # spawn rate
+        for rbs in "${rbac_policy_size[@]}"; do
+            for cr_cl in "${cpu_requests_limits[@]}"; do
+                IFS=":" read -ra tokens <<<"${cr_cl}"
+                cr="${tokens[0]}"                                        # cpu requests
+                [[ "${#tokens[@]}" == 1 ]] && cl="" || cl="${tokens[1]}" # cpu limits
+                for mr_ml in "${memory_requests_limits[@]}"; do
+                    IFS=":" read -ra tokens <<<"${mr_ml}"
+                    mr="${tokens[0]}"                                        # memory requests
+                    [[ "${#tokens[@]}" == 1 ]] && ml="" || ml="${tokens[1]}" # memory limits
+                    for a_c in "${catalog_apis_components[@]}"; do
+                        IFS=":" read -ra tokens <<<"${a_c}"
+                        a="${tokens[0]}"                                       # apis
+                        [[ "${#tokens[@]}" == 1 ]] && c="" || c="${tokens[1]}" # components
+                        for r in "${replicas[@]}"; do
+                            for s in "${db_storages[@]}"; do
                                 echo
-                                echo "/// Running the scalability test ///"
+                                echo "/// Setting up RHDH for scalability test ///"
                                 echo
                                 set -x
-                                export SCENARIO=${SCENARIO:-search-catalog}
-                                export USERS="${au}"
-                                export DURATION=${DURATION:-5m}
-                                export SPAWN_RATE="${sr}"
+                                export RHDH_DEPLOYMENT_REPLICAS="$r"
+                                export RHDH_DB_REPLICAS="$r"
+                                export RHDH_DB_STORAGE="$s"
+                                export RHDH_RESOURCES_CPU_REQUESTS="$cr"
+                                export RHDH_RESOURCES_CPU_LIMITS="$cl"
+                                export RHDH_RESOURCES_MEMORY_REQUESTS="$mr"
+                                export RHDH_RESOURCES_MEMORY_LIMITS="$ml"
+                                export RHDH_KEYCLOAK_REPLICAS="${RHDH_KEYCLOAK_REPLICAS:-$r}"
+                                export BACKSTAGE_USER_COUNT=$bu
+                                export GROUP_COUNT=$bg
+                                export RBAC_POLICY_SIZE="$rbs"
+                                export WORKERS=$w
+                                export API_COUNT=$a
+                                export COMPONENT_COUNT=$c
+                                index="${r}r-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c"
                                 set +x
-                                make clean
-                                test_artifacts="$SCALABILITY_ARTIFACTS/$index/test/${au}u"
-                                mkdir -p "$test_artifacts"
-                                wait_for_indexing |& tee "$test_artifacts/before-test-search.log"
-                                ARTIFACT_DIR=$test_artifacts ./ci-scripts/test.sh |& tee "$test_artifacts/test.log"
-                                ARTIFACT_DIR=$test_artifacts ./ci-scripts/collect-results.sh |& tee "$test_artifacts/collect-results.log"
+                                oc login "$OPENSHIFT_API" -u "$OPENSHIFT_USERNAME" -p "$OPENSHIFT_PASSWORD" --insecure-skip-tls-verify=true
+                                make clean-local undeploy-rhdh
+                                setup_artifacts="$SCALABILITY_ARTIFACTS/$index/setup"
+                                mkdir -p "$setup_artifacts"
+                                ARTIFACT_DIR=$setup_artifacts ./ci-scripts/setup.sh |& tee "$setup_artifacts/setup.log"
+                                wait_for_indexing |& tee "$setup_artifacts/after-setup-search.log"
+                                for au_sr in "${active_users_spawn_rate[@]}"; do
+                                    IFS=":" read -ra tokens <<<"${au_sr}"
+                                    au=${tokens[0]}                                          # active users
+                                    [[ "${#tokens[@]}" == 1 ]] && sr="" || sr="${tokens[1]}" # spawn rate
+                                    echo
+                                    echo "/// Running the scalability test ///"
+                                    echo
+                                    set -x
+                                    export SCENARIO=${SCENARIO:-search-catalog}
+                                    export USERS="${au}"
+                                    export DURATION=${DURATION:-5m}
+                                    export SPAWN_RATE="${sr}"
+                                    set +x
+                                    make clean
+                                    test_artifacts="$SCALABILITY_ARTIFACTS/$index/test/${au}u"
+                                    mkdir -p "$test_artifacts"
+                                    wait_for_indexing |& tee "$test_artifacts/before-test-search.log"
+                                    ARTIFACT_DIR=$test_artifacts ./ci-scripts/test.sh |& tee "$test_artifacts/test.log"
+                                    ARTIFACT_DIR=$test_artifacts ./ci-scripts/collect-results.sh |& tee "$test_artifacts/collect-results.log"
+                                done
                             done
                         done
                     done

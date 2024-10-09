@@ -29,6 +29,8 @@ API_COUNT,\
 COMPONENT_COUNT,\
 BACKSTAGE_USER_COUNT,\
 GROUP_COUNT,\
+RBAC_POLICY,\
+RBAC_POLICY_SIZE,\
 RHDH_DEPLOYMENT_REPLICAS,\
 RHDH_RESOURCES_CPU_LIMITS,\
 RHDH_RESOURCES_MEMORY_LIMITS,\
@@ -39,6 +41,8 @@ RHDH_CPU_Avg,\
 RHDH_CPU_Max,\
 RHDH_Memory_Avg,\
 RHDH_Memory_Max,\
+RHDH_Heap_Avg,\
+RHDH_Heap_Max,\
 RHDH_DB_Pods,\
 RHDH_DB_CPU_Avg,\
 RHDH_DB_CPU_Max,\
@@ -94,6 +98,8 @@ find "${1:-.}" -name benchmark.json -print0 | while IFS= read -r -d '' filename;
         .metadata.env.COMPONENT_COUNT,
         .metadata.env.BACKSTAGE_USER_COUNT,
         .metadata.env.GROUP_COUNT,
+        .metadata.env.RBAC_POLICY,
+        .metadata.env.RBAC_POLICY_SIZE,
         .metadata.env.RHDH_DEPLOYMENT_REPLICAS,
         .metadata.env.RHDH_RESOURCES_CPU_LIMITS,
         .metadata.env.RHDH_RESOURCES_MEMORY_LIMITS,
@@ -104,6 +110,8 @@ find "${1:-.}" -name benchmark.json -print0 | while IFS= read -r -d '' filename;
         .measurements."rhdh-developer-hub".cpu.max,
         .measurements."rhdh-developer-hub".memory.mean,
         .measurements."rhdh-developer-hub".memory.max,
+        .measurements.nodejs.test.nodejs_heap_size_used_bytes.mean,
+        .measurements.nodejs.test.nodejs_heap_size_used_bytes.max,
         .measurements."rhdh-postgresql".count_ready.mean,
         .measurements."rhdh-postgresql".cpu.mean,
         .measurements."rhdh-postgresql".cpu.max,
