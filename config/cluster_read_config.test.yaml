@@ -215,6 +215,27 @@
 - name: measurements.postgresql.backstage-plugin-search.index
   command: oc exec $(oc get pods -A -o json | jq -r '.items[] | select(.metadata.namespace | match("{{ namespace_regex }}")) | select(.metadata.name | match("{{ pod_regex }}")).metadata.name') -n $(oc get pods -A -o json | jq -r '.items[] | select(.metadata.namespace | match("{{ namespace_regex }}")) | select(.metadata.name | match("{{ pod_regex }}")).metadata.namespace') -- psql -h localhost -U postgres backstage_plugin_search -c "SELECT relname, 100 * idx_scan / (seq_scan + idx_scan) percent_of_times_index_used, n_live_tup rows_in_table FROM pg_stat_user_tables ORDER BY n_live_tup DESC;" -A -F ',' |head -n -1|yq -p csv -o json
   output: json
+
+- name: measurements.postgresql.db.size.readable
+  command: oc exec $(oc get pods -A -o json | jq -r '.items[] | select(.metadata.namespace | match("{{ namespace_regex }}")) | select(.metadata.name | match("{{ pod_regex }}")).metadata.name') -n $(oc get pods -A -o json | jq -r '.items[] | select(.metadata.namespace | match("{{ namespace_regex }}")) | select(.metadata.name | match("{{ pod_regex }}")).metadata.namespace') -- psql -h localhost -U postgres backstage_plugin_search -c "SELECT pg_size_pretty(SUM(pg_database_size(datname))) AS total_size FROM pg_database;" -A -F ',' |head -n -1|yq -p csv -o json
+  output: json
+
+- name: measurements.postgresql.db.size.raw
+  command: oc exec $(oc get pods -A -o json | jq -r '.items[] | select(.metadata.namespace | match("{{ namespace_regex }}")) | select(.metadata.name | match("{{ pod_regex }}")).metadata.name') -n $(oc get pods -A -o json | jq -r '.items[] | select(.metadata.namespace | match("{{ namespace_regex }}")) | select(.metadata.name | match("{{ pod_regex }}")).metadata.namespace') -- psql -h localhost -U postgres backstage_plugin_search -c "SELECT SUM(pg_database_size(datname)) AS total_size_in_bytes FROM pg_database;" -A -F ',' |head -n -1|yq -p csv -o json
+  output: json
+
+- name: measurements.postgresql.dbs.size.readable
+  command: oc exec $(oc get pods -A -o json | jq -r '.items[] | select(.metadata.namespace | match("{{ namespace_regex }}")) | select(.metadata.name | match("{{ pod_regex }}")).metadata.name') -n $(oc get pods -A -o json | jq -r '.items[] | select(.metadata.namespace | match("{{ namespace_regex }}")) | select(.metadata.name | match("{{ pod_regex }}")).metadata.namespace') -- psql -h localhost -U postgres backstage_plugin_search -c "SELECT datname, pg_size_pretty(pg_database_size(datname)) AS size FROM pg_database;" -A -F ',' |head -n -1|yq -p csv -o json
+  output: json
+
+- name: measurements.postgresql.dbs.size.raw
+  command: oc exec $(oc get pods -A -o json | jq -r '.items[] | select(.metadata.namespace | match("{{ namespace_regex }}")) | select(.metadata.name | match("{{ pod_regex }}")).metadata.name') -n $(oc get pods -A -o json | jq -r '.items[] | select(.metadata.namespace | match("{{ namespace_regex }}")) | select(.metadata.name | match("{{ pod_regex }}")).metadata.namespace') -- psql -h localhost -U postgres backstage_plugin_search -c "SELECT datname, pg_database_size(datname) AS size_in_bytes FROM pg_database;" -A -F ',' |head -n -1|yq -p csv -o json
+  output: json
+
+- name: measurements.postgresql.disk.usage.readable
+  command: oc exec $(oc get pods -A -o json | jq -r '.items[] | select(.metadata.namespace | match("{{ namespace_regex }}")) | select(.metadata.name | match("{{ pod_regex }}")).metadata.name') -n $(oc get pods -A -o json | jq -r '.items[] | select(.metadata.namespace | match("{{ namespace_regex }}")) | select(.metadata.name | match("{{ pod_regex }}")).metadata.namespace') --  df -h /var/lib/pgsql/data |yq -p csv -o json
+  output: json
+
 {%- endmacro %}
 
 {{ collect_index_usage('rhdh-performance.*', '(rhdh|backstage)-(postgresql|psql)-(primary|developer-hub)-0') }}
