@@ -113,9 +113,28 @@ clone_and_upload() {
   for filename in "${files[@]}"; do
     e_count=$(yq eval '.metadata.name | capture(".*-(?P<value>[0-9]+)").value' "$filename" | tail -n 1)
     upload_url="${GITHUB_REPO%.*}/blob/${tmp_branch}/$(basename "$filename")"
-    log_info "Uploading entities from $upload_url"
-    ACCESS_TOKEN=$(get_token "rhdh")
-    curl -k "$(backstage_url)/api/catalog/locations" --cookie "$COOKIE" --cookie-jar "$COOKIE" -X POST -H 'Accept-Encoding: gzip, deflate, br' -H 'Authorization: Bearer '"$ACCESS_TOKEN" -H 'Content-Type: application/json' --data-raw '{"type":"url","target":"'"${upload_url}"'"}'
+    max_attempts=5
+    attempt=1
+    while ((attempt <= max_attempts)); do
+      log_info "Uploading entities from $upload_url"
+      ACCESS_TOKEN=$(get_token "rhdh")
+      response="$(curl -k "$(backstage_url)/api/catalog/locations" --cookie "$COOKIE" --cookie-jar "$COOKIE" \
+        -X POST \
+        -H 'Accept-Encoding: gzip, deflate, br' \
+        -H 'Authorization: Bearer '"$ACCESS_TOKEN" \
+        -H 'Content-Type: application/json' --data-raw '{"type":"url","target":"'"${upload_url}"'"}')"
+      if [ "${PIPESTATUS[0]}" -eq 0 ]; then
+        log_info "Entities from $upload_url uploaded"
+        break
+      else
+        log_warn "Unable to upload entities from $upload_url: [$response]. Trying again up to $max_attempts times."
+        ((attempt++))
+      fi
+    done
+    if [[ $attempt -gt $max_attempts ]]; then
+      log_error "Unable to upload entities from $upload_url $max_attempts attempts, giving up!"
+      return 1
+    fi
 
     timeout=1800
     timeout_timestamp=$(date -d "$timeout seconds" "+%s")
