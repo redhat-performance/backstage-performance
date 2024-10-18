@@ -117,7 +117,7 @@ clone_and_upload() {
     ACCESS_TOKEN=$(get_token "rhdh")
     curl -k "$(backstage_url)/api/catalog/locations" --cookie "$COOKIE" --cookie-jar "$COOKIE" -X POST -H 'Accept-Encoding: gzip, deflate, br' -H 'Authorization: Bearer '"$ACCESS_TOKEN" -H 'Content-Type: application/json' --data-raw '{"type":"url","target":"'"${upload_url}"'"}'
 
-    timeout=1800
+    timeout=300
     timeout_timestamp=$(date -d "$timeout seconds" "+%s")
     last_count=-1
     while true; do
@@ -128,7 +128,8 @@ clone_and_upload() {
         ACCESS_TOKEN=$(get_token "rhdh")
         if [[ 'component-*.yaml' == "${1}" ]]; then b_count=$(curl -s -k "$(backstage_url)/api/catalog/entity-facets?facet=kind" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$ACCESS_TOKEN" | tee -a "$TMP_DIR/get_component_count.log" | jq -r '.facets.kind[] | select(.value == "Component")| .count'); fi
         if [[ 'api-*.yaml' == "${1}" ]]; then b_count=$(curl -s -k "$(backstage_url)/api/catalog/entity-facets?facet=kind" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$ACCESS_TOKEN" | tee -a "$TMP_DIR/get_api_count.log" | jq -r '.facets.kind[] | select(.value == "API")| .count'); fi
-        if [[ "$last_count" != "$b_count" ]] && [[ $last_count -ge 0 ]]; then # reset the timeout if current count changes
+        if [[ -z "$b_count" ]]; then log_warn "Failed to get current count, maybe RHDH is down?"; b_count=0; fi
+        if [[ "$last_count" != "$b_count" ]]; then # reset the timeout if current count changes
           log_info "The current count changed, resetting entity waiting timeout to $timeout seconds"
           timeout_timestamp=$(date -d "$timeout seconds" "+%s")
           last_count=$b_count
