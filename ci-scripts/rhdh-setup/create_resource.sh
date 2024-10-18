@@ -117,7 +117,7 @@ clone_and_upload() {
     ACCESS_TOKEN=$(get_token "rhdh")
     curl -k "$(backstage_url)/api/catalog/locations" --cookie "$COOKIE" --cookie-jar "$COOKIE" -X POST -H 'Accept-Encoding: gzip, deflate, br' -H 'Authorization: Bearer '"$ACCESS_TOKEN" -H 'Content-Type: application/json' --data-raw '{"type":"url","target":"'"${upload_url}"'"}'
 
-    timeout=1800
+    timeout=3600
     timeout_timestamp=$(date -d "$timeout seconds" "+%s")
     last_count=-1
     while true; do
