@@ -27,7 +27,7 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 NAMESPACE_CATALOGSOURCE="openshift-marketplace"
-NAMESPACE_SUBSCRIPTION="rhdh-operator"
+NAMESPACE_SUBSCRIPTION="${NAMESPACE_SUBSCRIPTION:-rhdh-operator}"
 OLM_CHANNEL="${OLM_CHANNEL:-fast}"
 
 errorf() {
