@@ -65,7 +65,7 @@ export ARTIFACT_DIR ?= $(shell readlink -m .artifacts)
 export PROJ_ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
 # Name of the namespace to install locust operator as well as to run Pods of master and workers.
-LOCUST_NAMESPACE=locust-operator
+LOCUST_NAMESPACE ?= locust-operator
 
 # Helm repository name to install locust operator from
 LOCUST_OPERATOR_REPO=locust-k8s-operator
@@ -188,7 +188,7 @@ endif
 	kubectl create --namespace $(LOCUST_NAMESPACE) configmap locust.$(SCENARIO) --from-file scenarios/$(SCENARIO).py --dry-run=client -o yaml | kubectl apply --namespace $(LOCUST_NAMESPACE) -f -
 	date --utc -Ins>$(TMP_DIR)/benchmark-before
 	timeout=$$(date -d "680 seconds" "+%s"); while [ -z "$$(kubectl get --namespace $(LOCUST_NAMESPACE) pod -l performance-test-pod-name=$(SCENARIO)-test-master -o name)" ]; do if [ "$$(date "+%s")" -gt "$$timeout" ]; then echo "ERROR: Timeout waiting for locust master pod to start"; exit 1; else echo "Waiting for locust master pod to start..."; sleep 5s; fi; done
-	kubectl wait --namespace $(LOCUST_NAMESPACE) --for=condition=Ready=true $$(kubectl get --namespace $(LOCUST_NAMESPACE) pod -l performance-test-pod-name=$(SCENARIO)-test-master -o name)
+	kubectl wait --namespace $(LOCUST_NAMESPACE) --for=condition=Ready=true $$(kubectl get --namespace $(LOCUST_NAMESPACE) pod -l performance-test-pod-name=$(SCENARIO)-test-master -o name) --timeout=60s
 	@echo "Getting locust master log:"
 	kubectl logs --namespace $(LOCUST_NAMESPACE) -f -l performance-test-pod-name=$(SCENARIO)-test-master | tee load-test.log
 	date --utc -Ins>$(TMP_DIR)/benchmark-after

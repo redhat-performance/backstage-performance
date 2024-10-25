@@ -16,7 +16,7 @@ source ./create_resource.sh
 export RHDH_NAMESPACE=${RHDH_NAMESPACE:-rhdh-performance}
 export RHDH_HELM_RELEASE_NAME=${RHDH_HELM_RELEASE_NAME:-rhdh}
 
-export RHDH_OPERATOR_NAMESPACE=rhdh-operator
+export RHDH_OPERATOR_NAMESPACE=${RHDH_OPERATOR_NAMESPACE:-rhdh-operator}
 
 cli="oc"
 clin="$cli -n $RHDH_NAMESPACE"
@@ -329,7 +329,7 @@ install_rhdh_with_olm() {
     $clin apply -f "$TMP_DIR/dynamic-plugins.configmap.yaml"
     mark_resource_for_rhdh cm dynamic-plugins-rhdh
     set -x
-    OLM_CHANNEL="${RHDH_OLM_CHANNEL}" UPSTREAM_IIB="${RHDH_OLM_INDEX_IMAGE}" ./install-rhdh-catalog-source.sh --install-operator "${RHDH_OLM_OPERATOR_PACKAGE:-rhdh}"
+    OLM_CHANNEL="${RHDH_OLM_CHANNEL}" UPSTREAM_IIB="${RHDH_OLM_INDEX_IMAGE}" NAMESPACE_SUBSCRIPTION="${RHDH_OPERATOR_NAMESPACE}" ./install-rhdh-catalog-source.sh --install-operator "${RHDH_OLM_OPERATOR_PACKAGE:-rhdh}"
     set +x
     wait_for_crd backstages.rhdh.redhat.com
 
