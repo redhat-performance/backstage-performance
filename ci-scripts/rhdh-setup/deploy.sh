@@ -344,7 +344,7 @@ install_rhdh_with_olm() {
     envsubst <template/backstage/olm/backstage.yaml >"$backstage_yaml"
     if ${ENABLE_RBAC}; then
         rbac_policy='[{"name": "rbac-policy"}]'
-        yq -i '(.spec.application.extraFiles.configMaps |= (. // []) + '"$rbac_policy" "$backstage_yaml"
+        yq -i '(.spec.application.extraFiles.configMaps |= (. // []) + '"$rbac_policy"')' "$backstage_yaml"
     fi
     $clin apply -f "$backstage_yaml"
 
