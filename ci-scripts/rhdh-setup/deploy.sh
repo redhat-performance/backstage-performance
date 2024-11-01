@@ -375,9 +375,12 @@ psql_debug() {
         $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#stats_fetch_consistency.*/stats_fetch_consistency = cache/" /var/lib/pgsql/data/userdata/postgresql.conf'
         $clin exec "${psql_db}" -- sh -c "echo shared_preload_libraries = \'pgaudit,auto_explain,pg_stat_statements\' >> /var/lib/pgsql/data/userdata/postgresql.conf"
     fi
-    log_info "Restarting RHDH DB..."
-    $clin rollout restart statefulset/"$psql_db_ss"
-    wait_to_start statefulset "$psql_db_ss" 300 300
+
+    if ${PSQL_LOG} || ${PSQL_EXPORT}; then
+        log_info "Restarting RHDH DB..."
+        $clin rollout restart statefulset/"$psql_db_ss"
+        wait_to_start statefulset "$psql_db_ss" 300 300
+    fi
 
     if ${PSQL_EXPORT}; then
         $clin exec "${psql_db}" -- sh -c 'psql -c "CREATE EXTENSION pg_stat_statements;"'
@@ -399,9 +402,12 @@ psql_debug() {
         done
     fi
 
-    log_info "Restarting RHDH..."
-    $clin rollout restart deployment/"$rhdh_deployment"
-    wait_to_start deployment "$rhdh_deployment" 300 300
+    if ${PSQL_LOG} || ${PSQL_EXPORT}; then
+        log_info "Restarting RHDH..."
+        $clin rollout restart deployment/"$rhdh_deployment"
+        wait_to_start deployment "$rhdh_deployment" 300 300
+    fi
+
     if ${PSQL_EXPORT}; then
         plugins=("pg-exporter" "backstage-plugin-permission" "backstage-plugin-auth" "backstage-plugin-catalog" "backstage-plugin-scaffolder" "backstage-plugin-search" "backstage-plugin-app")
         for plugin in "${plugins[@]}"; do
