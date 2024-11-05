@@ -48,7 +48,7 @@ function fatal() {
     exit 1
 }
 
-format_date() {
+function format_date() {
     date -d "$1" +%FT%TZ --utc
 }
 
@@ -62,7 +62,7 @@ function download() {
         debug "File $out already present, skipping download"
     else
         info "Downloading $out"
-        shovel.py prow --job-name "$job" download --job-run-id "$id" --run-name "$run" --artifact-path "$PROW_ARTIFACT_PATH" --output-path "$out"
+        shovel.py prow --job-name "$job" download --job-run-id "$id" --run-name "$run" --artifact-path "$PROW_ARTIFACT_PATH" --output-path "$out" --record-link metadata.link
     fi
 }
 
@@ -134,6 +134,13 @@ function upload_es() {
     shovel.py opensearch --base-url "$ES_HOST" --index "$ES_INDEX" upload --input-file "$f" --matcher-field ".metadata.env.BUILD_ID"
 }
 
+function upload_resultsdashboard() {
+    local f="$1"
+
+    debug "Uploading $f to Results Dashboard"
+    shovel.py resultsdashboard --base-url $ES_HOST upload --input-file "$f" --group "Portfolio and Delivery" --product "Red Hat Developer Hub" --test @name --result-id @metadata.env.BUILD_ID --result @result --date @measurements.timings.benchmark.started --link @metadata.link --release @metadata.image.version --version @metadata.image.release
+}
+
 counter=0
 
 # Fetch JSON files from main test that runs every 12 hours
@@ -149,6 +156,7 @@ for job in "mvp-cpt"; do
         enritch_stuff "$out" ".\"\$schema\"" "$HORREUM_TEST_SCHEMA"
         upload_horreum "$out"
         upload_es "$out"
+        upload_resultsdashboard "$out" || true
         ((counter++)) || true
     done
 done
