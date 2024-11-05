@@ -96,7 +96,7 @@ clone_and_upload() {
   git_repo=${GITHUB_REPO//github.com/${git_str}}
   [[ -d "${git_dir}" ]] && rm -rf "${git_dir}"
   git clone "$git_repo" "$git_dir"
-  cd "$git_dir" || return
+  pushd "$git_dir" || return
   git config user.name "rhdh-performance-bot"
   git config user.email rhdh-performance-bot@redhat.com
   tmp_branch=$(mktemp -u XXXXXXXXXX)
@@ -110,61 +110,18 @@ clone_and_upload() {
   git push -f --set-upstream origin "$tmp_branch"
   cd ..
   sleep 5
+  output="${TMP_DIR}/locations.yaml"
+  if [ ! -f "$output" ]; then
+    echo "locations: []" > "$output"
+  fi
   for filename in "${files[@]}"; do
-    e_count=$(yq eval '.metadata.name | capture(".*-(?P<value>[0-9]+)").value' "$filename" | tail -n 1)
     upload_url="${GITHUB_REPO%.*}/blob/${tmp_branch}/$(basename "$filename")"
-    max_attempts=5
-    attempt=1
-    while ((attempt <= max_attempts)); do
-      log_info "Uploading entities from $upload_url"
-      ACCESS_TOKEN=$(get_token "rhdh")
-      response="$(curl -k "$(backstage_url)/api/catalog/locations" --cookie "$COOKIE" --cookie-jar "$COOKIE" \
-        -X POST \
-        -H 'Accept-Encoding: gzip, deflate, br' \
-        -H 'Authorization: Bearer '"$ACCESS_TOKEN" \
-        -H 'Content-Type: application/json' --data-raw '{"type":"url","target":"'"${upload_url}"'"}')"
-      if [ "${PIPESTATUS[0]}" -eq 0 ]; then
-        log_info "Entities from $upload_url uploaded"
-        break
-      else
-        log_warn "Unable to upload entities from $upload_url: [$response]. Trying again up to $max_attempts times."
-        ((attempt++))
-      fi
-    done
-    if [[ $attempt -gt $max_attempts ]]; then
-      log_error "Unable to upload entities from $upload_url $max_attempts attempts, giving up!"
-      return 1
-    fi
-
-    timeout=300
-    timeout_timestamp=$(date -d "$timeout seconds" "+%s")
-    last_count=-1
-    while true; do
-      if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
-        log_error "Timeout waiting on entity count"
-        exit 1
-      else
-        ACCESS_TOKEN=$(get_token "rhdh")
-        if [[ 'component-*.yaml' == "${1}" ]]; then b_count=$(curl -s -k "$(backstage_url)/api/catalog/entity-facets?facet=kind" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$ACCESS_TOKEN" | tee -a "$TMP_DIR/get_component_count.log" | jq -r '.facets.kind[] | select(.value == "Component")| .count'); fi
-        if [[ 'api-*.yaml' == "${1}" ]]; then b_count=$(curl -s -k "$(backstage_url)/api/catalog/entity-facets?facet=kind" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$ACCESS_TOKEN" | tee -a "$TMP_DIR/get_api_count.log" | jq -r '.facets.kind[] | select(.value == "API")| .count'); fi
-        if [[ -z "$b_count" ]]; then log_warn "Failed to get current count, maybe RHDH is down?"; b_count=0; fi
-        if [[ "$last_count" != "$b_count" ]]; then # reset the timeout if current count changes
-          log_info "The current count changed, resetting entity waiting timeout to $timeout seconds"
-          timeout_timestamp=$(date -d "$timeout seconds" "+%s")
-          last_count=$b_count
-        fi
-        if [[ $b_count -ge $e_count ]]; then
-          log_info "The entity count reached expected value ($b_count)"
-          break
-        fi
-      fi
-      log_info "Waiting for the entity count to be ${e_count} (current: ${b_count})"
-      sleep 10s
-    done
+    yq -i '.locations |= . + {"target": "'"$upload_url"'", "type": "url"}' "$output"
   done
   for filename in "${files[@]}"; do
     rm -vf "$filename"
   done
+  popd || return
 }
 
 # shellcheck disable=SC2016
@@ -228,7 +185,6 @@ create_rbac_policy() {
     exit 1
     ;;
   esac
-
 }
 
 create_groups() {
@@ -354,6 +310,7 @@ rhdh_token() {
   echo "$ACCESS_TOKEN"
 }
 
+# shellcheck disable=SC2120
 get_token() {
   service=$1
   if [[ ${service} == 'rhdh' ]]; then

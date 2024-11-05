@@ -147,7 +147,7 @@ install() {
     appurl=$(oc whoami --show-console)
     export OPENSHIFT_APP_DOMAIN=${appurl#*.}
     $cli create namespace "${RHDH_NAMESPACE}" --dry-run=client -o yaml | $cli apply -f -
-    keycloak_install
+    keycloak_install |& tee "${TMP_DIR}/keycloak_install.log"
 
     if $PRE_LOAD_DB; then
         log_info "Creating users and groups in Keycloak in background"
@@ -199,10 +199,6 @@ create_users_groups() {
 }
 
 create_objs() {
-    if ! $PRE_LOAD_DB; then
-        create_users_groups
-    fi
-
     if [[ ${GITHUB_USER} ]] && [[ ${GITHUB_REPO} ]]; then
         date --utc -Ins >"${TMP_DIR}/populate-catalog-before"
         create_per_grp create_cmp COMPONENT_COUNT
@@ -233,9 +229,14 @@ backstage_install() {
     yq -i '.backend.cors.origin="'"$base_url"'"' "$TMP_DIR/app-config.yaml"
     until envsubst <template/backstage/secret-rhdh-pull-secret.yaml | $clin apply -f -; do $clin delete secret rhdh-pull-secret --ignore-not-found=true; done
     if ${ENABLE_RBAC}; then yq -i '. |= . + load("template/backstage/'$INSTALL_METHOD'/app-rbac-patch.yaml")' "$TMP_DIR/app-config.yaml"; fi
+    if ${PRE_LOAD_DB}; then
+        echo "locations: []" >"$TMP_DIR/locations.yaml"
+        create_objs
+        yq -i '.catalog.locations |= . + load("'"$TMP_DIR/locations.yaml"'").locations' "$TMP_DIR/app-config.yaml"
+    fi
     until $clin create configmap app-config-rhdh --from-file "app-config.rhdh.yaml=$TMP_DIR/app-config.yaml"; do $clin delete configmap app-config-rhdh --ignore-not-found=true; done
     if ${ENABLE_RBAC}; then
-        cp template/backstage/rbac-config.yaml "${TMP_DIR}"
+        cp template/backstage/rbac-config.yaml "${TMP_DIR}/rbac-config.yaml"
         create_rbac_policy "$RBAC_POLICY"
         cat "$TMP_DIR/group-rbac.yaml" >>"$TMP_DIR/rbac-config.yaml"
         until $clin create -f "$TMP_DIR/rbac-config.yaml"; do $clin delete configmap rbac-policy --ignore-not-found=true; done
@@ -249,8 +250,52 @@ backstage_install() {
         log_error "Invalid install method: $INSTALL_METHOD, currently allowed methods are helm or olm"
         return 1
     fi
-    if [ "${AUTH_PROVIDER}" == "keycloak" ] && ${RHDH_METRIC}; then $clin create -f template/backstage/rhdh-metrics-service.yaml; fi
-    if ${RHDH_METRIC}; then envsubst <template/backstage/rhdh-servicemonitor.yaml | $clin create -f -; fi
+    date --utc -Ins >"${TMP_DIR}/populate-before"
+    if ${RHDH_METRIC}; then
+        log_info "Setting up RHDH metrics"
+        if [ "${AUTH_PROVIDER}" == "keycloak" ]; then
+            $clin create -f template/backstage/rhdh-metrics-service.yaml
+        fi
+        envsubst <template/backstage/rhdh-servicemonitor.yaml | $clin create -f -
+    fi
+    log_info "RHDH Installed, waiting for the catalog to be populated"
+    timeout=300
+    timeout_timestamp=$(date -d "$timeout seconds" "+%s")
+    last_count=-1
+    for entity_type in Component Api; do
+        while true; do
+            if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
+                log_error "Timeout waiting on '$entity_type' count"
+                exit 1
+            else
+                ACCESS_TOKEN=$(get_token "rhdh")
+                if [[ 'Component' == "$entity_type" ]]; then
+                    e_count=$COMPONENT_COUNT
+                    b_count=$(curl -s -k "$(backstage_url)/api/catalog/entity-facets?facet=kind" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$ACCESS_TOKEN" | tee -a "$TMP_DIR/get_component_count.log" | jq -r '.facets.kind[] | select(.value == "Component")| .count')
+                fi
+                if [[ 'Api' == "$entity_type" ]]; then
+                    e_count=$API_COUNT
+                    b_count=$(curl -s -k "$(backstage_url)/api/catalog/entity-facets?facet=kind" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$ACCESS_TOKEN" | tee -a "$TMP_DIR/get_api_count.log" | jq -r '.facets.kind[] | select(.value == "API")| .count')
+                fi
+                if [[ -z "$b_count" ]]; then
+                    log_warn "Failed to get current '$entity_type' count, maybe RHDH is down?"
+                    b_count=0
+                fi
+                if [[ "$last_count" != "$b_count" ]]; then # reset the timeout if current count changes
+                    log_info "The current '$entity_type' count changed, resetting waiting timeout to $timeout seconds"
+                    timeout_timestamp=$(date -d "$timeout seconds" "+%s")
+                    last_count=$b_count
+                fi
+                if [[ $b_count -ge $e_count ]]; then
+                    log_info "The '$entity_type' count reached expected value ($b_count)"
+                    break
+                fi
+            fi
+            log_info "Waiting for the '$entity_type' count to be ${e_count} (current: ${b_count})"
+            sleep 10s
+        done
+    done
+    date --utc -Ins >"${TMP_DIR}/populate-after"
 }
 
 # shellcheck disable=SC2016,SC1004
@@ -364,11 +409,13 @@ psql_debug() {
         rhdh_deployment=backstage-developer-hub
     fi
     if ${PSQL_LOG}; then
+        log_info "Setting ups PostgreSQL logging"
         $clin exec "${psql_db}" -- sh -c "sed -i "s/^\s*#log_min_duration_statement.*/log_min_duration_statement=${LOG_MIN_DURATION_STATEMENT}/" /var/lib/pgsql/data/userdata/postgresql.conf "
         $clin exec "${psql_db}" -- sh -c "sed -i "s/^\s*#log_min_duration_sample.*/log_min_duration_sample=${LOG_MIN_DURATION_SAMPLE}/" /var/lib/pgsql/data/userdata/postgresql.conf "
         $clin exec "${psql_db}" -- sh -c "sed -i "s/^\s*#log_statement_sample_rate.*/log_statement_sample_rate=${LOG_STATEMENT_SAMPLE_RATE}/" /var/lib/pgsql/data/userdata/postgresql.conf "
     fi
     if ${PSQL_EXPORT}; then
+        log_info "Setting up PostgreSQL tracking"
         $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#track_io_timing.*/track_io_timing = on/" /var/lib/pgsql/data/userdata/postgresql.conf'
         $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#track_wal_io_timing.*/track_wal_io_timing = on/" /var/lib/pgsql/data/userdata/postgresql.conf'
         $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#track_functions.*/track_functions = all/" /var/lib/pgsql/data/userdata/postgresql.conf'
@@ -383,6 +430,7 @@ psql_debug() {
     fi
 
     if ${PSQL_EXPORT}; then
+        log_info "Setting up PostgreSQL metrics exporter"
         $clin exec "${psql_db}" -- sh -c 'psql -c "CREATE EXTENSION pg_stat_statements;"'
         uid=$(oc get namespace "${RHDH_NAMESPACE}" -o go-template='{{ index .metadata.annotations "openshift.io/sa.scc.supplemental-groups" }}' | cut -d '/' -f 1)
         pg_pass=$(${clin} get secret rhdh-postgresql -o jsonpath='{.data.postgres-password}' | base64 -d)
@@ -409,6 +457,7 @@ psql_debug() {
     fi
 
     if ${PSQL_EXPORT}; then
+        log_info "Setting up PostgreSQL monitoring"
         plugins=("pg-exporter" "backstage-plugin-permission" "backstage-plugin-auth" "backstage-plugin-catalog" "backstage-plugin-scaffolder" "backstage-plugin-search" "backstage-plugin-app")
         for plugin in "${plugins[@]}"; do
             cp template/postgres-exporter/service-monitor-template.yaml "${TMP_DIR}/${plugin}-monitor.yaml"
@@ -513,13 +562,10 @@ delete_rhdh_with_olm() {
     $cli delete namespace "$RHDH_OPERATOR_NAMESPACE" --ignore-not-found=true --wait
 }
 
-while getopts "oi:crd" flag; do
+while getopts "oi:rd" flag; do
     case "${flag}" in
     o)
         export INSTALL_METHOD=olm
-        ;;
-    c)
-        create_objs
         ;;
     r)
         delete
