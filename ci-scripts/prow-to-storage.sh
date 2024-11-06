@@ -1,7 +1,7 @@
 #!/bin/bash -eu
 
-JOB_BASE="https://gcsweb-ci.apps.ci.l2s4.p1.openshiftapps.com/gcs/test-platform-results/logs/"
 CACHE_DIR="prow-to-storage-cache-dir"
+PROW_ARTIFACT_PATH="redhat-performance-backstage-performance/artifacts/benchmark.json"
 ES_HOST="http://elasticsearch.intlab.perf-infra.lab.eng.rdu2.redhat.com"
 ES_INDEX="backstage_ci_status_data"
 HORREUM_HOST="https://horreum.corp.redhat.com"
@@ -15,6 +15,9 @@ mkdir -p "$CACHE_DIR"
 
 if ! type jq >/dev/null; then
     fatal "Please install jq"
+fi
+if ! type shovel.py >/dev/null; then
+    fatal "shovel.py utility not available"
 fi
 if [ -z "$HORREUM_JHUTAR_PASSWORD" ]; then
     fatal "Please provide HORREUM_JHUTAR_PASSWORD variable"
@@ -45,18 +48,21 @@ function fatal() {
     exit 1
 }
 
-format_date() {
+function format_date() {
     date -d "$1" +%FT%TZ --utc
 }
 
 function download() {
-    local from="$1"
-    local to="$2"
-    if ! [ -f "$to" ]; then
-        info "Downloading $from to $to"
-        curl -LSsl -o "$to" "$from"
+    local job="$1"
+    local id="$2"
+    local run="$3"
+    local out="$4"
+
+    if [ -f "$out" ]; then
+        debug "File $out already present, skipping download"
     else
-        debug "File $to already present, skipping download"
+        info "Downloading $out"
+        shovel.py prow --job-name "$job" download --job-run-id "$id" --run-name "$run" --artifact-path "$PROW_ARTIFACT_PATH" --output-path "$out" --record-link metadata.link
     fi
 }
 
@@ -113,101 +119,26 @@ function enritch_stuff() {
     fi
 }
 
-function upload_es() {
-    local f="$1"
-    local build_id="$2"
-
-    debug "Considering file for upload to ES"
-
-    local current_doc_in_es current_count_in_es current_error_in_es
-    current_doc_in_es="$(curl --silent -X GET $ES_HOST/$ES_INDEX/_search -H 'Content-Type: application/json' -d '{"query":{"term":{"metadata.env.BUILD_ID.keyword":{"value":"'"$build_id"'"}}}}')"
-    current_count_in_es="$(echo "$current_doc_in_es" | jq --raw-output .hits.total.value)"
-    current_error_in_es="$(echo "$current_doc_in_es" | jq --raw-output .error.type)"
-
-    if [[ "$current_error_in_es" == "index_not_found_exception" ]]; then
-        info "Index does not exist yet, going on"
-    else
-        if [[ "$current_count_in_es" -gt 0 ]]; then
-            info "Already in ES, skipping upload"
-            return 0
-        fi
-    fi
-
-    info "Uploading to ES"
-    curl --silent \
-        -X POST \
-        -H 'Content-Type: application/json' \
-        $ES_HOST/$ES_INDEX/_doc \
-        -d "@$f" | jq --raw-output .result
-}
-
 function upload_horreum() {
     local f="$1"
-    local test_name="$2"
-    local test_matcher="$3"
-    local build_id="$4"
 
-    if [ ! -f "$f" ] || [ -z "$test_name" ] || [ -z "$test_matcher" ] || [ -z "$build_id" ]; then
-        error "Insufficient parameters when uploading to Horreum"
-        return 1
-    fi
+    debug "Uploading file $f to Horreum"
+    shovel.py horreum --base-url "$HORREUM_HOST" --keycloak-url "$HORREUM_KEYCLOAK_HOST" --username "jhutar@redhat.com" --password "$HORREUM_JHUTAR_PASSWORD" upload --test-name "$HORREUM_TEST_NAME" --input-file "$f" --matcher-field ".metadata.env.BUILD_ID" --matcher-label ".metadata.env.BUILD_ID" --start "@measurements.timings.benchmark.started" --end "@measurements.timings.benchmark.ended" --owner "$HORREUM_TEST_OWNER" --access "$HORREUM_TEST_ACCESS"
+    shovel.py horreum --base-url "$HORREUM_HOST" --keycloak-url "$HORREUM_KEYCLOAK_HOST" --username "jhutar@redhat.com" --password "$HORREUM_JHUTAR_PASSWORD" result --test-name "$HORREUM_TEST_NAME" --output-file "$f" --start "@measurements.timings.benchmark.started" --end "@measurements.timings.benchmark.ended"
+}
 
-    local test_start test_end TOKEN test_id exists ids_list is_fail
+function upload_es() {
+    local f="$1"
 
-    test_start="$(format_date "$(jq --raw-output '.measurements.timings.benchmark.started | if . == "" then "-" else . end' "$f")")"
-    test_end="$(format_date "$(jq --raw-output '.measurements.timings.benchmark.ended | if . == "" then "-" else . end' "$f")")"
+    debug "Uploading file $f to OpenSearch"
+    shovel.py opensearch --base-url "$ES_HOST" --index "$ES_INDEX" upload --input-file "$f" --matcher-field ".metadata.env.BUILD_ID"
+}
 
-    if [ -z "$test_start" ] || [ -z "$test_end" ] || [ "$test_start" == "null" ] || [ "$test_end" == "null" ]; then
-        error "We need start ($test_start) and end ($test_end) time in the JSON we are supposed to upload"
-        return 1
-    fi
+function upload_resultsdashboard() {
+    local f="$1"
 
-    debug "Considering file upload to Horreum: start: $test_start, end: $test_end, $test_matcher: $build_id"
-
-    TOKEN=$(curl -s $HORREUM_KEYCLOAK_HOST/realms/horreum/protocol/openid-connect/token -d "username=jhutar@redhat.com" -d "password=$HORREUM_JHUTAR_PASSWORD" -d "grant_type=password" -d "client_id=horreum-ui" | jq --raw-output .access_token)
-
-    test_id=$(curl --silent --get -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" "$HORREUM_HOST/api/test/byName/$test_name" | jq --raw-output .id)
-
-    exists=$(curl --silent --get -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" "$HORREUM_HOST/api/dataset/list/$test_id" --data-urlencode "filter={\"$test_matcher\":\"$build_id\"}" | jq --raw-output '.datasets | length')
-
-    if [[ $exists -gt 0 ]]; then
-        info "Test result ($test_matcher=$build_id) found in Horreum ($exists), skipping upload"
-        return 0
-    fi
-
-    info "Uploading file to Horreum"
-    curl --silent \
-        -H "Content-Type: application/json" \
-        -H "Authorization: Bearer $TOKEN" \
-        "$HORREUM_HOST/api/run/data?test=$test_name&start=$test_start&stop=$test_end&owner=$HORREUM_TEST_OWNER&access=$HORREUM_TEST_ACCESS" \
-        -d "@$f"
-    echo
-
-    info "Getting pass/fail for file from Horreum"
-    ids_list=$(curl --silent "https://horreum.corp.redhat.com/api/alerting/variables?test=$test_id" | jq -r '.[] | .id')
-    is_fail=0
-    for i in $ids_list; do
-        data='{
-            "range": {
-                "from": "'"$test_start"'",
-                "to": "'"$test_end"'",
-                "oneBeforeAndAfter": true
-            },
-            "annotation": {
-                "query": "'"$i"'"
-            }
-        }'
-
-        count=$(curl --silent -H "Content-Type: application/json" "https://horreum.corp.redhat.com/api/changes/annotations" -d "$data" | jq -r '. | length')
-        if [ "$count" -gt 0 ]; then
-            is_fail=1
-            enritch_stuff "$f" ".result" "FAIL"
-            break
-        fi
-    done
-    if [ $is_fail != 1 ]; then
-        enritch_stuff "$f" ".result" "PASS"
-    fi
+    debug "Uploading $f to Results Dashboard"
+    shovel.py resultsdashboard --base-url $ES_HOST upload --input-file "$f" --group "Portfolio and Delivery" --product "Red Hat Developer Hub" --test @name --result-id @metadata.env.BUILD_ID --result @result --date @measurements.timings.benchmark.started --link @metadata.link --release @metadata.image.version --version @metadata.image.release
 }
 
 counter=0
@@ -215,17 +146,17 @@ counter=0
 # Fetch JSON files from main test that runs every 12 hours
 # shellcheck disable=SC2043
 for job in "mvp-cpt"; do
-    job_history="$JOB_BASE/periodic-ci-redhat-performance-backstage-performance-main-$job/"
-    for i in $(curl -SsL "$job_history" | grep -Eo '[0-9]{19}' | sort -V | uniq | tail -n 5); do
-        f="$job_history/$i/artifacts/$job/redhat-performance-backstage-performance/artifacts/benchmark.json"
+    prow_job="periodic-ci-redhat-performance-backstage-performance-main-$job"
+    for i in $(shovel.py prow --job-name "$prow_job" list); do
         out="$CACHE_DIR/$i.benchmark.json"
 
-        download "$f" "$out"
+        download "$prow_job" "$i" "$job" "$out"
         check_json "$out" || continue
         check_result "$out" || continue
         enritch_stuff "$out" ".\"\$schema\"" "$HORREUM_TEST_SCHEMA"
-        upload_horreum "$out" "$HORREUM_TEST_NAME" ".metadata.env.BUILD_ID" "$i"
-        upload_es "$out" "$i"
+        upload_horreum "$out"
+        upload_es "$out"
+        upload_resultsdashboard "$out" || true
         ((counter++)) || true
     done
 done
