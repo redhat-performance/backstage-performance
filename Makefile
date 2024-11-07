@@ -97,17 +97,6 @@ deploy-rhdh-helm: $(TMP_DIR)
 	cd ./ci-scripts/rhdh-setup/; ./deploy.sh -i "$(AUTH_PROVIDER)"
 	date --utc -Ins>$(TMP_DIR)/deploy-after
 
-## Create users, groups and objects such as components and APIs in RHDH
-.PHONY: populate-rhdh
-populate-rhdh: $(TMP_DIR)
-	date --utc -Ins>$(TMP_DIR)/populate-before
-ifeq ($(RHDH_INSTALL_METHOD),helm)
-	cd ./ci-scripts/rhdh-setup/; ./deploy.sh -c "$(AUTH_PROVIDER)"
-else ifeq ($(RHDH_INSTALL_METHOD),olm)
-	cd ./ci-scripts/rhdh-setup/; ./deploy.sh -o -c "$(AUTH_PROVIDER)"
-endif
-	date --utc -Ins>$(TMP_DIR)/populate-after
-
 ## Undeploy RHDH with Helm
 .PHONY: undeploy-rhdh-helm
 undeploy-rhdh-helm:

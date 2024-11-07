@@ -62,7 +62,3 @@ trap kill_rate_limits EXIT
 
 echo "$(date --utc -Ins) Running deployment script"
 make ci-deploy
-
-if [ "$PRE_LOAD_DB" == "true" ]; then
-    make populate-rhdh
-fi

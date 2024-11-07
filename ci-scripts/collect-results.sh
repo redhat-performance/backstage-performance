@@ -112,29 +112,38 @@ if [ "$PRE_LOAD_DB" == "true" ]; then
     mstart=$(date --utc --date "$(cat "${ARTIFACT_DIR}/populate-before")" --iso-8601=seconds)
     mend=$(date --utc --date "$(cat "${ARTIFACT_DIR}/populate-after")" --iso-8601=seconds)
     mhost=$(kubectl -n openshift-monitoring get route -l app.kubernetes.io/name=thanos-query -o json | jq --raw-output '.items[0].spec.host')
+
     deploy_started=$(cat "${ARTIFACT_DIR}/deploy-before")
     deploy_ended=$(cat "${ARTIFACT_DIR}/deploy-after")
+    deploy_duration="$(timestamp_diff "$deploy_started" "$deploy_ended")"
+
     populate_started=$(cat "${ARTIFACT_DIR}/populate-before")
     populate_ended=$(cat "${ARTIFACT_DIR}/populate-after")
+    populate_duration="$(timestamp_diff "$populate_started" "$populate_ended")"
+
     populate_users_groups_started=$(cat "${ARTIFACT_DIR}/populate-users-groups-before")
     populate_users_groups_ended=$(cat "${ARTIFACT_DIR}/populate-users-groups-after")
+    populate_users_groups_duration="$(timestamp_diff "$populate_users_groups_started" "$populate_users_groups_ended")"
+
     populate_catalog_started=$(cat "${ARTIFACT_DIR}/populate-catalog-before")
     populate_catalog_ended=$(cat "${ARTIFACT_DIR}/populate-catalog-after")
+    populate_catalog_duration="$(timestamp_diff "$populate_catalog_started" "$populate_catalog_ended")"
+
     status_data.py \
         --status-data-file "$monitoring_collection_data" \
         --set \
         measurements.timings.deploy.started="$deploy_started" \
         measurements.timings.deploy.ended="$deploy_ended" \
-        measurements.timings.deploy.duration="$(timestamp_diff "$deploy_started" "$deploy_ended")" \
+        measurements.timings.deploy.duration="$deploy_duration" \
         measurements.timings.populate.started="$populate_started" \
         measurements.timings.populate.ended="$populate_ended" \
-        measurements.timings.populate.duration="$(timestamp_diff "$populate_started" "$populate_ended")" \
+        measurements.timings.populate.duration="$populate_duration" \
         measurements.timings.populate_users_groups.started="$populate_users_groups_started" \
         measurements.timings.populate_users_groups.ended="$populate_users_groups_ended" \
-        measurements.timings.populate_users_groups.duration="$(timestamp_diff "$populate_users_groups_started" "$populate_users_groups_ended")" \
+        measurements.timings.populate_users_groups.duration="$populate_users_groups_duration" \
         measurements.timings.populate_catalog.started="$populate_catalog_started" \
         measurements.timings.populate_catalog.ended="$populate_catalog_ended" \
-        measurements.timings.populate_catalog.duration="$(timestamp_diff "$populate_catalog_started" "$populate_catalog_ended")" \
+        measurements.timings.populate_catalog.duration="$populate_catalog_duration" \
         -d &>"$monitoring_collection_log"
     status_data.py \
         --status-data-file "$monitoring_collection_data" \
