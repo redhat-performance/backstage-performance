@@ -242,6 +242,7 @@ backstage_install() {
         until $clin create -f "$TMP_DIR/rbac-config.yaml"; do $clin delete configmap rbac-policy --ignore-not-found=true; done
     fi
     envsubst <template/backstage/plugin-secrets.yaml | $clin apply -f -
+    until $clin create -f "template/backstage/techdocs-pvc.yaml"; do $clin delete pvc rhdh-techdocs --ignore-not-found=true; done
     if [ "$INSTALL_METHOD" == "helm" ]; then
         install_rhdh_with_helm
     elif [ "$INSTALL_METHOD" == "olm" ]; then

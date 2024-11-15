@@ -26,7 +26,7 @@ extraContainers:
     containerPort: 4180
     protocol: TCP
   imagePullPolicy: IfNotPresent
-  image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+  image: quay.io/oauth2-proxy/oauth2-proxy:v7.7.1
   args:
   - "--provider=oidc"
   - "--email-domain=*"

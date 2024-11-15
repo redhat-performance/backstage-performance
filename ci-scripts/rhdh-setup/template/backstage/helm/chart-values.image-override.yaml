@@ -6,7 +6,12 @@ global:
     includes:
       - dynamic-plugins.default.yaml
     plugins:
-      - package: ./dynamic-plugins/dist/janus-idp-backstage-plugin-keycloak-backend-dynamic
+      - package: ./dynamic-plugins/dist/backstage-community-plugin-catalog-backend-module-keycloak-dynamic
+        disabled: false
+      # TechDocs
+      - package: ./dynamic-plugins/dist/backstage-plugin-techdocs
+        disabled: false
+      - package: ./dynamic-plugins/dist/backstage-plugin-techdocs-backend-dynamic
         disabled: false
 route:
   enabled: true
@@ -21,11 +26,11 @@ upstream:
   backstage:
     appConfig:
       app:
-        baseUrl: 'https://{{- include "janus-idp.hostname" . }}'
+        baseUrl: "https://${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}"
       backend:
-        baseUrl: 'https://{{- include "janus-idp.hostname" . }}'
+        baseUrl: "https://${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}"
         cors:
-          origin: 'https://{{- include "janus-idp.hostname" . }}'
+          origin: "https://${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}"
         database:
           connection:
             password: "${POSTGRESQL_ADMIN_PASSWORD}"
@@ -88,7 +93,6 @@ upstream:
       - name: NODE_TLS_REJECT_UNAUTHORIZED
         value: "0"
     image:
-      debug: false
       pullPolicy: Always
       registry: ${RHDH_IMAGE_REGISTRY}
       repository: ${RHDH_IMAGE_REPO}
@@ -146,6 +150,7 @@ upstream:
         enabled: false
     architecture: replication
     replication:
+      enabled: true
       synchronousCommit: "on"
       numSynchronousReplicas: ${RHDH_DB_REPLICAS}
       applicationName: "${RHDH_HELM_RELEASE_NAME}"
