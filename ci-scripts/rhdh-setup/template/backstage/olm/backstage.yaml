@@ -1,4 +1,4 @@
-apiVersion: rhdh.redhat.com/v1alpha2
+apiVersion: rhdh.redhat.com/v1alpha3
 kind: Backstage
 metadata:
   name: developer-hub
@@ -34,14 +34,10 @@ spec:
           name: keycloak-client-secret-backstage
         - key: BACKEND_SECRET
           name: rhdh-backend-secret
+    imagePullSecrets:
+      - rhdh-pull-secret
+    replicas: ${RHDH_DEPLOYMENT_REPLICAS}
     route:
       enabled: true
   database:
     enableLocalDb: true
-  deployment:
-    spec:
-      replicas: ${RHDH_DEPLOYMENT_REPLICAS}
-      template:
-        spec:
-          imagePullSecrets:
-            - rhdh-pull-secret

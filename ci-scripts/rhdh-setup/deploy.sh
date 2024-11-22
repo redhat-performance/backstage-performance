@@ -210,6 +210,24 @@ create_objs() {
     fi
 }
 
+# TODO: remove once https://issues.redhat.com/browse/RHIDP-4936 and https://issues.redhat.com/browse/RHIDP-4937 are fixed
+RHIDP-4936_RHIDP-4937_workaround() {
+    log_info "Applyling workaround for https://issues.redhat.com/browse/RHIDP-4936 and https://issues.redhat.com/browse/RHIDP-4937 issues"
+    pod=$($clin get pods -l app.kubernetes.io/instance=rhdh -o json | jq -rc '.items[] | select(.metadata.name | startswith("rhdh-developer-hub")).metadata.name')
+    for package in backstage-community-plugin-catalog-backend-module-keycloak-dynamic backstage-plugin-techdocs-backend-dynamic; do
+        log_info "Applying workaround for $package package"
+        $clin exec "$pod" -c backstage-backend -- bash -c "for i in \$(find /opt/app-root/src/dynamic-plugins-root -type d -name '$package*'); do cd \$i; npm install; done"
+    done
+    log_info "Restarting RHDH..."
+    if [ "$INSTALL_METHOD" == "helm" ]; then
+        rhdh_deployment="${RHDH_HELM_RELEASE_NAME}-developer-hub"
+    elif [ "$INSTALL_METHOD" == "olm" ]; then
+        rhdh_deployment=backstage-developer-hub
+    fi
+    $clin rollout restart deployment/"$rhdh_deployment"
+    wait_to_start deployment "$rhdh_deployment" 300 300
+}
+
 backstage_install() {
     log_info "Installing RHDH with install method: $INSTALL_METHOD"
     cp "template/backstage/app-config.yaml" "$TMP_DIR/app-config.yaml"
@@ -242,6 +260,7 @@ backstage_install() {
         until $clin create -f "$TMP_DIR/rbac-config.yaml"; do $clin delete configmap rbac-policy --ignore-not-found=true; done
     fi
     envsubst <template/backstage/plugin-secrets.yaml | $clin apply -f -
+    until $clin create -f "template/backstage/techdocs-pvc.yaml"; do $clin delete pvc rhdh-techdocs --ignore-not-found=true; done
     if [ "$INSTALL_METHOD" == "helm" ]; then
         install_rhdh_with_helm
     elif [ "$INSTALL_METHOD" == "olm" ]; then
@@ -258,6 +277,7 @@ backstage_install() {
         fi
         envsubst <template/backstage/rhdh-servicemonitor.yaml | $clin create -f -
     fi
+    RHIDP-4936_RHIDP-4937_workaround # TODO: remove once https://issues.redhat.com/browse/RHIDP-4936 and https://issues.redhat.com/browse/RHIDP-4937 are fixed
     log_info "RHDH Installed, waiting for the catalog to be populated"
     timeout=300
     timeout_timestamp=$(date -d "$timeout seconds" "+%s")
@@ -409,7 +429,7 @@ psql_debug() {
         rhdh_deployment=backstage-developer-hub
     fi
     if ${PSQL_LOG}; then
-        log_info "Setting ups PostgreSQL logging"
+        log_info "Setting up PostgreSQL logging"
         $clin exec "${psql_db}" -- sh -c "sed -i "s/^\s*#log_min_duration_statement.*/log_min_duration_statement=${LOG_MIN_DURATION_STATEMENT}/" /var/lib/pgsql/data/userdata/postgresql.conf "
         $clin exec "${psql_db}" -- sh -c "sed -i "s/^\s*#log_min_duration_sample.*/log_min_duration_sample=${LOG_MIN_DURATION_SAMPLE}/" /var/lib/pgsql/data/userdata/postgresql.conf "
         $clin exec "${psql_db}" -- sh -c "sed -i "s/^\s*#log_statement_sample_rate.*/log_statement_sample_rate=${LOG_STATEMENT_SAMPLE_RATE}/" /var/lib/pgsql/data/userdata/postgresql.conf "

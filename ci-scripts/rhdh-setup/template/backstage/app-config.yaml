@@ -1,5 +1,7 @@
 app:
   title: Red Hat Developer Hub
+organization:
+  name: RHDH Perf&Scale
 integrations:
   github:
     - host: github.com
@@ -20,6 +22,14 @@ catalog:
           frequency: { seconds: 30 }
           timeout: { minutes: 1 }
           initialDelay: { seconds: 15 }
+techdocs:
+  builder: local
+  generator:
+      runIn: local
+  publisher:
+    type: local
+    local:
+      publishDirectory: /opt/app-root/src/techdocs-data
 enabled:
   github: true
   keycloak: true

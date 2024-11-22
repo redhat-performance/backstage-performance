@@ -2,21 +2,19 @@
 extraVolumeMounts:
   - name: dynamic-plugins-root
     mountPath: /opt/app-root/src/dynamic-plugins-root
-  - name: diststatic
-    mountPath: /opt/app-root/src/packages/app/dist/static
+  - name: audit-log-data
+    mountPath: /var/log/redhat-developer-hub/audit
   - name: rbac-policy
     mountPath: /opt/app-root/src/rbac
+  - name: techdocs-data
+    mountPath: /opt/app-root/src/techdocs-data
 extraVolumes:
   - name: dynamic-plugins-root
-    ephemeral:
-      volumeClaimTemplate:
-        spec:
-          accessModes:
-            - ReadWriteOnce
-          resources:
-            requests:
-              # -- Size of the volume that will contain the dynamic plugins. It should be large enough to contain all the plugins.
-              storage: 2Gi
+    persistentVolumeClaim:
+      claimName: '{{ printf "%s-dynamic-plugins-root" .Release.Name }}'
+  - name: audit-log-data
+    persistentVolumeClaim:
+      claimName: '{{ printf "%s-audit-log" .Release.Name }}'
   - name: dynamic-plugins
     configMap:
       defaultMode: 420
@@ -31,10 +29,9 @@ extraVolumes:
       defaultMode: 420
       optional: true
       secretName: dynamic-plugins-npmrc
-  - name: npmcacache
-    emptyDir: {}
-  - name: diststatic
-    emptyDir: {}
+  - name: techdocs-data
+    persistentVolumeClaim:
+      claimName: rhdh-techdocs
 initContainers:
   - name: install-dynamic-plugins
     image: '{{ include "backstage.image" . }}'
@@ -56,6 +53,4 @@ initContainers:
         name: dynamic-plugins-npmrc
         readOnly: true
         subPath: .npmrc
-      - mountPath: /opt/app-root/src/.npm/_cacache
-        name: npmcacache
     workingDir: /opt/app-root/src
