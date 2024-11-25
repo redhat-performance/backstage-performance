@@ -1,1 +1,1 @@
-https://files.pythonhosted.org/packages/54/7d/a3ec175a32df99968cec4909b69b1c05cb9367f55c058c46fb7bfe4625aa/locust-2.18.1-py3-none-any.whl
+locust==2.32.2
