@@ -1,5 +1,6 @@
 global:
   clusterRouterBase: ${OPENSHIFT_APP_DOMAIN}
+  host: "${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}"
   imagePullSecrets:
     - rhdh-pull-secret
   dynamic:
@@ -15,7 +16,7 @@ global:
         disabled: false
 route:
   enabled: true
-  host: "{{ .Values.global.host }}"
+  host: "${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}"
   path: /
   tls:
     enabled: true

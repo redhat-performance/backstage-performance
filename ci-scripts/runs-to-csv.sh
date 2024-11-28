@@ -22,6 +22,7 @@ Started,\
 Ended,\
 Duration,\
 Scenario,\
+ActiveUsers,\
 USERS,\
 SPAWN_RATE,\
 WORKERS,\
@@ -91,6 +92,7 @@ find "${1:-.}" -name benchmark.json -print0 | while IFS= read -r -d '' filename;
         .measurements.timings.benchmark.ended,
         .measurements.timings.benchmark.duration,
         .metadata.scenario.name,
+        .results.locust_users.max,
         .metadata.env.USERS,
         .metadata.env.SPAWN_RATE,
         .metadata.env.WORKERS,

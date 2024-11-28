@@ -2,8 +2,6 @@
 extraVolumeMounts:
   - name: dynamic-plugins-root
     mountPath: /opt/app-root/src/dynamic-plugins-root
-  - name: audit-log-data
-    mountPath: /var/log/redhat-developer-hub/audit
   - name: rbac-policy
     mountPath: /opt/app-root/src/rbac
   - name: techdocs-data
@@ -12,9 +10,6 @@ extraVolumes:
   - name: dynamic-plugins-root
     persistentVolumeClaim:
       claimName: '{{ printf "%s-dynamic-plugins-root" .Release.Name }}'
-  - name: audit-log-data
-    persistentVolumeClaim:
-      claimName: '{{ printf "%s-audit-log" .Release.Name }}'
   - name: dynamic-plugins
     configMap:
       defaultMode: 420

@@ -11,10 +11,10 @@ config:
   loadGenerationPods:
     resource:
       cpuRequest: 250m
-      memRequest: 128Mi
+      memRequest: 256Mi
       ephemeralRequest: 30Mi
-      cpuLimit: 2000m
-      memLimit: 2Gi
+      cpuLimit: 250m
+      memLimit: 256Mi
       ephemeralLimit: 100Mi
     metricsExporter:
       image: "quay.io/backstage-performance/locust_exporter:latest"

@@ -270,6 +270,8 @@ backstage_install() {
         return 1
     fi
     date --utc -Ins >"${TMP_DIR}/populate-before"
+    # shellcheck disable=SC2064
+    trap "date --utc -Ins >'${TMP_DIR}/populate-after'" EXIT
     if ${RHDH_METRIC}; then
         log_info "Setting up RHDH metrics"
         if [ "${AUTH_PROVIDER}" == "keycloak" ]; then
@@ -279,7 +281,7 @@ backstage_install() {
     fi
     RHIDP-4936_RHIDP-4937_workaround # TODO: remove once https://issues.redhat.com/browse/RHIDP-4936 and https://issues.redhat.com/browse/RHIDP-4937 are fixed
     log_info "RHDH Installed, waiting for the catalog to be populated"
-    timeout=300
+    timeout=600
     timeout_timestamp=$(date -d "$timeout seconds" "+%s")
     last_count=-1
     for entity_type in Component Api; do
@@ -315,7 +317,6 @@ backstage_install() {
             sleep 10s
         done
     done
-    date --utc -Ins >"${TMP_DIR}/populate-after"
 }
 
 # shellcheck disable=SC2016,SC1004
