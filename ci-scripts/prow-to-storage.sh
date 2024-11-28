@@ -3,25 +3,11 @@
 CACHE_DIR="prow-to-storage-cache-dir"
 PROW_ARTIFACT_PATH="redhat-performance-backstage-performance/artifacts/benchmark.json"
 ES_HOST="http://elasticsearch.intlab.perf-infra.lab.eng.rdu2.redhat.com"
-ES_INDEX="backstage_ci_status_data"
 HORREUM_HOST="https://horreum.corp.redhat.com"
-HORREUM_KEYCLOAK_HOST="https://horreum-keycloak.corp.redhat.com"
 HORREUM_TEST_NAME="rhdh-load-test"
 HORREUM_TEST_SCHEMA="urn:rhdh-perf-team-load-test:1.0"
 HORREUM_TEST_OWNER="rhdh-perf-test-team"
 HORREUM_TEST_ACCESS="PUBLIC"
-
-mkdir -p "$CACHE_DIR"
-
-if ! type jq >/dev/null; then
-    fatal "Please install jq"
-fi
-if ! type shovel.py >/dev/null; then
-    fatal "shovel.py utility not available"
-fi
-if [ -z "$HORREUM_JHUTAR_PASSWORD" ]; then
-    fatal "Please provide HORREUM_JHUTAR_PASSWORD variable"
-fi
 
 function _log() {
     echo "$(date -Ins --utc) $1 $2" >&1
@@ -47,6 +33,18 @@ function fatal() {
     _log FATAL "$1"
     exit 1
 }
+
+mkdir -p "$CACHE_DIR"
+
+if ! type jq >/dev/null; then
+    fatal "Please install jq"
+fi
+if ! type shovel.py >/dev/null; then
+    fatal "shovel.py utility not available"
+fi
+if [ -z "$HORREUM_API_TOKEN" ]; then
+    fatal "Please provide HORREUM_API_TOKEN variable"
+fi
 
 function format_date() {
     date -d "$1" +%FT%TZ --utc
@@ -123,15 +121,8 @@ function upload_horreum() {
     local f="$1"
 
     debug "Uploading file $f to Horreum"
-    shovel.py horreum --base-url "$HORREUM_HOST" --keycloak-url "$HORREUM_KEYCLOAK_HOST" --username "jhutar@redhat.com" --password "$HORREUM_JHUTAR_PASSWORD" upload --test-name "$HORREUM_TEST_NAME" --input-file "$f" --matcher-field ".metadata.env.BUILD_ID" --matcher-label ".metadata.env.BUILD_ID" --start "@measurements.timings.benchmark.started" --end "@measurements.timings.benchmark.ended" --owner "$HORREUM_TEST_OWNER" --access "$HORREUM_TEST_ACCESS"
-    shovel.py horreum --base-url "$HORREUM_HOST" --keycloak-url "$HORREUM_KEYCLOAK_HOST" --username "jhutar@redhat.com" --password "$HORREUM_JHUTAR_PASSWORD" result --test-name "$HORREUM_TEST_NAME" --output-file "$f" --start "@measurements.timings.benchmark.started" --end "@measurements.timings.benchmark.ended"
-}
-
-function upload_es() {
-    local f="$1"
-
-    debug "Uploading file $f to OpenSearch"
-    shovel.py opensearch --base-url "$ES_HOST" --index "$ES_INDEX" upload --input-file "$f" --matcher-field ".metadata.env.BUILD_ID"
+    shovel.py horreum --base-url "$HORREUM_HOST" --api-token "$HORREUM_API_TOKEN" upload --test-name "$HORREUM_TEST_NAME" --input-file "$f" --matcher-field ".metadata.env.BUILD_ID" --matcher-label ".metadata.env.BUILD_ID" --start "@measurements.timings.benchmark.started" --end "@measurements.timings.benchmark.ended" --owner "$HORREUM_TEST_OWNER" --access "$HORREUM_TEST_ACCESS"
+    shovel.py horreum --base-url "$HORREUM_HOST" --api-token "$HORREUM_API_TOKEN" result --test-name "$HORREUM_TEST_NAME" --output-file "$f" --start "@measurements.timings.benchmark.started" --end "@measurements.timings.benchmark.ended"
 }
 
 function upload_resultsdashboard() {
@@ -155,7 +146,6 @@ for job in "mvp-cpt"; do
         check_result "$out" || continue
         enritch_stuff "$out" ".\"\$schema\"" "$HORREUM_TEST_SCHEMA"
         upload_horreum "$out"
-        upload_es "$out"
         upload_resultsdashboard "$out" || true
         ((counter++)) || true
     done
