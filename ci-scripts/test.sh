@@ -10,8 +10,9 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1090,SC1091
 source "$(readlink -m "$SCRIPT_DIR"/../test.env)"
 
-export SCENARIO RHDH_INSTALL_METHOD AUTH_PROVIDER
+export SCENARIO RHDH_INSTALL_METHOD AUTH_PROVIDER RHDH_NAMESPACE
 
+RHDH_NAMESPACE=${RHDH_NAMESPACE:-rhdh-performance}
 RHDH_INSTALL_METHOD=${RHDH_INSTALL_METHOD:-helm}
 AUTH_PROVIDER=${AUTH_PROVIDER:-keycloak}
 
@@ -28,13 +29,13 @@ elif [ "$RHDH_INSTALL_METHOD" == "helm" ]; then
     RHDH_HELM_RELEASE_NAME=${RHDH_HELM_RELEASE_NAME:-rhdh}
     RHDH_HELM_CHART=${RHDH_HELM_CHART:-redhat-developer-hub}
 
-    rhdh_route="${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}"
+    rhdh_route="$(oc -n "${RHDH_NAMESPACE}" get routes -l app.kubernetes.io/instance="${RHDH_HELM_RELEASE_NAME}" -o jsonpath='{.items[0].metadata.name}')"
 else
     echo "Invalid RHDH install method: $RHDH_INSTALL_METHOD"
     exit 1
 fi
 export HOST
-HOST="https://$(oc get routes "$rhdh_route" -n "${RHDH_NAMESPACE:-rhdh-performance}" -o jsonpath='{.spec.host}')"
+HOST="https://$(oc get routes "$rhdh_route" -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')"
 # end-of testing env
 
 ARTIFACT_DIR=$(readlink -m "${ARTIFACT_DIR:-.artifacts}")

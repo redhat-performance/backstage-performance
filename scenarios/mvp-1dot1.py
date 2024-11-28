@@ -115,16 +115,14 @@ def on_test_start(environment, **_kwargs):
 
         worker_count = environment.runner.worker_count
         chunk_size = int(len(users) / worker_count)
+        chunk_leftover = int(len(users) % worker_count)
 
         for i, worker in enumerate(environment.runner.clients):
             start_index = i * chunk_size
-
-            if i + 1 < worker_count:
-                end_index = start_index + chunk_size
-            else:
-                end_index = len(users)
-
+            end_index = start_index + chunk_size
             data = users[start_index:end_index]
+            if chunk_leftover > 0 and chunk_leftover > i:
+                data.append(users[worker_count * chunk_size + i])
             environment.runner.send_message("test_users", data, worker)
 
 
@@ -173,7 +171,10 @@ class MVP1dot1Test(HttpUser):
         super().__init__(parent)
         self.HEADER = ''
         if self.environment.parsed_options.keycloak_host:
-            self.USERNAME = usernames.pop()
+            if len(usernames) > 0:
+                self.USERNAME = usernames.pop()
+            else:
+                self.USERNAME = "t1"
             kc_host = self.environment.parsed_options.keycloak_host
             self.KEYCLOAK_URL = f'https://{kc_host}/auth'
             bs_host = self.environment.host

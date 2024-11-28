@@ -47,7 +47,7 @@ echo
 wait_for_indexing() {
     COOKIE="$TMP_DIR/cookie.jar"
     if [ "$INSTALL_METHOD" == "helm" ]; then
-        rhdh_route="${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}"
+        rhdh_route="$(oc -n "${RHDH_NAMESPACE}" get routes -l app.kubernetes.io/instance="${RHDH_HELM_RELEASE_NAME}" -o jsonpath='{.items[0].metadata.name}')"
     else
         if [ "$AUTH_PROVIDER" == "keycloak" ]; then
             rhdh_route="rhdh"
