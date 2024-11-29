@@ -124,6 +124,15 @@ upstream:
     primary:
       containerSecurityContext:
         enabled: false
+      resources:
+        requests:
+          cpu: 250m
+          ephemeral-storage: 20Mi
+          memory: 256Mi
+        limits:
+          cpu: 2000m
+          memory: 8Gi
+          ephemeral-storage: 5Gi
       extraEnvVars:
         - name: POSTGRESQL_ADMIN_PASSWORD
           valueFrom:
