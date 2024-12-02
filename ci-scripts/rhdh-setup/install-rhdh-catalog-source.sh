@@ -29,6 +29,11 @@ NC='\033[0m'
 NAMESPACE_CATALOGSOURCE="openshift-marketplace"
 NAMESPACE_SUBSCRIPTION="${NAMESPACE_SUBSCRIPTION:-rhdh-operator}"
 OLM_CHANNEL="${OLM_CHANNEL:-fast}"
+WATCH_EXT_CONF="${WATCH_EXT_CONF:-true}"
+RHDH_OLM_OPERATOR_RESOURCES_CPU_REQUESTS=${RHDH_OLM_OPERATOR_RESOURCES_CPU_REQUESTS:-}
+RHDH_OLM_OPERATOR_RESOURCES_CPU_LIMITS=${RHDH_OLM_OPERATOR_RESOURCES_CPU_LIMITS:-}
+RHDH_OLM_OPERATOR_RESOURCES_MEMORY_REQUESTS=${RHDH_OLM_OPERATOR_RESOURCES_MEMORY_REQUESTS:-}
+RHDH_OLM_OPERATOR_RESOURCES_MEMORY_LIMITS=${RHDH_OLM_OPERATOR_RESOURCES_MEMORY_LIMITS:-}
 
 errorf() {
   echo -e "${RED}$1${NC}"
@@ -249,8 +254,8 @@ metadata:
   name: rhdh-operator-group
   namespace: ${NAMESPACE_SUBSCRIPTION}
 " >"$TMPDIR"/OperatorGroup.yml && oc apply -f "$TMPDIR"/OperatorGroup.yml
-
 # Create subscription for operator
+subscription="$TMPDIR/Subscription.yaml"
 echo "apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
 metadata:
@@ -262,4 +267,15 @@ spec:
   name: $TO_INSTALL
   source: ${CATALOGSOURCE_NAME}
   sourceNamespace: ${NAMESPACE_CATALOGSOURCE}
-" >"$TMPDIR"/Subscription.yml && oc apply -f "$TMPDIR"/Subscription.yml
+  config:
+    env:
+    - name: WATCH_EXT_CONF_backstage
+      value: \"${WATCH_EXT_CONF}\"
+" >"$subscription"
+
+if [ -n "${RHDH_OLM_OPERATOR_RESOURCES_CPU_REQUESTS}" ]; then yq -i '.spec.config.resources.requests.cpu = "'"${RHDH_OLM_OPERATOR_RESOURCES_CPU_REQUESTS}"'"' "$subscription"; fi
+if [ -n "${RHDH_OLM_OPERATOR_RESOURCES_CPU_LIMITS}" ]; then yq -i '.spec.config.resources.limits.cpu = "'"${RHDH_OLM_OPERATOR_RESOURCES_CPU_LIMITS}"'"' "$subscription"; fi
+if [ -n "${RHDH_OLM_OPERATOR_RESOURCES_MEMORY_REQUESTS}" ]; then yq -i '.spec.config.resources.requests.memory = "'"${RHDH_OLM_OPERATOR_RESOURCES_MEMORY_REQUESTS}"'"' "$subscription"; fi
+if [ -n "${RHDH_OLM_OPERATOR_RESOURCES_MEMORY_LIMITS}" ]; then yq -i '.spec.config.resources.limits.memory = "'"${RHDH_OLM_OPERATOR_RESOURCES_MEMORY_LIMITS}"'"' "$subscription"; fi
+
+oc apply -f "$subscription"

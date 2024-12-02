@@ -80,62 +80,62 @@ objects:
     metadata:
       name: perf-test-secret-10
   - apiVersion: v1
-    kind: ConfigMap
-    data:
-      config: value
+    kind: Secret
+    stringData:
+      secret: value # notsecret
     metadata:
-      name: perf-test-configmap-1
+      name: perf-test-secret-11
   - apiVersion: v1
-    kind: ConfigMap
-    data:
-      config: value
+    kind: Secret
+    stringData:
+      secret: value # notsecret
     metadata:
-      name: perf-test-configmap-2
+      name: perf-test-secret-12
   - apiVersion: v1
-    kind: ConfigMap
-    data:
-      config: value
+    kind: Secret
+    stringData:
+      secret: value # notsecret
     metadata:
-      name: perf-test-configmap-3
+      name: perf-test-secret-13
   - apiVersion: v1
-    kind: ConfigMap
-    data:
-      config: value
+    kind: Secret
+    stringData:
+      secret: value # notsecret
     metadata:
-      name: perf-test-configmap-4
+      name: perf-test-secret-14
   - apiVersion: v1
-    kind: ConfigMap
-    data:
-      config: value
+    kind: Secret
+    stringData:
+      secret: value # notsecret
     metadata:
-      name: perf-test-configmap-5
+      name: perf-test-secret-15
   - apiVersion: v1
-    kind: ConfigMap
-    data:
-      config: value
+    kind: Secret
+    stringData:
+      secret: value # notsecret
     metadata:
-      name: perf-test-configmap-6
+      name: perf-test-secret-16
   - apiVersion: v1
-    kind: ConfigMap
-    data:
-      config: value
+    kind: Secret
+    stringData:
+      secret: value # notsecret
     metadata:
-      name: perf-test-configmap-7
+      name: perf-test-secret-17
   - apiVersion: v1
-    kind: ConfigMap
-    data:
-      config: value
+    kind: Secret
+    stringData:
+      secret: value # notsecret
     metadata:
-      name: perf-test-configmap-8
+      name: perf-test-secret-18
   - apiVersion: v1
-    kind: ConfigMap
-    data:
-      config: value
+    kind: Secret
+    stringData:
+      secret: value # notsecret
     metadata:
-      name: perf-test-configmap-9
+      name: perf-test-secret-19
   - apiVersion: v1
-    kind: ConfigMap
-    data:
-      config: value
+    kind: Secret
+    stringData:
+      secret: value # notsecret
     metadata:
-      name: perf-test-configmap-10
+      name: perf-test-secret-20
