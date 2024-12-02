@@ -44,6 +44,11 @@ OCP_VER="$(oc version -o json | jq -r '.openshiftVersion' | sed -r -e "s#([0-9]+
 export RHDH_OLM_INDEX_IMAGE="${RHDH_OLM_INDEX_IMAGE:-quay.io/rhdh/iib:1.4-v${OCP_VER}-x86_64}"
 export RHDH_OLM_CHANNEL=${RHDH_OLM_CHANNEL:-fast}
 export RHDH_OLM_OPERATOR_PACKAGE=${RHDH_OLM_OPERATOR_PACKAGE:-rhdh}
+export RHDH_OLM_WATCH_EXT_CONF=${RHDH_OLM_WATCH_EXT_CONF:-true}
+export RHDH_OLM_OPERATOR_RESOURCES_CPU_REQUESTS=${RHDH_OLM_OPERATOR_RESOURCES_CPU_REQUESTS:-}
+export RHDH_OLM_OPERATOR_RESOURCES_CPU_LIMITS=${RHDH_OLM_OPERATOR_RESOURCES_CPU_LIMITS:-}
+export RHDH_OLM_OPERATOR_RESOURCES_MEMORY_REQUESTS=${RHDH_OLM_OPERATOR_RESOURCES_MEMORY_REQUESTS:-}
+export RHDH_OLM_OPERATOR_RESOURCES_MEMORY_LIMITS=${RHDH_OLM_OPERATOR_RESOURCES_MEMORY_LIMITS:-}
 
 export PRE_LOAD_DB="${PRE_LOAD_DB:-true}"
 export BACKSTAGE_USER_COUNT="${BACKSTAGE_USER_COUNT:-1}"
@@ -375,13 +380,12 @@ install_rhdh_with_olm() {
     mark_resource_for_rhdh cm app-config-backend-secret
     cp template/backstage/olm/dynamic-plugins.configmap.yaml "$TMP_DIR/dynamic-plugins.configmap.yaml"
     if ${ENABLE_RBAC}; then
-        echo "      - package: ./dynamic-plugins/dist/janus-idp-backstage-plugin-rbac
-        disabled: false" >>"$TMP_DIR/dynamic-plugins.configmap.yaml"
+        cat template/backstage/olm/rbac-plugin-patch.yaml >>"$TMP_DIR/dynamic-plugins.configmap.yaml"
     fi
     $clin apply -f "$TMP_DIR/dynamic-plugins.configmap.yaml"
     mark_resource_for_rhdh cm dynamic-plugins-rhdh
     set -x
-    OLM_CHANNEL="${RHDH_OLM_CHANNEL}" UPSTREAM_IIB="${RHDH_OLM_INDEX_IMAGE}" NAMESPACE_SUBSCRIPTION="${RHDH_OPERATOR_NAMESPACE}" ./install-rhdh-catalog-source.sh --install-operator "${RHDH_OLM_OPERATOR_PACKAGE:-rhdh}"
+    OLM_CHANNEL="${RHDH_OLM_CHANNEL}" UPSTREAM_IIB="${RHDH_OLM_INDEX_IMAGE}" NAMESPACE_SUBSCRIPTION="${RHDH_OPERATOR_NAMESPACE}" WATCH_EXT_CONF="${RHDH_OLM_WATCH_EXT_CONF}" ./install-rhdh-catalog-source.sh --install-operator "${RHDH_OLM_OPERATOR_PACKAGE:-rhdh}"
     set +x
     wait_for_crd backstages.rhdh.redhat.com
 
@@ -391,6 +395,10 @@ install_rhdh_with_olm() {
 
     backstage_yaml="$TMP_DIR/backstage.yaml"
     envsubst <template/backstage/olm/backstage.yaml >"$backstage_yaml"
+    if [ -n "${RHDH_IMAGE_REGISTRY}${RHDH_IMAGE_REPO}${RHDH_IMAGE_TAG}" ]; then
+        echo "Using '$RHDH_IMAGE_REGISTRY/$RHDH_IMAGE_REPO:$RHDH_IMAGE_TAG' image for RHDH"
+        yq -i '(.spec.application.image |= "'"${RHDH_IMAGE_REGISTRY}/${RHDH_IMAGE_REPO}:${RHDH_IMAGE_TAG}"'")' "$backstage_yaml"
+    fi
     if ${ENABLE_RBAC}; then
         rbac_policy='[{"name": "rbac-policy"}]'
         yq -i '(.spec.application.extraFiles.configMaps |= (. // []) + '"$rbac_policy"')' "$backstage_yaml"
