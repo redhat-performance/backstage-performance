@@ -22,6 +22,9 @@ export DURATION ?= 1m
 # Used to set --spawn-rate option of locust CLI (Rate to spawn users at (users per second)).  See https://docs.locust.io/en/stable/configuration.html#command-line-options for details
 export SPAWN_RATE ?= 20
 
+# Used to set logging level of RHDH
+export RHDH_LOG_LEVEL ?= warn
+
 # RHDH image to deploy. Uncomment and set to override RHDH image to deploy and test.
 export RHDH_IMAGE_REGISTRY ?=
 export RHDH_IMAGE_REPO ?=

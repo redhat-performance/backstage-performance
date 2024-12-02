@@ -55,6 +55,7 @@ export AUTH_PROVIDER="${AUTH_PROVIDER:-''}"
 export ENABLE_RBAC="${ENABLE_RBAC:-false}"
 export ENABLE_PROFILING="${ENABLE_PROFILING:-false}"
 export RBAC_POLICY="${RBAC_POLICY:-all_groups_admin}"
+export RHDH_LOG_LEVEL="${RHDH_LOG_LEVEL:-warn}"
 
 export PSQL_LOG="${PSQL_LOG:-true}"
 export RHDH_METRIC="${RHDH_METRIC:-true}"
@@ -362,6 +363,7 @@ install_rhdh_with_helm() {
             ${RHDH_IMAGE_TAG} \
             ${RHDH_NAMESPACE} \
             ${RHDH_METRIC} \
+            ${RHDH_LOG_LEVEL} \
             ${COOKIE_SECRET} \
             ' <"$TMP_DIR/chart-values.temp.yaml" >"$TMP_DIR/chart-values.yaml"
     if [ -n "${RHDH_RESOURCES_CPU_REQUESTS}" ]; then yq -i '.upstream.backstage.resources.requests.cpu = "'"${RHDH_RESOURCES_CPU_REQUESTS}"'"' "$TMP_DIR/chart-values.yaml"; fi
