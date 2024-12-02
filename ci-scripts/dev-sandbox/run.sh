@@ -66,6 +66,7 @@ RHDH_BASE_URL="https://$(oc get routes "$rhdh_route" -n "${RHDH_NAMESPACE:-rhdh-
 
 envsubst <"$SCRIPT_DIR/rhdh-perf-workloads.template.yaml" >"$TMP_DIR/rhdh-perf.workloads.yaml"
 template="${1:-"$TMP_DIR/rhdh-perf.workloads.yaml"}"
+date --utc -Ins>"${ARTIFACT_DIR}/benchmark-before"
 for r in $(seq -w 1 "${2:-10}"); do
     TEST_ID="run$r"
     echo "Running $TEST_ID"
@@ -75,3 +76,4 @@ for r in $(seq -w 1 "${2:-10}"); do
     yes | $cmd |& tee "$TEST_ID.log" && out="tmp/results/$(date +%F_%T)-counts.csv"
     collect_counts "$TEST_ID-counts-post"
 done
+date --utc -Ins>"${ARTIFACT_DIR}/benchmark-after"

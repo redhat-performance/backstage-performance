@@ -1,3 +1,2 @@
----
-- package: ./dynamic-plugins/dist/backstage-community-plugin-rbac
-  disabled: false
+      - package: ./dynamic-plugins/dist/backstage-community-plugin-rbac
+        disabled: false
