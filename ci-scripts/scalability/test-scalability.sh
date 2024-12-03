@@ -35,6 +35,8 @@ read -ra replicas <<<"${SCALE_REPLICAS:-5}"
 
 read -ra db_storages <<<"${SCALE_DB_STORAGES:-1Gi 2Gi}"
 
+read -ra db_profile <<<"${SCALE_PROFILE:-default}"
+
 read -ra cpu_requests_limits <<<"${SCALE_CPU_REQUESTS_LIMITS:-:}"
 
 read -ra memory_requests_limits <<<"${SCALE_MEMORY_REQUESTS_LIMITS:-:}"
@@ -108,6 +110,7 @@ for w in "${workers[@]}"; do
                         [[ "${#tokens[@]}" == 1 ]] && c="" || c="${tokens[1]}" # components
                         for r in "${replicas[@]}"; do
                             for s in "${db_storages[@]}"; do
+                             for pr in "${db_profile[@]}"; do
                                 echo
                                 echo "/// Setting up RHDH for scalability test ///"
                                 echo
@@ -126,7 +129,8 @@ for w in "${workers[@]}"; do
                                 export WORKERS=$w
                                 export API_COUNT=$a
                                 export COMPONENT_COUNT=$c
-                                index="${r}r-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c"
+                                export PSQL_PROFILE=$pr
+                                index="${r}r-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c-${pr}"
                                 set +x
                                 oc login "$OPENSHIFT_API" -u "$OPENSHIFT_USERNAME" -p "$OPENSHIFT_PASSWORD" --insecure-skip-tls-verify=true
                                 make clean-local undeploy-rhdh
@@ -154,6 +158,7 @@ for w in "${workers[@]}"; do
                                     ARTIFACT_DIR=$test_artifacts ./ci-scripts/test.sh |& tee "$test_artifacts/test.log"
                                     ARTIFACT_DIR=$test_artifacts ./ci-scripts/collect-results.sh |& tee "$test_artifacts/collect-results.log"
                                 done
+                             done
                             done
                         done
                     done

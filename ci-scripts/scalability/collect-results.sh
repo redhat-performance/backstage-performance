@@ -32,6 +32,8 @@ read -ra db_storages <<<"${SCALE_DB_STORAGES:-1Gi 2Gi}"
 
 read -ra cpu_requests_limits <<<"${SCALE_CPU_REQUESTS_LIMITS:-:}"
 
+read -ra db_profile <<<"${SCALE_PROFILE:-default}"
+
 read -ra memory_requests_limits <<<"${SCALE_MEMORY_REQUESTS_LIMITS:-:}"
 
 csv_delim=";"
@@ -46,11 +48,12 @@ for w in "${workers[@]}"; do
             [[ "${#tokens[@]}" == 1 ]] && bg="" || bg="${tokens[1]}" # backstage groups
             for rbs in "${rbac_policy_size[@]}"; do
                 for s in "${db_storages[@]}"; do
+                 for pr in "${db_profile[@]}"; do
                     for au_sr in "${active_users_spawn_rate[@]}"; do
                         IFS=":" read -ra tokens <<<"${au_sr}"
                         active_users=${tokens[0]}
-                        output="$ARTIFACT_DIR/scalability_c-${r}r-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${active_users}u.csv"
-                        header="CatalogSize${csv_delim}Apis${csv_delim}Components${csv_delim}MaxActiveUsers${csv_delim}AverageRPS${csv_delim}MaxRPS${csv_delim}AverageRT${csv_delim}MaxRT${csv_delim}Failures${csv_delim}FailRate${csv_delim}DBStorageUsed${csv_delim}DBStorageAvailable${csv_delim}DBStorageCapacity"
+                        output="$ARTIFACT_DIR/scalability_c-${r}r-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${active_users}u-${pr}.csv"
+                        header="CatalogSize${csv_delim}Apis${csv_delim}Components${csv_delim}MaxActiveUsers${csv_delim}AverageRPS${csv_delim}MaxRPS${csv_delim}AverageRT${csv_delim}MaxRT${csv_delim}Failures${csv_delim}FailRate${csv_delim}DBStorageUsed${csv_delim}DBStorageAvailable${csv_delim}DBStorageCapacity${csv_delim}DBProfile"
                         for cr_cl in "${cpu_requests_limits[@]}"; do
                             IFS=":" read -ra tokens <<<"${cr_cl}"
                             cr="${tokens[0]}"                                        # cpu requests
@@ -64,7 +67,7 @@ for w in "${workers[@]}"; do
                                     IFS=":" read -ra tokens <<<"${a_c}"
                                     a="${tokens[0]}"                                       # apis
                                     [[ "${#tokens[@]}" == 1 ]] && c="" || c="${tokens[1]}" # components
-                                    index="${r}r-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c"
+                                    index="${r}r-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c-${pr}"
                                     iteration="${index}/test/${active_users}u"
                                     echo "[$iteration] Looking for benchmark.json..."
                                     benchmark_json="$(find "${ARTIFACT_DIR}" -name benchmark.json | grep "$iteration" || true)"
@@ -96,6 +99,7 @@ for w in "${workers[@]}"; do
                             done
                         done
                     done
+                 done
                 done
             done
         done
