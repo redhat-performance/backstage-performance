@@ -37,6 +37,8 @@ read -ra db_storages <<<"${SCALE_DB_STORAGES:-1Gi 2Gi}"
 
 read -ra db_profile <<<"${SCALE_PROFILE:-default}"
 
+read -ra test_time <<<"${SCALE_TIME=:-5m}"
+
 read -ra cpu_requests_limits <<<"${SCALE_CPU_REQUESTS_LIMITS:-:}"
 
 read -ra memory_requests_limits <<<"${SCALE_MEMORY_REQUESTS_LIMITS:-:}"
@@ -139,6 +141,7 @@ for w in "${workers[@]}"; do
                                 ARTIFACT_DIR=$setup_artifacts ./ci-scripts/setup.sh |& tee "$setup_artifacts/setup.log"
                                 wait_for_indexing |& tee "$setup_artifacts/after-setup-search.log"
                                 for au_sr in "${active_users_spawn_rate[@]}"; do
+                                 for td in "${test_time[@]}"; do 
                                     IFS=":" read -ra tokens <<<"${au_sr}"
                                     au=${tokens[0]}                                          # active users
                                     [[ "${#tokens[@]}" == 1 ]] && sr="" || sr="${tokens[1]}" # spawn rate
@@ -148,15 +151,16 @@ for w in "${workers[@]}"; do
                                     set -x
                                     export SCENARIO=${SCENARIO:-search-catalog}
                                     export USERS="${au}"
-                                    export DURATION=${DURATION:-5m}
+                                    export DURATION=${td}
                                     export SPAWN_RATE="${sr}"
                                     set +x
                                     make clean
-                                    test_artifacts="$SCALABILITY_ARTIFACTS/$index/test/${au}u"
+                                    test_artifacts="$SCALABILITY_ARTIFACTS/$index/test/${au}u${td}"
                                     mkdir -p "$test_artifacts"
                                     wait_for_indexing |& tee "$test_artifacts/before-test-search.log"
                                     ARTIFACT_DIR=$test_artifacts ./ci-scripts/test.sh |& tee "$test_artifacts/test.log"
                                     ARTIFACT_DIR=$test_artifacts ./ci-scripts/collect-results.sh |& tee "$test_artifacts/collect-results.log"
+                                 done
                                 done
                              done
                             done
