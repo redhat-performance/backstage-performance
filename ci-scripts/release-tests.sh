@@ -84,6 +84,6 @@ function storage_limit_test() {
 VERSION_OLD="1.3"
 VERSION_NEW="1.4"
 RHDH_HELM_REPO_OLD="https://charts.openshift.io/"
-RHDH_HELM_REPO_NEW="https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/refs/heads/redhat-developer-hub-1.4-69-CI/installation"
+RHDH_HELM_REPO_NEW="https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/refs/heads/redhat-developer-hub-1.4-117-CI/installation"
 entity_burden_test "RHIDP-4541"
 #storage_limit_test "RHIDP-4531"
