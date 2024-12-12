@@ -145,6 +145,7 @@ mark_resource_for_rhdh() {
 }
 
 install() {
+    setup_monitoring
     appurl=$(oc whoami --show-console)
     export OPENSHIFT_APP_DOMAIN=${appurl#*.}
     $cli create namespace "${RHDH_NAMESPACE}" --dry-run=client -o yaml | $cli apply -f -
@@ -157,7 +158,6 @@ install() {
 
     backstage_install |& tee -a "${TMP_DIR}/backstage-install.log"
     psql_debug
-    setup_monitoring
 
     log_info "Waiting for all the users and groups to be created in Keycloak"
     wait
@@ -473,26 +473,45 @@ psql_debug() {
 }
 
 setup_monitoring() {
-    log_info "Enabling user workload monitoring"
-    rm -f config.yaml
-    if oc -n openshift-monitoring get cm cluster-monitoring-config; then
-        oc -n openshift-monitoring extract configmap/cluster-monitoring-config --to=. --keys=config.yaml
-        sed -i '/^enableUserWorkload:/d' config.yaml
-        echo -e "\nenableUserWorkload: true" >>config.yaml
-        oc -n openshift-monitoring set data configmap/cluster-monitoring-config --from-file=config.yaml
+    log_info "Ensuring Prometheus persistent storage"
+    config="$TMP_DIR/cluster-monitoring-config.yaml"
+    rm -rvf "$config"
+    if $cli -n openshift-monitoring get cm cluster-monitoring-config; then
+        $cli -n openshift-monitoring extract configmap/cluster-monitoring-config --to=- --keys=config.yaml >"$config"
     else
-        cat <<EOD >config.yaml
+        cat <<EOD >"$config"
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: cluster-monitoring-config
   namespace: openshift-monitoring
 data:
-  config.yaml: |
-    enableUserWorkload: true
+  config.yaml: ""
 EOD
-        oc -n openshift-monitoring apply -f config.yaml
     fi
+
+    update_config=0
+    if [ "$(yq '.enableUserWorkload' "$config")" != "true" ]; then
+        yq -i '.enableUserWorkload = true' "$config"
+        update_config=1
+    fi
+
+    if [ "$(yq '.prometheusK8s.volumeClaimTemplate' "$config")" == "null" ]; then
+        yq -i '.prometheusK8s = {"volumeClaimTemplate":{"spec":{"storageClassName":"gp3-csi","volumeMode":"Filesystem","resources":{"requests":{"storage":"50Gi"}}}}}' "$config"
+        update_config=1
+    fi
+
+    if [ $update_config -gt 0 ]; then
+        log_info "Updating cluster monitoring config"
+        $cli -n openshift-monitoring set data configmap/cluster-monitoring-config --from-file=config.yaml="$config"
+
+        log_info "Restarting Prometheus"
+        oc -n openshift-monitoring rollout restart statefulset/prometheus-k8s
+        oc -n openshift-monitoring rollout status statefulset/prometheus-k8s -w
+    fi
+
+    # Setup user workload monitoring
+    log_info "Enabling user workload monitoring"
     before=$(date --utc +%s)
     while true; do
         count=$(kubectl -n "openshift-user-workload-monitoring" get StatefulSet -l operator.prometheus.io/name=user-workload -o name 2>/dev/null | wc -l)
@@ -508,6 +527,32 @@ EOD
     kubectl -n openshift-user-workload-monitoring rollout status --watch --timeout=600s StatefulSet/prometheus-user-workload
     kubectl -n openshift-user-workload-monitoring wait --for=condition=ready pod -l app.kubernetes.io/component=prometheus
     kubectl -n openshift-user-workload-monitoring get pod
+
+    config="$TMP_DIR/user-workload-monitoring-config.yaml"
+    rm -rvf "$config"
+    if $cli -n openshift-user-workload-monitoring get cm user-workload-monitoring-config; then
+        $cli -n openshift-user-workload-monitoring extract configmap/user-workload-monitoring-config --to=- --keys=config.yaml >"$config"
+    else
+        cat <<EOD >"$config"
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: user-workload-monitoring-config
+  namespace: openshift-user-workload-monitoring
+data:
+  config.yaml: ""
+EOD
+    fi
+
+    if [ "$(yq '.prometheus.volumeClaimTemplate' "$config")" == "null" ]; then
+        yq -i '.prometheus = {"volumeClaimTemplate":{"spec":{"storageClassName":"gp3-csi","volumeMode":"Filesystem","resources":{"requests":{"storage":"10Gi"}}}}}' "$config"
+        log_info "Updating user workload monitoring config"
+        $cli -n openshift-user-workload-monitoring set data configmap/user-workload-monitoring-config --from-file=config.yaml="$config"
+
+        log_info "Restarting User Workload Prometheus"
+        oc -n openshift-user-workload-monitoring rollout restart statefulset/prometheus-user-workload
+        oc -n openshift-user-workload-monitoring rollout status statefulset/prometheus-user-workload -w
+    fi
 
     log_info "Setup monitoring"
     cat <<EOF | kubectl -n locust-operator apply -f -
