@@ -36,12 +36,12 @@ export RHDH_IMAGE_REGISTRY=${RHDH_IMAGE_REGISTRY:-}
 export RHDH_IMAGE_REPO=${RHDH_IMAGE_REPO:-}
 export RHDH_IMAGE_TAG=${RHDH_IMAGE_TAG:-}
 
-export RHDH_HELM_REPO=${RHDH_HELM_REPO:-https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/rhdh-1.3-rhel-9/installation}
+export RHDH_HELM_REPO=${RHDH_HELM_REPO:-https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/rhdh-1.4-rhel-9/installation}
 export RHDH_HELM_CHART=${RHDH_HELM_CHART:-redhat-developer-hub}
 export RHDH_HELM_CHART_VERSION=${RHDH_HELM_CHART_VERSION:-}
 
 OCP_VER="$(oc version -o json | jq -r '.openshiftVersion' | sed -r -e "s#([0-9]+\.[0-9]+)\..+#\1#")"
-export RHDH_OLM_INDEX_IMAGE="${RHDH_OLM_INDEX_IMAGE:-quay.io/rhdh/iib:1.3-v${OCP_VER}-x86_64}"
+export RHDH_OLM_INDEX_IMAGE="${RHDH_OLM_INDEX_IMAGE:-quay.io/rhdh/iib:1.4-v${OCP_VER}-x86_64}"
 export RHDH_OLM_CHANNEL=${RHDH_OLM_CHANNEL:-fast}
 export RHDH_OLM_OPERATOR_PACKAGE=${RHDH_OLM_OPERATOR_PACKAGE:-rhdh}
 
@@ -211,24 +211,6 @@ create_objs() {
     fi
 }
 
-# TODO: remove once https://issues.redhat.com/browse/RHIDP-4936 and https://issues.redhat.com/browse/RHIDP-4937 are fixed
-RHIDP-4936_RHIDP-4937_workaround() {
-    log_info "Applyling workaround for https://issues.redhat.com/browse/RHIDP-4936 and https://issues.redhat.com/browse/RHIDP-4937 issues"
-    pod=$($clin get pods -l app.kubernetes.io/instance=rhdh -o json | jq -rc '.items[] | select(.metadata.name | startswith("rhdh-developer-hub")).metadata.name')
-    for package in backstage-community-plugin-catalog-backend-module-keycloak-dynamic backstage-plugin-techdocs-backend-dynamic; do
-        log_info "Applying workaround for $package package"
-        $clin exec "$pod" -c backstage-backend -- bash -c "for i in \$(find /opt/app-root/src/dynamic-plugins-root -type d -name '$package*'); do cd \$i; npm install; done"
-    done
-    log_info "Restarting RHDH..."
-    if [ "$INSTALL_METHOD" == "helm" ]; then
-        rhdh_deployment="${RHDH_HELM_RELEASE_NAME}-developer-hub"
-    elif [ "$INSTALL_METHOD" == "olm" ]; then
-        rhdh_deployment=backstage-developer-hub
-    fi
-    $clin rollout restart deployment/"$rhdh_deployment"
-    wait_to_start deployment "$rhdh_deployment" 300 300
-}
-
 backstage_install() {
     log_info "Installing RHDH with install method: $INSTALL_METHOD"
     cp "template/backstage/app-config.yaml" "$TMP_DIR/app-config.yaml"
@@ -280,7 +262,6 @@ backstage_install() {
         fi
         envsubst <template/backstage/rhdh-servicemonitor.yaml | $clin create -f -
     fi
-    RHIDP-4936_RHIDP-4937_workaround # TODO: remove once https://issues.redhat.com/browse/RHIDP-4936 and https://issues.redhat.com/browse/RHIDP-4937 are fixed
     log_info "RHDH Installed, waiting for the catalog to be populated"
     timeout=600
     timeout_timestamp=$(date -d "$timeout seconds" "+%s")
