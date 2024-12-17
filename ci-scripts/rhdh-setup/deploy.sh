@@ -479,15 +479,8 @@ setup_monitoring() {
     if $cli -n openshift-monitoring get cm cluster-monitoring-config; then
         $cli -n openshift-monitoring extract configmap/cluster-monitoring-config --to=- --keys=config.yaml >"$config"
     else
-        cat <<EOD >"$config"
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: cluster-monitoring-config
-  namespace: openshift-monitoring
-data:
-  config.yaml: ""
-EOD
+        $cli -n openshift-monitoring create configmap cluster-monitoring-config
+        echo "" >"$config"
     fi
 
     update_config=0
@@ -497,7 +490,7 @@ EOD
     fi
 
     if [ "$(yq '.prometheusK8s.volumeClaimTemplate' "$config")" == "null" ]; then
-        yq -i '.prometheusK8s = {"volumeClaimTemplate":{"spec":{"storageClassName":"gp3-csi","volumeMode":"Filesystem","resources":{"requests":{"storage":"50Gi"}}}}}' "$config"
+        yq -i '.prometheusK8s = {"volumeClaimTemplate":{"spec":{"storageClassName":"gp3-csi","volumeMode":"Filesystem","resources":{"requests":{"storage":"30Gi"}}}}}' "$config"
         update_config=1
     fi
 
@@ -533,15 +526,8 @@ EOD
     if $cli -n openshift-user-workload-monitoring get cm user-workload-monitoring-config; then
         $cli -n openshift-user-workload-monitoring extract configmap/user-workload-monitoring-config --to=- --keys=config.yaml >"$config"
     else
-        cat <<EOD >"$config"
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: user-workload-monitoring-config
-  namespace: openshift-user-workload-monitoring
-data:
-  config.yaml: ""
-EOD
+        $cli -n openshift-user-workload-monitoring create configmap user-workload-monitoring-config
+        echo "" >"$config"
     fi
 
     if [ "$(yq '.prometheus.volumeClaimTemplate' "$config")" == "null" ]; then
