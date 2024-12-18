@@ -2,8 +2,9 @@
 
 export RHDH_OLM_INDEX_IMAGE ?= registry.redhat.io/redhat/redhat-operator-index:v4.15
 export RHDH_OPERATOR_NAMESPACE ?= rhdh-operator
-export RHDH_OLM_CHANNEL ?= fast-1.2
+export RHDH_OLM_CHANNEL ?= fast
 export RHDH_OLM_OPERATOR_PACKAGE ?= rhdh
+export RHDH_OLM_WATCH_EXT_CONF ?= true
 
 export ARTIFACT_DIR ?=
 
