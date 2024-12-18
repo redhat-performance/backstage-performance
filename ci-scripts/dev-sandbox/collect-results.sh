@@ -15,7 +15,7 @@ mkdir -p "${TMP_DIR}"
 
 cli="oc"
 
-out=$ARTIFACT_DIR/dev-sandbox/summary.csv
+out=$ARTIFACT_DIR/summary.csv
 rm -rvf "$out"
 while read -r baseline_csv; do
     while read -r metrics; do
@@ -59,6 +59,7 @@ source "$PYTHON_VENV_DIR/bin/activate"
 set -u
 python3 -m pip install --quiet -U pip
 python3 -m pip install --quiet -e "git+https://github.com/redhat-performance/opl.git#egg=opl-rhcloud-perf-team-core&subdirectory=core"
+python3 -m pip install --quiet -U csvkit
 set +u
 deactivate
 set -u
@@ -103,9 +104,9 @@ while read -r metric_csv; do
             timestamp="${tokens[0]}"
             value="${tokens[1]}"
             if [[ $line =~ ^timestamp ]]; then
-                echo "$line"
+                echo "$timestamp;$value"
             else
-                echo "$(date -d "@$timestamp" --utc -Ins),$value"
+                echo "$(date -d "@$timestamp" --utc "+%F %T");$value"
             fi
         done <"$tmp_csv" >>"$metric_csv"
         rm -f "$tmp_csv"
@@ -113,3 +114,5 @@ while read -r metric_csv; do
 done <<<"$(find "$monitoring_collection_dir" -name '*.csv')"
 
 wait
+
+csvjoin -c timestamp -d ";" --datetime-format "%F %T" "$monitoring_collection_dir"/*.csv >"$ARTIFACT_DIR/metrics-all.csv"
