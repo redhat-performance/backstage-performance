@@ -59,7 +59,8 @@ export RBAC_POLICY="${RBAC_POLICY:-all_groups_admin}"
 
 export PSQL_LOG="${PSQL_LOG:-true}"
 export RHDH_METRIC="${RHDH_METRIC:-true}"
-export PSQL_EXPORT="${PSQL_EXPORT:-false}"
+export PSQL_EXPORT="${PSQL_EXPORT:-true}"
+export PSQL_PROFILE="${PSQL_PROFILE:-default}"
 export LOG_MIN_DURATION_STATEMENT="${LOG_MIN_DURATION_STATEMENT:-65}"
 export LOG_MIN_DURATION_SAMPLE="${LOG_MIN_DURATION_SAMPLE:-50}"
 export LOG_STATEMENT_SAMPLE_RATE="${LOG_STATEMENT_SAMPLE_RATE:-0.7}"
@@ -370,6 +371,9 @@ psql_debug() {
         $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#track_wal_io_timing.*/track_wal_io_timing = on/" /var/lib/pgsql/data/userdata/postgresql.conf'
         $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#track_functions.*/track_functions = all/" /var/lib/pgsql/data/userdata/postgresql.conf'
         $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#stats_fetch_consistency.*/stats_fetch_consistency = cache/" /var/lib/pgsql/data/userdata/postgresql.conf'
+        if [[ ${PSQL_PROFILE} != 'default'  ]] ; then
+            ./${PSQL_PROFILE}.sh "${clin}" "${psql_db}" 
+        fi
         $clin exec "${psql_db}" -- sh -c "echo shared_preload_libraries = \'pgaudit,auto_explain,pg_stat_statements\' >> /var/lib/pgsql/data/userdata/postgresql.conf"
     fi
     log_info "Restarting RHDH DB..."
