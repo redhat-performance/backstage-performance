@@ -308,8 +308,11 @@ backstage_install() {
 
 # shellcheck disable=SC2016,SC1004
 install_rhdh_with_helm() {
+    log_info "Removing old Helm repo ${repo_name}"
     helm repo remove "${repo_name}" || true
+    log_info "Adding new Helm repo ${repo_name}: ${RHDH_HELM_REPO}"
     helm repo add "${repo_name}" "${RHDH_HELM_REPO}"
+    log_info "Updating helm repo ${repo_name}"
     helm repo update "${repo_name}"
     chart_values=template/backstage/helm/chart-values.yaml
     if [ -n "${RHDH_IMAGE_REGISTRY}${RHDH_IMAGE_REPO}${RHDH_IMAGE_TAG}" ]; then
