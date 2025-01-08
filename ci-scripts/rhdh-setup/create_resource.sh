@@ -112,7 +112,7 @@ clone_and_upload() {
   sleep 5
   output="${TMP_DIR}/locations.yaml"
   if [ ! -f "$output" ]; then
-    echo "locations: []" > "$output"
+    echo "locations: []" >"$output"
   fi
   for filename in "${files[@]}"; do
     upload_url="${GITHUB_REPO%.*}/blob/${tmp_branch}/$(basename "$filename")"
@@ -294,7 +294,7 @@ rhdh_token() {
     --data-urlencode "client_id=${CLIENTID}" \
     --data-urlencode "tab_id=${tab_id}" \
     --data-urlencode "execution=${execution}" \
-    --write-out "%{REDIRECT_URL}" \
+    --write-out "%{redirect_url}" \
     "$AUTHENTICATE_URL")
 
   code=$(echo "$CODE_URL" | grep -oP 'code=\K[^"]+')
