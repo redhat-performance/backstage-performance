@@ -301,6 +301,10 @@ install_rhdh_with_helm() {
     if [ -n "${RHDH_RESOURCES_MEMORY_LIMITS}" ]; then yq -i '.upstream.backstage.resources.limits.memory = "'"${RHDH_RESOURCES_MEMORY_LIMITS}"'"' "$TMP_DIR/chart-values.yaml"; fi
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.service.ports.targetPort = "oauth2-proxy"' "$TMP_DIR/chart-values.yaml"; fi
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.service.ports.backend = 4180' "$TMP_DIR/chart-values.yaml"; fi
+    yq -i '.upstream.postgresql.primary.resources.requests.memory = "1Gi"' "$TMP_DIR/chart-values.yaml"
+    yq -i '.upstream.postgresql.primary.resources.limits.memory = "1Gi"' "$TMP_DIR/chart-values.yaml"
+    yq -i '.upstream.postgresql.primary.resources.requests.cpu = "250m"' "$TMP_DIR/chart-values.yaml"
+    yq -i '.upstream.postgresql.primary.resources.limits.cpu = "250m"' "$TMP_DIR/chart-values.yaml"
     if ${ENABLE_PROFILING}; then
         yq -i '.upstream.backstage.command |= ["node", "--prof", "--heapsnapshot-signal=SIGUSR1", "packages/backend"]' "$TMP_DIR/chart-values.yaml"
         # Collecting the heap snapshot freezes the RHDH while getting and writting the heap snapshot to a file
