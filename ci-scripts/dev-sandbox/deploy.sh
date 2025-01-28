@@ -19,5 +19,6 @@ $cli create namespace "$RHDH_OPERATOR_NAMESPACE" --dry-run=client -o yaml | $cli
 
 until envsubst <"$rootdir/ci-scripts/rhdh-setup/template/backstage/secret-rhdh-pull-secret.yaml" | $clin apply -f -; do $clin delete secret rhdh-pull-secret --ignore-not-found=true; done
 pushd "$rootdir/ci-scripts/rhdh-setup" || exit
+./deploy.sh -m -o
 OLM_CHANNEL="${RHDH_OLM_CHANNEL}" UPSTREAM_IIB="${RHDH_OLM_INDEX_IMAGE}" NAMESPACE_SUBSCRIPTION="${RHDH_OPERATOR_NAMESPACE}" WATCH_EXT_CONF="${RHDH_OLM_WATCH_EXT_CONF}" ./install-rhdh-catalog-source.sh --install-operator "${RHDH_OLM_OPERATOR_PACKAGE:-rhdh}"
 popd || exit

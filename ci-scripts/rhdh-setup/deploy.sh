@@ -49,6 +49,7 @@ export RHDH_OLM_OPERATOR_RESOURCES_CPU_REQUESTS=${RHDH_OLM_OPERATOR_RESOURCES_CP
 export RHDH_OLM_OPERATOR_RESOURCES_CPU_LIMITS=${RHDH_OLM_OPERATOR_RESOURCES_CPU_LIMITS:-}
 export RHDH_OLM_OPERATOR_RESOURCES_MEMORY_REQUESTS=${RHDH_OLM_OPERATOR_RESOURCES_MEMORY_REQUESTS:-}
 export RHDH_OLM_OPERATOR_RESOURCES_MEMORY_LIMITS=${RHDH_OLM_OPERATOR_RESOURCES_MEMORY_LIMITS:-}
+export RHDH_OLM_OPERATOR_RESOURCES_EPHEMERAL_STORAGE_REQUESTS=${RHDH_OLM_OPERATOR_RESOURCES_EPHEMERAL_STORAGE_REQUESTS:-}
 
 export PRE_LOAD_DB="${PRE_LOAD_DB:-true}"
 export BACKSTAGE_USER_COUNT="${BACKSTAGE_USER_COUNT:-1}"
@@ -608,7 +609,7 @@ delete_rhdh_with_olm() {
     $cli delete namespace "$RHDH_OPERATOR_NAMESPACE" --ignore-not-found=true --wait
 }
 
-while getopts "oi:rd" flag; do
+while getopts "oi:mrd" flag; do
     case "${flag}" in
     o)
         export INSTALL_METHOD=olm
@@ -623,6 +624,9 @@ while getopts "oi:rd" flag; do
     i)
         AUTH_PROVIDER="$OPTARG"
         install
+        ;;
+    m)
+        setup_monitoring
         ;;
     \?)
         log_warn "Invalid option: ${flag} - defaulting to -i (install)"

@@ -16,6 +16,8 @@ mkdir -p "${TMP_DIR}"
 WSTC=$(readlink -m "$rootdir/.toolchain-e2e.git")
 
 export RHDH_INSTALL_METHOD=${RHDH_INSTALL_METHOD:-olm}
+export RHDH_WORKLOADS_TEMPLATE_NAME=${RHDH_WORKLOADS_TEMPLATE_NAME:-default}
+export RHDH_WORKLOADS_TEMPLATE=${RHDH_WORKLOADS_TEMPLATE:-$SCRIPT_DIR/rhdh-perf-workloads.$RHDH_WORKLOADS_TEMPLATE_NAME.template.yaml}
 
 cd "$WSTC" || exit
 
@@ -42,38 +44,21 @@ cmd="go run setup/main.go --users 1 --default 1 --custom 0 --username baseline -
 yes | $cmd
 collect_counts "baseline-counts-post"
 
-# testing env
-if [ "$RHDH_INSTALL_METHOD" == "olm" ]; then
-    if [ "$AUTH_PROVIDER" == "keycloak" ]; then
-        rhdh_route="rhdh"
-    else
-        rhdh_route="backstage-developer-hub"
-    fi
-elif [ "$RHDH_INSTALL_METHOD" == "helm" ]; then
-    export RHDH_HELM_RELEASE_NAME RHDH_HELM_CHART
+number_of_runs=${1:-10}
+number_of_users_per_run=${2:-2000}
+number_of_users_with_workloads_per_run=${3:-2000}
 
-    RHDH_HELM_RELEASE_NAME=${RHDH_HELM_RELEASE_NAME:-rhdh}
-    RHDH_HELM_CHART=${RHDH_HELM_CHART:-redhat-developer-hub}
-
-    rhdh_route="${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}"
-else
-    echo "Invalid RHDH install method: $RHDH_INSTALL_METHOD"
-    exit 1
-fi
-export RHDH_BASE_URL
-RHDH_BASE_URL="https://$(oc get routes "$rhdh_route" -n "${RHDH_NAMESPACE:-rhdh-performance}" -o jsonpath='{.spec.host}')"
-# end-of testing env
-
-envsubst <"$SCRIPT_DIR/rhdh-perf-workloads.template.yaml" >"$TMP_DIR/rhdh-perf.workloads.yaml"
-template="${1:-"$TMP_DIR/rhdh-perf.workloads.yaml"}"
-date --utc -Ins>"${ARTIFACT_DIR}/benchmark-before"
-for r in $(seq -w 1 "${2:-10}"); do
+template="$TMP_DIR/rhdh-perf.workloads.yaml"
+echo "Using $RHDH_WORKLOADS_TEMPLATE template --> $template"
+envsubst <"$RHDH_WORKLOADS_TEMPLATE" >"$template"
+date --utc -Ins >"${ARTIFACT_DIR}/benchmark-before"
+for r in $(seq -w 1 "$number_of_runs"); do
     TEST_ID="run$r"
     echo "Running $TEST_ID"
     make clean-users
     collect_counts "$TEST_ID-counts-pre"
-    cmd="go run setup/main.go --users 2000 --default 2000 --custom 2000 --template=$template $workloads --username $TEST_ID --testname=$TEST_ID --verbose --idler-timeout 15m"
+    cmd="go run setup/main.go --users $number_of_users_per_run --default $number_of_users_per_run --custom $number_of_users_with_workloads_per_run --template=$template $workloads --username $TEST_ID --testname=$TEST_ID --verbose --idler-timeout 15s --skip-install-operators"
     yes | $cmd |& tee "$TEST_ID.log" && out="tmp/results/$(date +%F_%T)-counts.csv"
     collect_counts "$TEST_ID-counts-post"
 done
-date --utc -Ins>"${ARTIFACT_DIR}/benchmark-after"
+date --utc -Ins >"${ARTIFACT_DIR}/benchmark-after"
