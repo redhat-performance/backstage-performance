@@ -1,0 +1,202 @@
+kind: Template
+apiVersion: template.openshift.io/v1
+metadata:
+  name: user-workloads
+objects:
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: dynamic-plugins-rhdh
+    data:
+      dynamic-plugins.yaml: |
+        includes:
+          - dynamic-plugins.default.yaml
+        plugins:
+          - package: ./dynamic-plugins/dist/backstage-community-plugin-rbac
+            disabled: false
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: user-t1-group-g1
+    data:
+      user_t1-group_g1.yaml: |
+        ---
+        apiVersion: backstage.io/v1alpha1
+        kind: Group
+        metadata:
+          name: g1
+          namespace: default
+          description: "Group #1"
+        spec:
+          type: team
+          profile:
+            displayName: "Group #1"
+          members:
+            - t1
+          children: []
+        ---
+        apiVersion: backstage.io/v1alpha1
+        kind: User
+        metadata:
+          name: t1
+          namespace: default
+          description: "Test User #1"
+        spec:
+          profile:
+            displayName: "Test User #1"
+            email: t1@test.com
+          memberOf:
+            - g1
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: rbac-policy
+    data:
+      rbac-policy.csv: |
+        p, role:default/a, kubernetes.proxy, use, allow
+        p, role:default/a, catalog-entity, read, allow
+        p, role:default/a, catalog.entity.create, create, allow
+        p, role:default/a, catalog.location.create, create, allow
+        p, role:default/a, catalog.location.read, read, allow
+        g, user:default/guru, role:default/a
+        g, user:development/guest, role:default/a
+        g, group:default/g1, role:default/a
+  - kind: ConfigMap
+    apiVersion: v1
+    metadata:
+      name: app-config-backend-secret
+    data:
+      app-config.rhdh.backend-secret.yaml: |
+        backend:
+          auth:
+            externalAccess:
+              - type: legacy
+                options:
+                  secret: "secret:${BACKEND_SECRET}"
+                  subject: legacy-catalog
+  - kind: ConfigMap
+    apiVersion: v1
+    metadata:
+      name: app-config-rhdh
+    data:
+      app-config.rhdh.yaml: |
+        app:
+          title: Red Hat Developer Hub
+        organization:
+          name: RHDH Perf&Scale
+        integrations:
+          github:
+            - host: github.com
+        catalog:
+          rules:
+            - allow: [User, Group, Component, Api]
+          locations:
+            - target: /opt/app-root/src/user_t1-group_g1.yaml
+              type: file
+            - target: https://github.com/pmacik-testing/rhdh-perf-testing-repo/blob/main/100_components-100-apis.yaml
+              type: url
+        enabled:
+          github: true
+        auth:
+          providers:
+            guest:
+              dangerouslyAllowOutsideDevelopmet: true
+        permission:
+          enabled: true
+          rbac:
+            policies-csv-file: "./rbac-policy.csv"
+            admin:
+              users:
+                - name: user:default/t1
+        logging:
+          level: debug
+        backend:
+          database:
+            client: better-sqlite3
+            connection: ':memory:'
+  - kind: Secret
+    apiVersion: v1
+    metadata:
+      name: rhdh-backend-secret
+    stringData:
+      BACKEND_SECRET: b0oySXJaakZhRW8 # notsecret
+    type: Opaque
+  - kind: Backstage
+    apiVersion: rhdh.redhat.com/v1alpha3
+    metadata:
+      name: pmacik-rhdh
+    spec:
+      application:
+        appConfig:
+          configMaps:
+            - name: app-config-rhdh
+              key: app-config.rhdh.yaml
+            - name: app-config-backend-secret
+              key: app-config.rhdh.backend-secret.yaml
+          mountPath: /opt/app-root/src
+        dynamicPluginsConfigMapName: "dynamic-plugins-rhdh"
+        extraFiles:
+          configMaps:
+            - name: rbac-policy
+            - name: user-t1-group-g1
+          mountPath: /opt/app-root/src
+        extraEnvs:
+          envs:
+            - name: NODE_TLS_REJECT_UNAUTHORIZED
+              value: "0"
+            - name: NODE_ENV
+              value: development
+          secrets:
+            - key: BACKEND_SECRET
+              name: rhdh-backend-secret
+        replicas: 1
+        route:
+          enabled: true
+      database:
+        enableLocalDb: false
+      deployment:
+        patch:
+          spec:
+            template:
+              spec:
+                initcontainers:
+                  - name: install-dynamic-plugins
+                    resources:
+                      limits:
+                        cpu: 100m
+                        ephemeral-storage: 200Mi
+                        memory: 256Mi
+                      requests:
+                        cpu: 100m
+                        ephemeral-storage: 200Mi
+                        memory: 256Mi
+                containers:
+                  - name: backstage-backend
+                    resources:
+                      limits:
+                        cpu: 400m
+                        ephemeral-storage: 100Mi
+                        memory: 500Mi
+                      requests:
+                        cpu: 400m
+                        ephemeral-storage: 100Mi
+                        memory: 500Mi
+                    readinessProbe:
+                      initialDelaySeconds: 120
+                      timeoutSeconds: 60
+                      periodSeconds: 60
+                    livenessProbe:
+                      initialDelaySeconds: 120
+                      timeoutSeconds: 60
+                      periodSeconds: 60
+                volumes:
+                  - name: dynamic-plugins-root
+                    ephemeral:
+                      volumeClaimTemplate:
+                        spec:
+                          accessModes:
+                            - ReadWriteOnce
+                          resources:
+                            requests:
+                              storage: 1Gi
+                          volumeMode: Filesystem

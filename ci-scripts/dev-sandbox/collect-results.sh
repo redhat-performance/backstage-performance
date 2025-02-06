@@ -1,5 +1,7 @@
 #!/bin/bash
 
+export RHDH_OPERATOR_NAMESPACE=rhdh-operator
+
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1090,SC1091
 source "$(readlink -m "$SCRIPT_DIR/../../test.env")"
@@ -14,6 +16,10 @@ TMP_DIR=$(readlink -m "${TMP_DIR:-"$rootdir/.tmp"}")
 mkdir -p "${TMP_DIR}"
 
 cli="oc"
+clin="$cli -n $RHDH_OPERATOR_NAMESPACE"
+
+$clin logs -l app=rhdh-operator --tail=-1 >& "$ARTIFACT_DIR/rhdh-operator.log"
+$clin logs -l app=rhdh-operator --previous=true --tail=-1 >& "$ARTIFACT_DIR/rhdh-operator.previous.log"
 
 out=$ARTIFACT_DIR/summary.csv
 rm -rvf "$out"

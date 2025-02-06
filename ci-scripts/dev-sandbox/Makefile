@@ -6,6 +6,11 @@ export RHDH_OLM_CHANNEL ?= fast
 export RHDH_OLM_OPERATOR_PACKAGE ?= rhdh
 export RHDH_OLM_WATCH_EXT_CONF ?= true
 
+export RHDH_WORKLOADS_TEMPLATE_NAME ?= default
+export NUMBER_OF_RUNS ?= 10
+export NUMBER_OF_USERS_PER_RUN ?= 2000
+export NUMBER_OF_USERS_WITH_WORKLOADS_PER_RUN ?= 2000
+
 export ARTIFACT_DIR ?=
 
 .PHONY: setup-toolchain-e2e
@@ -22,7 +27,7 @@ undeploy:
 
 .PHONY: run
 run:
-	./run.sh
+	./run.sh "$(NUMBER_OF_RUNS)" "$(NUMBER_OF_USERS_PER_RUN)" "$(NUMBER_OF_USERS_WITH_WORKLOADS_PER_RUN)"
 
 .PHONY: collect-results
 collect-results:
