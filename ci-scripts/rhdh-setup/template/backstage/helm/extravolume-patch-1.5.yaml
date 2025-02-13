@@ -1,0 +1,58 @@
+---
+extraVolumeMounts:
+  - name: dynamic-plugins-root
+    mountPath: /opt/app-root/src/dynamic-plugins-root
+  - name: rbac-policy
+    mountPath: /opt/app-root/src/rbac
+  - name: techdocs-data
+    mountPath: /opt/app-root/src/techdocs-data
+extraVolumes:
+  - name: dynamic-plugins-root
+    ephemeral:
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              # -- Size of the volume that will contain the dynamic plugins. It should be large enough to contain all the plugins.
+              storage: 2Gi
+  - name: dynamic-plugins
+    configMap:
+      defaultMode: 420
+      name: '{{ printf "%s-dynamic-plugins" .Release.Name }}'
+      optional: true
+  - name: rbac-policy
+    configMap:
+      defaultMode: 420
+      name: rbac-policy
+  - name: dynamic-plugins-npmrc
+    secret:
+      defaultMode: 420
+      optional: true
+      secretName: dynamic-plugins-npmrc
+  - name: techdocs-data
+    persistentVolumeClaim:
+      claimName: rhdh-techdocs
+initContainers:
+  - name: install-dynamic-plugins
+    image: '{{ include "backstage.image" . }}'
+    command:
+      - ./install-dynamic-plugins.sh
+      - /dynamic-plugins-root
+    env:
+      - name: NPM_CONFIG_USERCONFIG
+        value: /opt/app-root/src/.npmrc.dynamic-plugins
+    imagePullPolicy: Always
+    volumeMounts:
+      - mountPath: /dynamic-plugins-root
+        name: dynamic-plugins-root
+      - mountPath: /opt/app-root/src/dynamic-plugins.yaml
+        name: dynamic-plugins
+        readOnly: true
+        subPath: dynamic-plugins.yaml
+      - mountPath: /opt/app-root/src/.npmrc.dynamic-plugins
+        name: dynamic-plugins-npmrc
+        readOnly: true
+        subPath: .npmrc
+    workingDir: /opt/app-root/src

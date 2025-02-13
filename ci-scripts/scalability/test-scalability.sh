@@ -5,7 +5,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$(readlink -m "$SCRIPT_DIR"/../../test.env)"
 
 export PRE_LOAD_DB=${PRE_LOAD_DB:-true}
-export RHDH_HELM_REPO=${RHDH_HELM_REPO:-https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/rhdh-1.4-rhel-9/installation}
+export RHDH_HELM_REPO=${RHDH_HELM_REPO:-https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/refs/heads/redhat-developer-hub-1.5-147-CI/installation}
 export RHDH_HELM_RELEASE_NAME=${RHDH_HELM_RELEASE_NAME:-rhdh}
 export RHDH_HELM_CHART=${RHDH_HELM_CHART:-developer-hub}
 export RHDH_NAMESPACE=${RHDH_NAMESPACE:-rhdh-performance}
