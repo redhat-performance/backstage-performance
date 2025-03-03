@@ -100,6 +100,7 @@ VERSION_NEW="1.5"
 RHDH_HELM_REPO_OLD="https://charts.openshift.io/"
 RHDH_HELM_REPO_NEW="https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/refs/heads/redhat-developer-hub-1.5-147-CI/installation"
 SOURCE_BRANCH=main
+SOURCE_BRANCH=fix10-test-1.5   # DELME
 compare_previous_test "RHIDP-5931"
 entity_burden_test "RHIDP-5929"
 storage_limit_test "RHIDP-5927"
