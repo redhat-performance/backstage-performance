@@ -61,7 +61,7 @@ export RHDH_HELM_REPO='$RHDH_HELM_REPO'
         "https://api.github.com/repos/redhat-performance/backstage-performance/pulls" \
         -d "$curl_data"
     )"
-    echo "$(date -Ins --utc) INFO Created PR $( echo "$curl_out" | jq .html_url ) so you can comment '/test mpc' there"
+    echo "$(date -Ins --utc) INFO Created PR $( echo "$curl_out" | jq .html_url ) so you can comment '/test mvp' there"
 }
 
 function _test() {
