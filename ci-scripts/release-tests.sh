@@ -12,7 +12,7 @@ function configure_run() {
     branch="$2"
     testname="$3"
 
-    git checkout main
+    git checkout "$SOURCE_BRANCH"
     git checkout -b "$branch"
 
     echo "
@@ -26,6 +26,7 @@ export SCALE_DB_STORAGES='$SCALE_DB_STORAGES'
 export SCALE_MEMORY_REQUESTS_LIMITS=:
 export SCALE_REPLICAS=1
 export SCALE_WORKERS=20
+export USERS=100
 export SCENARIO=mvp
 export USE_PR_BRANCH=true
 export WAIT_FOR_SEARCH_INDEX=false
@@ -37,7 +38,7 @@ export RHDH_HELM_REPO='$RHDH_HELM_REPO'
     git commit -am "chore($ticket): $testname on $branch"
     git push -u origin "$branch"
     echo "$(date -Ins --utc) INFO Create PR on https://github.com/redhat-performance/backstage-performance/pull/new/${branch} and comment '/test mpc' there"
-    git checkout main
+    git checkout "$SOURCE_BRANCH"
 }
 
 function _test() {
@@ -54,10 +55,23 @@ function _test() {
     configure_run "$ticket" "$branch_new" "$name"
 }
 
+function compare_previous_test() {
+    name="Compare to previous release"
+    nick="compare"
+    ticket="$1"   # Jira task for comparison tests
+
+    export DURATION="15m"
+    export SCALE_BS_USERS_GROUPS="1000:250"
+    export SCALE_CATALOG_SIZES="2500:2500"
+    export SCALE_DB_STORAGES="1Gi"
+
+    _test "$name" "$nick" "$ticket"
+}
+
 function entity_burden_test() {
     name="Entity burden test"
     nick="entity"
-    ticket="$1"   # Jira task for storage tests
+    ticket="$1"   # Jira task for entity burden tests
 
     export DURATION="15m"
     export SCALE_BS_USERS_GROUPS="100:20"
@@ -73,17 +87,19 @@ function storage_limit_test() {
     ticket="$1"   # Jira task for storage tests
 
     export DURATION="15m"
-    export SCALE_BS_USERS_GROUPS="10000:2000"
-    export SCALE_CATALOG_SIZES="1:1 2800:2800 2900:2900 3000:3000 3100:3100 3200:3200 3300:3300 3400:3400"
+    export SCALE_BS_USERS_GROUPS="100:20"
+    export SCALE_CATALOG_SIZES="1:1 2600:2600 2800:2800 3000:3000 3200:3200 3400:3400 3600:3600 3800:3800"
     export SCALE_DB_STORAGES="1Gi"
 
     _test "$name" "$nick" "$ticket"
 }
 
 # !!! Configure here !!!
-VERSION_OLD="1.3"
-VERSION_NEW="1.4"
+VERSION_OLD="1.4"
+VERSION_NEW="1.5"
 RHDH_HELM_REPO_OLD="https://charts.openshift.io/"
-RHDH_HELM_REPO_NEW="https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/refs/heads/redhat-developer-hub-1.4-117-CI/installation"
-entity_burden_test "RHIDP-4541"
-#storage_limit_test "RHIDP-4531"
+RHDH_HELM_REPO_NEW="https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/refs/heads/redhat-developer-hub-1.5-147-CI/installation"
+SOURCE_BRANCH=main
+compare_previous_test "RHIDP-5931"
+entity_burden_test "RHIDP-5929"
+storage_limit_test "RHIDP-5927"
