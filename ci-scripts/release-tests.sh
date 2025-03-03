@@ -71,10 +71,12 @@ function _test() {
 
     branch_old="test-$VERSION_NEW-$nick-$VERSION_OLD"
     export RHDH_HELM_REPO="$RHDH_HELM_REPO_OLD"
+    export SOURCE_BRANCH="$SOURCE_BRANCH_OLD"
     configure_run "$ticket" "$branch_old" "$name"
 
     branch_new="test-$VERSION_NEW-$nick-$VERSION_NEW"
     export RHDH_HELM_REPO="$RHDH_HELM_REPO_NEW"
+    export SOURCE_BRANCH="$SOURCE_BRANCH_NEW"
     configure_run "$ticket" "$branch_new" "$name"
 }
 
@@ -122,7 +124,8 @@ VERSION_OLD="1.4"
 VERSION_NEW="1.5"
 RHDH_HELM_REPO_OLD="https://charts.openshift.io/"
 RHDH_HELM_REPO_NEW="https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/refs/heads/redhat-developer-hub-1.5-147-CI/installation"
-SOURCE_BRANCH=main
+SOURCE_BRANCH_OLD=rhdh-v1.4.x
+SOURCE_BRANCH_NEW=main
 compare_previous_test "RHIDP-5931"
 entity_burden_test "RHIDP-5929"
 storage_limit_test "RHIDP-5927"
