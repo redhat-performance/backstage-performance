@@ -7,6 +7,10 @@ function configure_run() {
         echo "$(date -Ins --utc) FATAL Can not reach 'test.env' file. Are you in backstage-performance directory?"
         exit 1
     fi
+    if [ -z "$GITHUB_TOKEN" ]; then
+        echo "$(date -Ins --utc) FATAL Please export GITHUB_TOKEN. It is needed to create PRs."
+        exit 1
+    fi
 
     ticket="$1"
     branch="$2"
@@ -37,8 +41,27 @@ export RHDH_HELM_REPO='$RHDH_HELM_REPO'
 
     git commit -am "chore($ticket): $testname on $branch"
     git push -u origin "$branch"
-    echo "$(date -Ins --utc) INFO Create PR on https://github.com/redhat-performance/backstage-performance/pull/new/${branch} and comment '/test mpc' there"
+    echo "$(date -Ins --utc) INFO Created and pushed branch ${branch}"
     git checkout "$SOURCE_BRANCH"
+
+    curl_data='{
+        "title": "chore('"$ticket"'): '"$branch"' OLD",
+        "body": "**'"$testname"'**: '"$VERSION_OLD"' vs. '"$VERSION_NEW"' testing. This is to get perf&scale data for `'"$branch"'`",
+        "head": "'"$branch"'",
+        "base": "main",
+        "draft": true
+    }'
+    curl_out="$( curl \
+        -L \
+        --silent \
+        -X POST \
+        -H "Accept: application/vnd.github+json" \
+        -H "Authorization: Bearer $GITHUB_TOKEN" \
+        -H "X-GitHub-Api-Version: 2022-11-28" \
+        "https://api.github.com/repos/redhat-performance/backstage-performance/pulls" \
+        -d "$curl_data"
+    )"
+    echo "$(date -Ins --utc) INFO Created PR $( echo "$curl_out" | jq .html_url ) so you can comment '/test mpc' there"
 }
 
 function _test() {
