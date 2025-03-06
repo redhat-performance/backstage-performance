@@ -48,7 +48,7 @@ export RHDH_HELM_REPO='$RHDH_HELM_REPO'
         "title": "chore('"$ticket"'): '"$branch"'",
         "body": "**'"$testname"'**: '"$VERSION_OLD"' vs. '"$VERSION_NEW"' testing. This is to get perf&scale data for `'"$branch"'`",
         "head": "'"$branch"'",
-        "base": "main",
+        "base": "'"$SOURCE_BRANCH"'",
         "draft": true
     }'
     curl_out="$( curl \
