@@ -47,7 +47,7 @@ mkfifo "$TMPFIFODIR/mypipe"
 ###cat /tmp/error-report.txt > $TMPFIFODIR/mypipe &
 curl -s "$log_url" > "$TMPFIFODIR/mypipe" &
 
-while IFS=$'\n' read line; do
+while IFS=$'\n' read -r line; do
     case "$line" in
         \[*)
             [[ -n "$heading" ]] && show_errors
