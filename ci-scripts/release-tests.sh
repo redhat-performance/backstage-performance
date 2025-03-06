@@ -61,7 +61,16 @@ export RHDH_HELM_REPO='$RHDH_HELM_REPO'
         "https://api.github.com/repos/redhat-performance/backstage-performance/pulls" \
         -d "$curl_data"
     )"
-    echo "$(date -Ins --utc) INFO Created PR $( echo "$curl_out" | jq .html_url ) so you can comment '/test mvp-scalability' there"
+    pr_number=$( echo "$curl_out" | jq -rc '.number' )
+    curl_comment_out="$( curl \
+        -L \
+        --silent \
+        -X POST \
+        -H "Accept: application/vnd.github+json" \
+        -H "Authorization: Bearer $GITHUB_TOKEN" \
+        -H "X-GitHub-Api-Version: 2022-11-28" \
+        "https://api.github.com/repos/redhat-performance/backstage-performance/issues/$pr_number/comments "
+        -d '{"body":"/test mvp-scalability"}'
 }
 
 function _test() {
