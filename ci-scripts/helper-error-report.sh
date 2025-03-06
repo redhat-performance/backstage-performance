@@ -55,21 +55,25 @@ while IFS=$'\n' read line; do
             cleanup_errors
         ;;
         *"504 Server Error: Gateway Time-out for url: "*)
+            # shellcheck disable=SC2206
             numbers=( ${line//[!0-9]/ } )
             count=${numbers[0]}
             (( error_504+=count ))
         ;;
         *"503 Server Error: Service Unavailable for url: "*)
+            # shellcheck disable=SC2206
             numbers=( ${line//[!0-9]/ } )
             count=${numbers[0]}
             (( error_503+=count ))
         ;;
         *"502 Server Error: Bad Gateway for url: "*)
+            # shellcheck disable=SC2206
             numbers=( ${line//[!0-9]/ } )
             count="${numbers[0]}"
             (( error_502+=count ))
         ;;
         *"Remote end closed connection without response"*)
+            # shellcheck disable=SC2206
             numbers=( ${line//[!0-9]/ } )
             count="${numbers[0]}"
             (( error_remoteclose+=count ))
