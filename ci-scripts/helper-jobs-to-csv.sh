@@ -47,9 +47,9 @@ function assert_json() {
 }
 
 files_dir="$( mktemp -d )"
-trap "rm -rf '${files_dir}'" EXIT
+trap 'rm -rf "${files_dir}"' EXIT
 
-for url in $@; do
+for url in "$@"; do
     log "DEBUG Processing URL ${url}"
     pr_number="$( echo "${url}" | cut -d '/' -f 10 )"
     assert_int "$pr_number"
@@ -64,4 +64,4 @@ for url in $@; do
     log "INFO Downloaded to ${bench_file}"
 done
 
-ci-scripts/runs-to-csv.sh ${files_dir}
+ci-scripts/runs-to-csv.sh "${files_dir}"
