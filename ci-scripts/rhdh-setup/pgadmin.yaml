@@ -1,0 +1,114 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  creationTimestamp: null
+  name: pgadmin-servers
+  metadata:
+    labels:
+      app: pgadmin
+data:
+  servers.json: |-
+    {
+      "Servers": {
+          "1": {
+              "Name": "rhdh",
+              "Group": "Servers",
+              "Host": "${RHDH_DB_HOST}",
+              "Port": 5432,
+              "MaintenanceDB": "postgres",
+              "Username": "postgres",
+              "UseSSHTunnel": 0,
+              "TunnelPort": "22",
+              "TunnelAuthentication": 0,
+              "KerberosAuthentication": false
+          },
+          "2": {
+              "Name": "keycloak",
+              "Group": "Servers",
+              "Host": "keycloak-postgresql",
+              "Port": 5432,
+              "MaintenanceDB": "root",
+              "Username": "keycloak",
+              "UseSSHTunnel": 0,
+              "TunnelPort": "22",
+              "TunnelAuthentication": 0,
+              "KerberosAuthentication": false
+          }
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgadmin
+  labels:
+    app: pgadmin
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pgadmin
+  template:
+    metadata:
+      labels:
+        app: pgadmin
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: pgadmin
+          image: bnoleau/pgadmin-rootless:8.12
+          securityContext:
+            allowPrivilegeEscalation: false
+          ports:
+            - containerPort: 5050
+          env:
+            - name: PGADMIN_DEFAULT_EMAIL
+              value: "admin@example.com"
+            - name: PGADMIN_DEFAULT_PASSWORD
+              value: "admin"
+            - name: PGADMIN_LISTEN_ADDRESS
+              value: "0.0.0.0"
+            - name: PGADMIN_LISTEN_PORT
+              value: "5050"
+          volumeMounts:
+            - name: pgadmin-data
+              mountPath: "/var/lib/pgadmin"
+            - name: pgadmin-servers
+              mountPath: /pgadmin4/servers.json
+              subPath: "servers.json"
+      volumes:
+        - name: pgadmin-data
+          emptyDir: {}
+        - name: pgadmin-servers
+          configMap:
+            name: pgadmin-servers
+            items:
+              - key: servers.json
+                path: servers.json
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgadmin
+spec:
+  selector:
+    app: pgadmin
+  ports:
+    - protocol: TCP
+      port: 5050
+      targetPort: 5050
+  type: ClusterIP
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: pgadmin
+spec:
+  to:
+    kind: Service
+    name: pgadmin
+  port:
+    targetPort: 5050
+  tls:
+    termination: edge

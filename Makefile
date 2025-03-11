@@ -61,7 +61,7 @@ export RHDH_INSTALL_METHOD ?= helm
 PYTHON_VENV=.venv
 
 # Local directory to store temporary files
-export TMP_DIR=$(shell readlink -m .tmp)
+export TMP_DIR ?= $(shell readlink -m .tmp)
 
 # Local directory to store artifacts
 export ARTIFACT_DIR ?= $(shell readlink -m .artifacts)
@@ -256,6 +256,16 @@ clean-artifacts:
 ## Clean all
 .PHONY: clean-all
 clean-all: namespace clean clean-local clean-artifacts undeploy-rhdh
+
+## Deploy pgAdmin
+.PHONY: deploy-pgadmin
+deploy-pgadmin:
+	cd ci-scripts/rhdh-setup; ./pgadmin.sh -i
+
+## Undeploy pgAdmin
+.PHONY: undeploy-pgadmin
+undeploy-pgadmin:
+	cd ci-scripts/rhdh-setup; ./pgadmin.sh -d
 
 ##	=== Help ===
 
