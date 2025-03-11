@@ -64,4 +64,6 @@ for url in "$@"; do
     log "INFO Downloaded to ${bench_file}"
 done
 
-ci-scripts/runs-to-csv.sh "${files_dir}"
+output="$( mktemp runs-to-csv-XXXXXX.csv )"
+log "INFO Storing resulting CSV as '${output}'"
+ci-scripts/runs-to-csv.sh "${files_dir}" | tee "${output}"
