@@ -112,20 +112,20 @@ for w in "${workers[@]}"; do
                                 echo "/// Setting up RHDH for scalability test ///"
                                 echo
                                 set -x
-                                export RHDH_DEPLOYMENT_REPLICAS="$r"
-                                export RHDH_DB_REPLICAS="$r"
-                                export RHDH_DB_STORAGE="$s"
-                                export RHDH_RESOURCES_CPU_REQUESTS="$cr"
-                                export RHDH_RESOURCES_CPU_LIMITS="$cl"
-                                export RHDH_RESOURCES_MEMORY_REQUESTS="$mr"
-                                export RHDH_RESOURCES_MEMORY_LIMITS="$ml"
+                                export RHDH_DEPLOYMENT_REPLICAS="${RHDH_DEPLOYMENT_REPLICAS:-$r}"
+                                export RHDH_DB_REPLICAS="${RHDH_DB_REPLICAS:-$r}"
+                                export RHDH_DB_STORAGE="${RHDH_DB_STORAGE:-$s}"
+                                export RHDH_RESOURCES_CPU_REQUESTS="${RHDH_RESOURCES_CPU_REQUESTS:-$cr}"
+                                export RHDH_RESOURCES_CPU_LIMITS="${RHDH_RESOURCES_CPU_LIMITS:-$cl}"
+                                export RHDH_RESOURCES_MEMORY_REQUESTS="${RHDH_RESOURCES_MEMORY_REQUESTS:-$mr}"
+                                export RHDH_RESOURCES_MEMORY_LIMITS="${RHDH_RESOURCES_MEMORY_LIMITS:-$ml}"
                                 export RHDH_KEYCLOAK_REPLICAS="${RHDH_KEYCLOAK_REPLICAS:-$r}"
-                                export BACKSTAGE_USER_COUNT=$bu
-                                export GROUP_COUNT=$bg
-                                export RBAC_POLICY_SIZE="$rbs"
-                                export WORKERS=$w
-                                export API_COUNT=$a
-                                export COMPONENT_COUNT=$c
+                                export BACKSTAGE_USER_COUNT="${BACKSTAGE_USER_COUNT:-$bu}"
+                                export GROUP_COUNT="${GROUP_COUNT:-$bg}"
+                                export RBAC_POLICY_SIZE="${RBAC_POLICY_SIZE:-$rbs}"
+                                export WORKERS="${WORKERS:-$w}"
+                                export API_COUNT="${API_COUNT:-$a}"
+                                export COMPONENT_COUNT="${COMPONENT_COUNT:-$c}"
                                 index="${r}r-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c"
                                 set +x
                                 oc login "$OPENSHIFT_API" -u "$OPENSHIFT_USERNAME" -p "$OPENSHIFT_PASSWORD" --insecure-skip-tls-verify=true
