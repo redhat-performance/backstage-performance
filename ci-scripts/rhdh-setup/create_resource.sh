@@ -165,6 +165,7 @@ create_group() {
 
 export RBAC_POLICY_ALL_GROUPS_ADMIN="all_groups_admin" #default
 export RBAC_POLICY_STATIC="static"
+export RBAC_POLICY_USER_IN_MULTIPLE_GROUPS="user_in_multiple_groups"
 
 create_rbac_policy() {
   policy="${1:-$RBAC_POLICY_ALL_GROUPS_ADMIN}"
@@ -173,6 +174,23 @@ create_rbac_policy() {
   "$RBAC_POLICY_ALL_GROUPS_ADMIN")
     for i in $(seq 1 "$GROUP_COUNT"); do
       echo "    g, group:default/g${i}, role:default/a" >>"$TMP_DIR/group-rbac.yaml"
+    done
+    ;;
+  "$RBAC_POLICY_USER_IN_MULTIPLE_GROUPS")
+    group_condition="group in ["
+    for g in $(seq 1 "${RBAC_POLICY_SIZE:-$GROUP_COUNT}"); do
+      if [ "$g" -gt 1 ]; then
+        group_condition="$group_condition,"
+      fi
+      group_condition="$group_condition'g$g'"
+    done
+    group_condition="$group_condition]"
+    for u in $(seq 1 "$BACKSTAGE_USER_COUNT"); do
+      if [ "$u" -eq 1 ]; then
+        echo "    g, user:default/t${u}, role:default/a, $group_condition" >>"$TMP_DIR/group-rbac.yaml"
+      else
+        echo "    g, user:default/t${u}, role:default/a" >>"$TMP_DIR/group-rbac.yaml"
+      fi
     done
     ;;
   "$RBAC_POLICY_STATIC")
@@ -196,18 +214,37 @@ create_groups() {
 create_user() {
   max_attempts=5
   attempt=1
+  user_index=${0}
+  grp=$(echo "${0}%${GROUP_COUNT}" | bc)
+  [[ $grp -eq 0 ]] && grp=${GROUP_COUNT}
+  groups="["
+  case $RBAC_POLICY in
+  "$RBAC_POLICY_ALL_GROUPS_ADMIN" | "$RBAC_POLICY_STATIC")
+    groups="$groups\"g${grp}\""
+    ;;
+  "$RBAC_POLICY_USER_IN_MULTIPLE_GROUPS")
+    if [ "$user_index" -eq 1 ]; then
+      for g in $(seq 1 "${RBAC_POLICY_SIZE:-$GROUP_COUNT}"); do
+        if [ "$g" -gt 1 ]; then
+          groups="$groups,"
+        fi
+        groups="$groups\"g$g\""
+      done
+    else
+      groups="$groups\"g${grp}\""
+    fi
+    ;;
+  esac
+  groups="$groups]"
   while ((attempt <= max_attempts)); do
     token=$(get_token)
-    grp=$(echo "${0}%${GROUP_COUNT}" | bc)
-    [[ $grp -eq 0 ]] && grp=${GROUP_COUNT}
     username="t${0}"
-    groupname="g${grp}"
     response="$(curl -s -k --location --request POST "$(keycloak_url)/auth/admin/realms/backstage/users" \
       -H 'Content-Type: application/json' \
       -H 'Authorization: Bearer '"$token" \
-      --data-raw '{"firstName":"'"${username}"'","lastName":"tester", "email":"'"${username}"'@test.com","emailVerified":"true", "enabled":"true", "username":"'"${username}"'","groups":["/'"${groupname}"'"],"credentials":[{"type":"password","value":"'"${KEYCLOAK_USER_PASS}"'","temporary":false}]}' 2>&1)"
+      --data-raw '{"firstName":"'"${username}"'","lastName":"tester", "email":"'"${username}"'@test.com","emailVerified":"true", "enabled":"true", "username":"'"${username}"'","groups":'"$groups"',"credentials":[{"type":"password","value":"'"${KEYCLOAK_USER_PASS}"'","temporary":false}]}' 2>&1)"
     if [ "${PIPESTATUS[0]}" -eq 0 ] && ! echo "$response" | grep -q 'error' >&/dev/null; then
-      log_info "User $username ($groupname) created" >>"$TMP_DIR/create_user.log"
+      log_info "User $username ($groups) created" >>"$TMP_DIR/create_user.log"
       return
     else
       log_warn "Unable to create the $username user at $attempt. attempt. [$response].  Trying again up to $max_attempts times." >>"$TMP_DIR/create_user.log"
@@ -273,36 +310,36 @@ rhdh_token() {
     return
   fi
 
-  LOGIN_URL=$(curl -I -k -sSL --cookie "$COOKIE" --cookie-jar "$COOKIE" "$REFRESH_URL")
+  LOGIN_URL=$(curl -I -k -sSL --dump-header "$TMP_DIR/login_url_headers.log" --cookie "$COOKIE" --cookie-jar "$COOKIE" "$REFRESH_URL")
   state=$(echo "$LOGIN_URL" | grep -oP 'state=\K[^ ]+' | sed 's/%2F/\//g;s/%3A/:/g')
 
-  AUTH_URL=$(curl -k -sSL --get --cookie "$COOKIE" --cookie-jar "$COOKIE" \
+  AUTH_URL=$(curl -k -sSL --dump-header "$TMP_DIR/auth_url_headers.log"--get --cookie "$COOKIE" --cookie-jar "$COOKIE" \
     --data-urlencode "client_id=${CLIENTID}" \
     --data-urlencode "state=${state}" \
     --data-urlencode "redirect_uri=${REDIRECT_URL}" \
     --data-urlencode "scope=openid email profile" \
     --data-urlencode "response_type=code" \
-    "$(keycloak_url)/auth/realms/$REALM/protocol/openid-connect/auth" | grep -oP 'action="\K[^"]+')
+    "$(keycloak_url)/auth/realms/$REALM/protocol/openid-connect/auth" |& tee "$TMP_DIR/auth_url.log" | grep -oP 'action="\K[^"]+')
 
   execution=$(echo "$AUTH_URL" | grep -oP 'execution=\K[^&]+')
   tab_id=$(echo "$AUTH_URL" | grep -oP 'tab_id=\K[^&]+')
   # shellcheck disable=SC2001
   AUTHENTICATE_URL=$(echo "$AUTH_URL" | sed -e 's/\&amp;/\&/g')
 
-  CODE_URL=$(curl -k -sS --cookie "$COOKIE" --cookie-jar "$COOKIE" \
+  CODE_URL=$(curl -k -sS --dump-header "$TMP_DIR/code_url_headers.log" --cookie "$COOKIE" --cookie-jar "$COOKIE" \
     --data-raw "username=${USERNAME}&password=${PASSWORD}&credentialId=" \
     --data-urlencode "client_id=${CLIENTID}" \
     --data-urlencode "tab_id=${tab_id}" \
     --data-urlencode "execution=${execution}" \
     --write-out "%{redirect_url}" \
-    "$AUTHENTICATE_URL")
+    "$AUTHENTICATE_URL" |& tee "$TMP_DIR/code_url.log")
 
   code=$(echo "$CODE_URL" | grep -oP 'code=\K[^"]+')
   session_state=$(echo "$CODE_URL" | grep -oP 'session_state=\K[^&]+')
 
   # shellcheck disable=SC2001
   CODE_URL=$(echo "$CODE_URL" | sed -e 's/\&amp;/\&/g')
-  ACCESS_TOKEN=$(curl -k -sSL --cookie "$COOKIE" --cookie-jar "$COOKIE" \
+  ACCESS_TOKEN=$(curl -k -sSL --dump-header "$TMP_DIR/get_rhdh_token_headers.log" --cookie "$COOKIE" --cookie-jar "$COOKIE" \
     --data-urlencode "code=$code" \
     --data-urlencode "session_state=$session_state" \
     --data-urlencode "state=$state" \
