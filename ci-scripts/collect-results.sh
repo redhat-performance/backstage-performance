@@ -78,6 +78,7 @@ try_gather_file "${TMP_DIR}/get_token.log"
 try_gather_file "${TMP_DIR}/get_rhdh_token.log"
 try_gather_file "${TMP_DIR}/get_api_count.log"
 try_gather_file "${TMP_DIR}/get_component_count.log"
+try_gather_file "${TMP_DIR}/rbac-config.yaml"
 try_gather_file load-test.log
 try_gather_file postgresql.log
 
