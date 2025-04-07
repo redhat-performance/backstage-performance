@@ -21,21 +21,40 @@ mkdir -p "${TMP_DIR}"
 RHDH_NAMESPACE=${RHDH_NAMESPACE:-rhdh-performance}
 ENABLE_PROFILING="${ENABLE_PROFILING:-false}"
 RHDH_INSTALL_METHOD="${RHDH_INSTALL_METHOD:-helm}"
+LOCUST_NAMESPACE="${LOCUST_NAMESPACE:-locust-operator}"
 
 cli="oc"
 clin="$cli -n $RHDH_NAMESPACE"
 
-for label in app.kubernetes.io/name=developer-hub app.kubernetes.io/name=postgresql; do
-    echo -e "\nCollecting logs from pods in '$RHDH_NAMESPACE' namespace with label '$label':"
-    for pod in $($clin get pods -l "$label" -o name); do
+# Logs
+gather_pod_logs() {
+    log_dir=$1
+    pods=$2
+    namespace=$3
+    mkdir -p "$log_dir"
+    echo -e "\nCollecting logs from pods in '$namespace' namespace:"
+    for pod in $pods; do
         echo "$pod"
-        logfile="${ARTIFACT_DIR}/${pod##*/}"
-        echo -e " -> $logfile.log"
-        $clin logs "$pod" --tail=-1 >&"$logfile.log" || true
-        echo -e " -> $logfile.previous.log"
-        $clin logs "$pod" --tail=-1 --previous=true >&"$logfile.previous.log" || true
+        logfile_prefix="$log_dir/${pod##*/}"
+        echo -e " -> $logfile_prefix.log"
+        $cli -n "$namespace" logs "$pod" --tail=-1 >&"$logfile_prefix.log" || true
+        echo -e " -> $logfile_prefix.previous.log"
+        $cli -n "$namespace" logs "$pod" --tail=-1 --previous=true >&"$logfile_prefix.previous.log" || true
+    done
+}
+
+pods="$(oc -n "$LOCUST_NAMESPACE" get pods -o json | jq -r '.items[] | select(.metadata.name | contains("locust-operator")).metadata.name')"
+pods="$pods $(oc -n "$LOCUST_NAMESPACE" get pods -o json | jq -r '.items[] | select(.metadata.name | contains("test-worker")).metadata.name')"
+pods="$pods $(oc -n "$LOCUST_NAMESPACE" get pods -o json | jq -r '.items[] | select(.metadata.name | contains("test-master")).metadata.name')"
+gather_pod_logs "${ARTIFACT_DIR}/locust-logs" "$pods" "$LOCUST_NAMESPACE"
+
+pods=""
+for label in app.kubernetes.io/name=developer-hub app.kubernetes.io/name=postgresql; do
+    for pod in $($clin get pods -l "$label" -o name); do
+        pods="$pods $pod"
     done
 done
+gather_pod_logs "${ARTIFACT_DIR}/rhdh-logs" "$pods" "$RHDH_NAMESPACE"
 
 monitoring_collection_data=$ARTIFACT_DIR/benchmark.json
 monitoring_collection_log=$ARTIFACT_DIR/monitoring-collection.log
@@ -82,6 +101,7 @@ try_gather_file "${TMP_DIR}/rbac-config.yaml"
 try_gather_file load-test.log
 try_gather_file postgresql.log
 
+# Metrics
 PYTHON_VENV_DIR=.venv
 
 echo "$(date --utc -Ins) Setting up tool to collect monitoring data"
