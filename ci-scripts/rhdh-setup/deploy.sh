@@ -36,12 +36,12 @@ export RHDH_IMAGE_REGISTRY=${RHDH_IMAGE_REGISTRY:-}
 export RHDH_IMAGE_REPO=${RHDH_IMAGE_REPO:-}
 export RHDH_IMAGE_TAG=${RHDH_IMAGE_TAG:-}
 
-export RHDH_HELM_REPO=${RHDH_HELM_REPO:-https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/refs/heads/redhat-developer-hub-1.5-147-CI/installation}
+export RHDH_HELM_REPO=${RHDH_HELM_REPO:-https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/rhdh-1.6-rhel-9/installation}
 export RHDH_HELM_CHART=${RHDH_HELM_CHART:-redhat-developer-hub}
 export RHDH_HELM_CHART_VERSION=${RHDH_HELM_CHART_VERSION:-}
 
 OCP_VER="$(oc version -o json | jq -r '.openshiftVersion' | sed -r -e "s#([0-9]+\.[0-9]+)\..+#\1#")"
-export RHDH_OLM_INDEX_IMAGE="${RHDH_OLM_INDEX_IMAGE:-quay.io/rhdh/iib:1.4-v${OCP_VER}-x86_64}"
+export RHDH_OLM_INDEX_IMAGE="${RHDH_OLM_INDEX_IMAGE:-quay.io/rhdh/iib:1.6-v${OCP_VER}-x86_64}"
 export RHDH_OLM_CHANNEL=${RHDH_OLM_CHANNEL:-fast}
 export RHDH_OLM_OPERATOR_PACKAGE=${RHDH_OLM_OPERATOR_PACKAGE:-rhdh}
 export RHDH_OLM_WATCH_EXT_CONF=${RHDH_OLM_WATCH_EXT_CONF:-true}
@@ -330,7 +330,9 @@ install_rhdh_with_helm() {
     cp "$chart_values" "$TMP_DIR/chart-values.temp.yaml"
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.backstage |= . + load("template/backstage/helm/oauth2-container-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"; fi
     if ${ENABLE_RBAC}; then
-        if helm search repo --devel -r rhdh --version 1.5-1 --fail-on-no-result; then
+        if helm search repo --devel -r rhdh --version 1.6-1 --fail-on-no-result; then
+            yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.6.yaml")' "$TMP_DIR/chart-values.temp.yaml"
+        elif helm search repo --devel -r rhdh --version 1.5-1 --fail-on-no-result; then
             yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.5.yaml")' "$TMP_DIR/chart-values.temp.yaml"
         elif helm search repo --devel -r rhdh --version 1.4-1 --fail-on-no-result; then
             yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.4.yaml")' "$TMP_DIR/chart-values.temp.yaml"
