@@ -98,7 +98,7 @@ function compare_previous_test() {
     ticket="$1"   # Jira task for comparison tests
 
     export DURATION="15m"
-    export SCALE_BS_USERS_GROUPS="1000:250"
+    export SCALE_BS_USERS_GROUPS="1000:250 1000:250 1000:250 1000:250 1000:250"
     export SCALE_CATALOG_SIZES="2500:2500"
     export SCALE_DB_STORAGES="1Gi"
 
@@ -132,12 +132,12 @@ function storage_limit_test() {
 }
 
 # !!! Configure here !!!
-VERSION_OLD="1.4"
-VERSION_NEW="1.5"
-RHDH_HELM_REPO_OLD="https://charts.openshift.io/"
-RHDH_HELM_REPO_NEW="https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/refs/heads/redhat-developer-hub-1.5-147-CI/installation"
-SOURCE_BRANCH_OLD=rhdh-v1.4.x
+VERSION_OLD="1.5"
+VERSION_NEW="1.6"
+RHDH_HELM_REPO_OLD="https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/refs/heads/redhat-developer-hub-1.5-178-CI/installation"
+RHDH_HELM_REPO_NEW="https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/refs/heads/redhat-developer-hub-1.6-72-CI/installation"
+SOURCE_BRANCH_OLD=rhdh-v1.5.x
 SOURCE_BRANCH_NEW=main
-compare_previous_test "RHIDP-5931"
-entity_burden_test "RHIDP-5929"
-storage_limit_test "RHIDP-5927"
+compare_previous_test "RHIDP-6832"
+entity_burden_test "RHIDP-6841"
+storage_limit_test "RHIDP-6834"
