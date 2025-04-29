@@ -88,6 +88,7 @@ SCALABILITY_ARTIFACTS="$ARTIFACT_DIR/scalability"
 rm -rvf "${SCALABILITY_ARTIFACTS}"
 mkdir -p "${SCALABILITY_ARTIFACTS}"
 
+counter=0
 for w in "${workers[@]}"; do
     for bu_bg in "${bs_users_groups[@]}"; do
         IFS=":" read -ra tokens <<<"${bu_bg}"
@@ -126,8 +127,9 @@ for w in "${workers[@]}"; do
                                 export WORKERS=$w
                                 export API_COUNT=$a
                                 export COMPONENT_COUNT=$c
-                                index="${r}r-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c"
+                                index="${r}r-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c-${counter}"
                                 set +x
+                                (( counter += 1 ))
                                 oc login "$OPENSHIFT_API" -u "$OPENSHIFT_USERNAME" -p "$OPENSHIFT_PASSWORD" --insecure-skip-tls-verify=true
                                 make clean-local undeploy-rhdh
                                 setup_artifacts="$SCALABILITY_ARTIFACTS/$index/setup"
