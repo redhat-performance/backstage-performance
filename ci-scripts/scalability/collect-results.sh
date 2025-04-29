@@ -38,6 +38,7 @@ csv_delim=";"
 csv_delim_quoted="\"$csv_delim\""
 
 echo "Collecting scalability data"
+counter=0
 for w in "${workers[@]}"; do
     for r in "${replicas[@]}"; do
         for bu_bg in "${bs_users_groups[@]}"; do
@@ -59,12 +60,13 @@ for w in "${workers[@]}"; do
                                 IFS=":" read -ra tokens <<<"${mr_ml}"
                                 mr="${tokens[0]}"                                        # memory requests
                                 [[ "${#tokens[@]}" == 1 ]] && ml="" || ml="${tokens[1]}" # memory limits
-                                echo "$header" >"$output"
+                                [[ -f "${output}" ]] || echo "$header" >"$output"
                                 for a_c in "${catalog_apis_components[@]}"; do
                                     IFS=":" read -ra tokens <<<"${a_c}"
                                     a="${tokens[0]}"                                       # apis
                                     [[ "${#tokens[@]}" == 1 ]] && c="" || c="${tokens[1]}" # components
-                                    index="${r}r-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c"
+                                    index="${r}r-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c-${counter}"
+                                    (( counter += 1 ))
                                     iteration="${index}/test/${active_users}u"
                                     echo "[$iteration] Looking for benchmark.json..."
                                     benchmark_json="$(find "${ARTIFACT_DIR}" -name benchmark.json | grep "$iteration" || true)"
