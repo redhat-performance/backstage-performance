@@ -6,6 +6,7 @@ set -o pipefail
 
 # Just a helper script to output CSV file based on all found benchmark.json files
 headers="Build_ID,\
+Iteration,\
 DeployStarted,\
 DeployEnded,\
 DeployDuration,\
@@ -76,6 +77,7 @@ find "${1:-.}" -name benchmark.json -print0 | while IFS= read -r -d '' filename;
     sed -Ee 's/: ([0-9]+\.[0-9]*[X]+[0-9e\+-]*|[0-9]*X+[0-9]*\.[0-9e\+-]*|[0-9]*X+[0-9]*\.[0-9]*X+[0-9e\+-]+)/: "\1"/g' "${filename}" |
         jq --raw-output '[
         .metadata.env.BUILD_ID,
+        .metadata.scalability.iteration,
         .measurements.timings.deploy.started,
         .measurements.timings.deploy.ended,
         .measurements.timings.deploy.duration,
