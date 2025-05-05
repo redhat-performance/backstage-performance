@@ -88,6 +88,7 @@ SCALABILITY_ARTIFACTS="$ARTIFACT_DIR/scalability"
 rm -rvf "${SCALABILITY_ARTIFACTS}"
 mkdir -p "${SCALABILITY_ARTIFACTS}"
 
+counter=1
 for w in "${workers[@]}"; do
     for bu_bg in "${bs_users_groups[@]}"; do
         IFS=":" read -ra tokens <<<"${bu_bg}"
@@ -130,7 +131,7 @@ for w in "${workers[@]}"; do
                                 set +x
                                 oc login "$OPENSHIFT_API" -u "$OPENSHIFT_USERNAME" -p "$OPENSHIFT_PASSWORD" --insecure-skip-tls-verify=true
                                 make clean-local undeploy-rhdh
-                                setup_artifacts="$SCALABILITY_ARTIFACTS/$index/setup"
+                                setup_artifacts="$SCALABILITY_ARTIFACTS/$index/setup/${counter}"
                                 mkdir -p "$setup_artifacts"
                                 ARTIFACT_DIR=$setup_artifacts ./ci-scripts/setup.sh |& tee "$setup_artifacts/setup.log"
                                 wait_for_indexing |& tee "$setup_artifacts/after-setup-search.log"
@@ -148,11 +149,14 @@ for w in "${workers[@]}"; do
                                     export SPAWN_RATE="${sr}"
                                     set +x
                                     make clean
-                                    test_artifacts="$SCALABILITY_ARTIFACTS/$index/test/${au}u"
+                                    test_artifacts="$SCALABILITY_ARTIFACTS/$index/test/${counter}/${au}u"
                                     mkdir -p "$test_artifacts"
                                     wait_for_indexing |& tee "$test_artifacts/before-test-search.log"
                                     ARTIFACT_DIR=$test_artifacts ./ci-scripts/test.sh |& tee "$test_artifacts/test.log"
                                     ARTIFACT_DIR=$test_artifacts ./ci-scripts/collect-results.sh |& tee "$test_artifacts/collect-results.log"
+                                    jq ".metadata.scalability.iteration = ${counter}" "$test_artifacts/benchmark.json" > $$.json
+                                    mv -vf $$.json "$test_artifacts/benchmark.json"
+                                    (( counter += 1 ))
                                 done
                             done
                         done
