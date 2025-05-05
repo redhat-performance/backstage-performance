@@ -38,7 +38,7 @@ csv_delim=";"
 csv_delim_quoted="\"$csv_delim\""
 
 echo "Collecting scalability data"
-counter=0
+counter=1
 for w in "${workers[@]}"; do
     for r in "${replicas[@]}"; do
         for bu_bg in "${bs_users_groups[@]}"; do
@@ -50,7 +50,7 @@ for w in "${workers[@]}"; do
                     for au_sr in "${active_users_spawn_rate[@]}"; do
                         IFS=":" read -ra tokens <<<"${au_sr}"
                         active_users=${tokens[0]}
-                        output="$ARTIFACT_DIR/scalability_c-${r}r-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${active_users}u.csv"
+                        output="$ARTIFACT_DIR/scalability_c-${r}r-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${active_users}u-${counter}.csv"
                         header="CatalogSize${csv_delim}Apis${csv_delim}Components${csv_delim}MaxActiveUsers${csv_delim}AverageRPS${csv_delim}MaxRPS${csv_delim}AverageRT${csv_delim}MaxRT${csv_delim}Failures${csv_delim}FailRate${csv_delim}DBStorageUsed${csv_delim}DBStorageAvailable${csv_delim}DBStorageCapacity"
                         for cr_cl in "${cpu_requests_limits[@]}"; do
                             IFS=":" read -ra tokens <<<"${cr_cl}"
@@ -65,9 +65,9 @@ for w in "${workers[@]}"; do
                                     IFS=":" read -ra tokens <<<"${a_c}"
                                     a="${tokens[0]}"                                       # apis
                                     [[ "${#tokens[@]}" == 1 ]] && c="" || c="${tokens[1]}" # components
-                                    index="${r}r-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c-${counter}"
+                                    index="${r}r-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c"
+                                    iteration="${index}/test/${counter}/${active_users}u"
                                     (( counter += 1 ))
-                                    iteration="${index}/test/${active_users}u"
                                     echo "[$iteration] Looking for benchmark.json..."
                                     benchmark_json="$(find "${ARTIFACT_DIR}" -name benchmark.json | grep "$iteration" || true)"
                                     if [ -n "$benchmark_json" ]; then
