@@ -17,17 +17,19 @@ error_unknown=0
 error_504=0
 error_503=0
 error_502=0
+error_401=0
 error_remoteclose=0
 
 heading=""
 final_csv=""
 
 function cleanup_errors() {
+    error_unknown=0
     error_504=0
     error_503=0
     error_502=0
+    error_401=0
     error_remoteclose=0
-    error_unknown=0
 }
 
 function show_errors() {
@@ -35,9 +37,10 @@ function show_errors() {
     echo "504 Server Error: Gateway Time-out for url: $error_504"
     echo "503 Server Error: Service Unavailable for url: $error_503"
     echo "502 Server Error: Bad Gateway for url: $error_502"
+    echo "401 Client Error: Unauthorized for url: $error_401"
     echo "Remote end closed connection without response: $error_remoteclose"
     echo "Not recognized error: $error_unknown"
-    final_csv="${final_csv}${heading},${log_url},${error_504},${error_503},${error_502},${error_remoteclose},${error_unknown}\n"
+    final_csv="${final_csv}${heading},${log_url},${error_504},${error_503},${error_502},${error_401},${error_remoteclose},${error_unknown}\n"
 }
 
 # Why this fifo? See https://jhutar.blogspot.com/2024/12/bash-while-read-line-without-subshell.html
@@ -72,6 +75,12 @@ while IFS=$'\n' read -r line; do
             count="${numbers[0]}"
             (( error_502+=count ))
         ;;
+        *"401 Client Error: Unauthorized for url: "*)
+            # shellcheck disable=SC2206
+            numbers=( ${line//[!0-9]/ } )
+            count="${numbers[0]}"
+            (( error_401+=count ))
+        ;;
         *"Remote end closed connection without response"*)
             # shellcheck disable=SC2206
             numbers=( ${line//[!0-9]/ } )
@@ -91,5 +100,5 @@ done < "$TMPFIFODIR/mypipe"
 show_errors
 
 echo -e "\nIn CSV form:\n"
-echo "Scenario,Log,504 Server Error: Gateway Time-out for url: ...,503 Server Error: Service Unavailable for url: ...,502 Server Error: Bad Gateway for url: ...,Remote end closed connection without response,Not recognized error"
+echo "Scenario,Log,504 Server Error: Gateway Time-out for url: ...,503 Server Error: Service Unavailable for url: ...,502 Server Error: Bad Gateway for url: ...,401 Client Error: Unauthorized for url: ...,Remote end closed connection without response,Not recognized error"
 echo -e "$final_csv"
