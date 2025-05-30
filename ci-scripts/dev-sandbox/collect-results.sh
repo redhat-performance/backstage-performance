@@ -18,8 +18,8 @@ mkdir -p "${TMP_DIR}"
 cli="oc"
 clin="$cli -n $RHDH_OPERATOR_NAMESPACE"
 
-$clin logs -l app=rhdh-operator --tail=-1 >& "$ARTIFACT_DIR/rhdh-operator.log"
-$clin logs -l app=rhdh-operator --previous=true --tail=-1 >& "$ARTIFACT_DIR/rhdh-operator.previous.log"
+$clin logs -l app=rhdh-operator --tail=-1 >&"$ARTIFACT_DIR/rhdh-operator.log"
+$clin logs -l app=rhdh-operator --previous=true --tail=-1 >&"$ARTIFACT_DIR/rhdh-operator.previous.log"
 
 out=$ARTIFACT_DIR/summary.csv
 rm -rvf "$out"
@@ -122,3 +122,4 @@ done <<<"$(find "$monitoring_collection_dir" -name '*.csv')"
 wait
 
 csvjoin -c timestamp -d ";" --datetime-format "%F %T" "$monitoring_collection_dir"/*.csv >"$ARTIFACT_DIR/metrics-all.csv"
+csvcut -c "timestamp,measurements.cluster_configmaps_count,measurements.cluster_namespaces_count,measurements.cluster_secrets_count,measurements.rhdh-operator.memory,measurements.rhdh-operator.restarts" "$ARTIFACT_DIR/metrics-all.csv" >"$ARTIFACT_DIR/metrics.summary.csv"
