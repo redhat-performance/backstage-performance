@@ -20,6 +20,7 @@ clin="$cli -n $RHDH_OPERATOR_NAMESPACE"
 
 $clin logs -l app=rhdh-operator --tail=-1 >&"$ARTIFACT_DIR/rhdh-operator.log"
 $clin logs -l app=rhdh-operator --previous=true --tail=-1 >&"$ARTIFACT_DIR/rhdh-operator.previous.log"
+$clin get pods -l app=rhdh-operator -o yaml >"$ARTIFACT_DIR/rhdh-operator.pods.yaml"
 
 out=$ARTIFACT_DIR/summary.csv
 rm -rvf "$out"
