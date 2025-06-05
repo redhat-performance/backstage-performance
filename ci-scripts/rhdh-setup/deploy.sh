@@ -21,8 +21,6 @@ export RHDH_OPERATOR_NAMESPACE=${RHDH_OPERATOR_NAMESPACE:-rhdh-operator}
 cli="oc"
 clin="$cli -n $RHDH_NAMESPACE"
 
-repo_name="$RHDH_NAMESPACE-helm-repo"
-
 export RHDH_DEPLOYMENT_REPLICAS=${RHDH_DEPLOYMENT_REPLICAS:-1}
 export RHDH_DB_REPLICAS=${RHDH_DB_REPLICAS:-1}
 export RHDH_DB_STORAGE=${RHDH_DB_STORAGE:-1Gi}
@@ -36,7 +34,7 @@ export RHDH_IMAGE_REGISTRY=${RHDH_IMAGE_REGISTRY:-}
 export RHDH_IMAGE_REPO=${RHDH_IMAGE_REPO:-}
 export RHDH_IMAGE_TAG=${RHDH_IMAGE_TAG:-}
 
-export RHDH_HELM_REPO=${RHDH_HELM_REPO:-https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/rhdh-1.6-rhel-9/installation}
+export RHDH_HELM_REPO=${RHDH_HELM_REPO:-oci://quay.io/rhdh/chart}
 export RHDH_HELM_CHART=${RHDH_HELM_CHART:-redhat-developer-hub}
 export RHDH_HELM_CHART_VERSION=${RHDH_HELM_CHART_VERSION:-}
 
@@ -309,19 +307,13 @@ backstage_install() {
 
 # shellcheck disable=SC2016,SC1004
 install_rhdh_with_helm() {
-    log_info "Removing old Helm repo ${repo_name}"
-    helm repo remove "${repo_name}" || true
-    log_info "Adding new Helm repo ${repo_name}: ${RHDH_HELM_REPO}"
-    helm repo add "${repo_name}" "${RHDH_HELM_REPO}"
-    log_info "Updating helm repo ${repo_name}"
-    helm repo update "${repo_name}"
     chart_values=template/backstage/helm/chart-values.yaml
     if [ -n "${RHDH_IMAGE_REGISTRY}${RHDH_IMAGE_REPO}${RHDH_IMAGE_TAG}" ]; then
         echo "Using '$RHDH_IMAGE_REGISTRY/$RHDH_IMAGE_REPO:$RHDH_IMAGE_TAG' image for RHDH"
         chart_values=template/backstage/helm/chart-values.image-override.yaml
     fi
     version_arg=""
-    chart_origin=$repo_name/$RHDH_HELM_CHART
+    chart_origin=$RHDH_HELM_REPO
     if [ -n "${RHDH_HELM_CHART_VERSION}" ]; then
         version_arg="--version $RHDH_HELM_CHART_VERSION"
         chart_origin="$chart_origin@$RHDH_HELM_CHART_VERSION"
@@ -330,19 +322,7 @@ install_rhdh_with_helm() {
     cp "$chart_values" "$TMP_DIR/chart-values.temp.yaml"
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.backstage |= . + load("template/backstage/helm/oauth2-container-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"; fi
     if ${ENABLE_RBAC}; then
-        if helm search repo --devel -r rhdh --version 1.6-1 --fail-on-no-result; then
-            yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.6.yaml")' "$TMP_DIR/chart-values.temp.yaml"
-        elif helm search repo --devel -r rhdh --version 1.5-1 --fail-on-no-result; then
-            yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.5.yaml")' "$TMP_DIR/chart-values.temp.yaml"
-        elif helm search repo --devel -r rhdh --version 1.4-1 --fail-on-no-result; then
-            yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.4.yaml")' "$TMP_DIR/chart-values.temp.yaml"
-        elif helm search repo --devel -r rhdh --version 1.3-1 --fail-on-no-result; then
-            yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.3.yaml")' "$TMP_DIR/chart-values.temp.yaml"
-        elif helm search repo --devel -r rhdh --version 1.2-1 --fail-on-no-result; then
-            yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.2.yaml")' "$TMP_DIR/chart-values.temp.yaml"
-        else
-            yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.1.yaml")' "$TMP_DIR/chart-values.temp.yaml"
-        fi
+        yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.x.yaml")' "$TMP_DIR/chart-values.temp.yaml"
         yq -i '.global.dynamic.plugins |= . + load("template/backstage/helm/rbac-plugin-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"
     fi
     envsubst \
@@ -376,7 +356,7 @@ install_rhdh_with_helm() {
         yq -i '.upstream.backstage.livenessProbe |= {"httpGet":{"path":"/healthcheck","port":7007,"scheme":"HTTP"},"initialDelaySeconds":30,"timeoutSeconds":2,"periodSeconds":300,"successThreshold":1,"failureThreshold":3}' "$TMP_DIR/chart-values.yaml"
     fi
     #shellcheck disable=SC2086
-    helm upgrade --install "${RHDH_HELM_RELEASE_NAME}" --devel "${repo_name}/${RHDH_HELM_CHART}" ${version_arg} -n "${RHDH_NAMESPACE}" --values "$TMP_DIR/chart-values.yaml"
+    helm upgrade "${RHDH_HELM_RELEASE_NAME}" -i ${RHDH_HELM_REPO} ${version_arg} -n "${RHDH_NAMESPACE}" --values "$TMP_DIR/chart-values.yaml"
     wait_to_start statefulset "${RHDH_HELM_RELEASE_NAME}-postgresql-read" 300 300
     wait_to_start deployment "${RHDH_HELM_RELEASE_NAME}-developer-hub" 300 300
 }
@@ -596,7 +576,6 @@ delete() {
         helm uninstall "${RHDH_HELM_RELEASE_NAME}" --namespace "${RHDH_NAMESPACE}"
         $clin delete pvc "data-${RHDH_HELM_RELEASE_NAME}-postgresql-0" --ignore-not-found=true
         $cli delete ns "${RHDH_NAMESPACE}" --ignore-not-found=true --wait
-        helm repo remove "${repo_name}" || true
     elif [ "$INSTALL_METHOD" == "olm" ]; then
         delete_rhdh_with_olm
     fi
