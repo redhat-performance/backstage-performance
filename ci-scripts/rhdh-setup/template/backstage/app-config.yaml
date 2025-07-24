@@ -1,5 +1,7 @@
 app:
   title: Red Hat Developer Hub
+  analytics:
+    adoptionInsights: {}
 organization:
   name: RHDH Perf&Scale
 integrations:
