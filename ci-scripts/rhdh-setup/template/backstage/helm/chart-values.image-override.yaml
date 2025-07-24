@@ -9,6 +9,8 @@ global:
     plugins:
       - package: ./dynamic-plugins/dist/backstage-community-plugin-catalog-backend-module-keycloak-dynamic
         disabled: false
+      - package: ./dynamic-plugins/dist/backstage-community-plugin-analytics-provider-segment
+        disabled: true
       # TechDocs
       - package: ./dynamic-plugins/dist/backstage-plugin-techdocs
         disabled: false
