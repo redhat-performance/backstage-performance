@@ -8,10 +8,10 @@ source "$(readlink -m "$SCRIPT_DIR"/../../test.env)"
 # shellcheck disable=SC1091
 source ./create_resource.sh
 
-[ -z "${QUAY_TOKEN}" ]
-[ -z "${GITHUB_TOKEN}" ]
-[ -z "${GITHUB_USER}" ]
-[ -z "${GITHUB_REPO}" ]
+[ -n "${QUAY_TOKEN}" ]
+[ -n "${GITHUB_TOKEN}" ]
+[ -n "${GITHUB_USER}" ]
+[ -n "${GITHUB_REPO}" ]
 
 export RHDH_NAMESPACE=${RHDH_NAMESPACE:-rhdh-performance}
 export RHDH_HELM_RELEASE_NAME=${RHDH_HELM_RELEASE_NAME:-rhdh}
@@ -20,8 +20,6 @@ export RHDH_OPERATOR_NAMESPACE=${RHDH_OPERATOR_NAMESPACE:-rhdh-operator}
 
 cli="oc"
 clin="$cli -n $RHDH_NAMESPACE"
-
-repo_name="$RHDH_NAMESPACE-helm-repo"
 
 export RHDH_DEPLOYMENT_REPLICAS=${RHDH_DEPLOYMENT_REPLICAS:-1}
 export RHDH_DB_REPLICAS=${RHDH_DB_REPLICAS:-1}
@@ -36,12 +34,14 @@ export RHDH_IMAGE_REGISTRY=${RHDH_IMAGE_REGISTRY:-}
 export RHDH_IMAGE_REPO=${RHDH_IMAGE_REPO:-}
 export RHDH_IMAGE_TAG=${RHDH_IMAGE_TAG:-}
 
-export RHDH_HELM_REPO=${RHDH_HELM_REPO:-https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/rhdh-1.6-rhel-9/installation}
+export RHDH_BASE_VERSION=${RHDH_BASE_VERSION:-1.6}
+
+export RHDH_HELM_REPO=${RHDH_HELM_REPO:-oci://quay.io/rhdh/chart}
 export RHDH_HELM_CHART=${RHDH_HELM_CHART:-redhat-developer-hub}
-export RHDH_HELM_CHART_VERSION=${RHDH_HELM_CHART_VERSION:-}
+export RHDH_HELM_CHART_VERSION=${RHDH_HELM_CHART_VERSION:-$(skopeo list-tags docker://quay.io/rhdh/chart | jq -rc '.Tags[]' | grep "${RHDH_BASE_VERSION//./\.}"'.*' | sort -V | tail -n1)}
 
 OCP_VER="$(oc version -o json | jq -r '.openshiftVersion' | sed -r -e "s#([0-9]+\.[0-9]+)\..+#\1#")"
-export RHDH_OLM_INDEX_IMAGE="${RHDH_OLM_INDEX_IMAGE:-quay.io/rhdh/iib:1.6-v${OCP_VER}-x86_64}"
+export RHDH_OLM_INDEX_IMAGE="${RHDH_OLM_INDEX_IMAGE:-quay.io/rhdh/iib:${RHDH_BASE_VERSION}-v${OCP_VER}-x86_64}"
 export RHDH_OLM_CHANNEL=${RHDH_OLM_CHANNEL:-fast}
 export RHDH_OLM_OPERATOR_PACKAGE=${RHDH_OLM_OPERATOR_PACKAGE:-rhdh}
 export RHDH_OLM_WATCH_EXT_CONF=${RHDH_OLM_WATCH_EXT_CONF:-true}
@@ -95,6 +95,7 @@ wait_to_start_in_namespace() {
         fi
     done
     $cli -n "$namespace" rollout status "$rn" --timeout="${wait_timeout}s"
+    return $?
 }
 
 wait_for_crd() {
@@ -117,6 +118,7 @@ wait_for_crd() {
 
 wait_to_start() {
     wait_to_start_in_namespace "$RHDH_NAMESPACE" "$@"
+    return $?
 }
 
 label() {
@@ -163,8 +165,12 @@ install() {
     fi
 
     backstage_install |& tee -a "${TMP_DIR}/backstage-install.log"
+    exit_code=${PIPESTATUS[0]}
+    if [ "$exit_code" -ne 0 ]; then
+        log_error "Installation failed!!!"
+        return "$exit_code"
+    fi
     psql_debug
-
     log_info "Waiting for all the users and groups to be created in Keycloak"
     wait
 }
@@ -252,11 +258,13 @@ backstage_install() {
     until $clin create -f "template/backstage/techdocs-pvc.yaml"; do $clin delete pvc rhdh-techdocs --ignore-not-found=true; done
     if [ "$INSTALL_METHOD" == "helm" ]; then
         install_rhdh_with_helm
+        install_exit_code=$?
     elif [ "$INSTALL_METHOD" == "olm" ]; then
         install_rhdh_with_olm
+        install_exit_code=$?
     else
         log_error "Invalid install method: $INSTALL_METHOD, currently allowed methods are helm or olm"
-        return 1
+        exit 1
     fi
     date --utc -Ins >"${TMP_DIR}/populate-before"
     # shellcheck disable=SC2064
@@ -267,6 +275,10 @@ backstage_install() {
             $clin create -f template/backstage/rhdh-metrics-service.yaml
         fi
         envsubst <template/backstage/rhdh-servicemonitor.yaml | $clin create -f -
+    fi
+    if [ "$install_exit_code" -ne 0 ]; then
+        log_error "RHDH installation with install method $INSTALL_METHOD failed"
+        return $install_exit_code
     fi
     log_info "RHDH Installed, waiting for the catalog to be populated"
     timeout=600
@@ -309,19 +321,13 @@ backstage_install() {
 
 # shellcheck disable=SC2016,SC1004
 install_rhdh_with_helm() {
-    log_info "Removing old Helm repo ${repo_name}"
-    helm repo remove "${repo_name}" || true
-    log_info "Adding new Helm repo ${repo_name}: ${RHDH_HELM_REPO}"
-    helm repo add "${repo_name}" "${RHDH_HELM_REPO}"
-    log_info "Updating helm repo ${repo_name}"
-    helm repo update "${repo_name}"
     chart_values=template/backstage/helm/chart-values.yaml
     if [ -n "${RHDH_IMAGE_REGISTRY}${RHDH_IMAGE_REPO}${RHDH_IMAGE_TAG}" ]; then
         echo "Using '$RHDH_IMAGE_REGISTRY/$RHDH_IMAGE_REPO:$RHDH_IMAGE_TAG' image for RHDH"
         chart_values=template/backstage/helm/chart-values.image-override.yaml
     fi
     version_arg=""
-    chart_origin=$repo_name/$RHDH_HELM_CHART
+    chart_origin=$RHDH_HELM_REPO
     if [ -n "${RHDH_HELM_CHART_VERSION}" ]; then
         version_arg="--version $RHDH_HELM_CHART_VERSION"
         chart_origin="$chart_origin@$RHDH_HELM_CHART_VERSION"
@@ -330,19 +336,7 @@ install_rhdh_with_helm() {
     cp "$chart_values" "$TMP_DIR/chart-values.temp.yaml"
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.backstage |= . + load("template/backstage/helm/oauth2-container-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"; fi
     if ${ENABLE_RBAC}; then
-        if helm search repo --devel -r rhdh --version 1.6-1 --fail-on-no-result; then
-            yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.6.yaml")' "$TMP_DIR/chart-values.temp.yaml"
-        elif helm search repo --devel -r rhdh --version 1.5-1 --fail-on-no-result; then
-            yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.5.yaml")' "$TMP_DIR/chart-values.temp.yaml"
-        elif helm search repo --devel -r rhdh --version 1.4-1 --fail-on-no-result; then
-            yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.4.yaml")' "$TMP_DIR/chart-values.temp.yaml"
-        elif helm search repo --devel -r rhdh --version 1.3-1 --fail-on-no-result; then
-            yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.3.yaml")' "$TMP_DIR/chart-values.temp.yaml"
-        elif helm search repo --devel -r rhdh --version 1.2-1 --fail-on-no-result; then
-            yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.2.yaml")' "$TMP_DIR/chart-values.temp.yaml"
-        else
-            yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.1.yaml")' "$TMP_DIR/chart-values.temp.yaml"
-        fi
+        yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.x.yaml")' "$TMP_DIR/chart-values.temp.yaml"
         yq -i '.global.dynamic.plugins |= . + load("template/backstage/helm/rbac-plugin-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"
     fi
     envsubst \
@@ -376,9 +370,10 @@ install_rhdh_with_helm() {
         yq -i '.upstream.backstage.livenessProbe |= {"httpGet":{"path":"/healthcheck","port":7007,"scheme":"HTTP"},"initialDelaySeconds":30,"timeoutSeconds":2,"periodSeconds":300,"successThreshold":1,"failureThreshold":3}' "$TMP_DIR/chart-values.yaml"
     fi
     #shellcheck disable=SC2086
-    helm upgrade --install "${RHDH_HELM_RELEASE_NAME}" --devel "${repo_name}/${RHDH_HELM_CHART}" ${version_arg} -n "${RHDH_NAMESPACE}" --values "$TMP_DIR/chart-values.yaml"
+    helm upgrade "${RHDH_HELM_RELEASE_NAME}" -i ${RHDH_HELM_REPO} ${version_arg} -n "${RHDH_NAMESPACE}" --values "$TMP_DIR/chart-values.yaml"
     wait_to_start statefulset "${RHDH_HELM_RELEASE_NAME}-postgresql-read" 300 300
     wait_to_start deployment "${RHDH_HELM_RELEASE_NAME}-developer-hub" 300 300
+    return $?
 }
 
 install_rhdh_with_olm() {
@@ -415,6 +410,7 @@ install_rhdh_with_olm() {
 
     wait_to_start statefulset "backstage-psql-developer-hub" 300 300
     wait_to_start deployment "backstage-developer-hub" 300 300
+    return $?
 }
 
 # shellcheck disable=SC2016,SC1001,SC2086
@@ -596,7 +592,6 @@ delete() {
         helm uninstall "${RHDH_HELM_RELEASE_NAME}" --namespace "${RHDH_NAMESPACE}"
         $clin delete pvc "data-${RHDH_HELM_RELEASE_NAME}-postgresql-0" --ignore-not-found=true
         $cli delete ns "${RHDH_NAMESPACE}" --ignore-not-found=true --wait
-        helm repo remove "${repo_name}" || true
     elif [ "$INSTALL_METHOD" == "olm" ]; then
         delete_rhdh_with_olm
     fi
