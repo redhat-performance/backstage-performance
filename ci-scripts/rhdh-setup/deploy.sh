@@ -8,10 +8,10 @@ source "$(readlink -m "$SCRIPT_DIR"/../../test.env)"
 # shellcheck disable=SC1091
 source ./create_resource.sh
 
-[ -z "${QUAY_TOKEN}" ]
-[ -z "${GITHUB_TOKEN}" ]
-[ -z "${GITHUB_USER}" ]
-[ -z "${GITHUB_REPO}" ]
+[ -n "${QUAY_TOKEN}" ]
+[ -n "${GITHUB_TOKEN}" ]
+[ -n "${GITHUB_USER}" ]
+[ -n "${GITHUB_REPO}" ]
 
 export RHDH_NAMESPACE=${RHDH_NAMESPACE:-rhdh-performance}
 export RHDH_HELM_RELEASE_NAME=${RHDH_HELM_RELEASE_NAME:-rhdh}
@@ -34,12 +34,14 @@ export RHDH_IMAGE_REGISTRY=${RHDH_IMAGE_REGISTRY:-}
 export RHDH_IMAGE_REPO=${RHDH_IMAGE_REPO:-}
 export RHDH_IMAGE_TAG=${RHDH_IMAGE_TAG:-}
 
+export RHDH_BASE_VERSION=${RHDH_BASE_VERSION:-1.7}
+
 export RHDH_HELM_REPO=${RHDH_HELM_REPO:-oci://quay.io/rhdh/chart}
 export RHDH_HELM_CHART=${RHDH_HELM_CHART:-redhat-developer-hub}
-export RHDH_HELM_CHART_VERSION=${RHDH_HELM_CHART_VERSION:-}
+export RHDH_HELM_CHART_VERSION=${RHDH_HELM_CHART_VERSION:-$(skopeo list-tags docker://quay.io/rhdh/chart | jq -rc '.Tags[]' | grep "${RHDH_BASE_VERSION//./\.}"'.*' | sort -V | tail -n1)}
 
 OCP_VER="$(oc version -o json | jq -r '.openshiftVersion' | sed -r -e "s#([0-9]+\.[0-9]+)\..+#\1#")"
-export RHDH_OLM_INDEX_IMAGE="${RHDH_OLM_INDEX_IMAGE:-quay.io/rhdh/iib:1.6-v${OCP_VER}-x86_64}"
+export RHDH_OLM_INDEX_IMAGE="${RHDH_OLM_INDEX_IMAGE:-quay.io/rhdh/iib:${RHDH_BASE_VERSION}-v${OCP_VER}-x86_64}"
 export RHDH_OLM_CHANNEL=${RHDH_OLM_CHANNEL:-fast}
 export RHDH_OLM_OPERATOR_PACKAGE=${RHDH_OLM_OPERATOR_PACKAGE:-rhdh}
 export RHDH_OLM_WATCH_EXT_CONF=${RHDH_OLM_WATCH_EXT_CONF:-true}
@@ -93,6 +95,7 @@ wait_to_start_in_namespace() {
         fi
     done
     $cli -n "$namespace" rollout status "$rn" --timeout="${wait_timeout}s"
+    return $?
 }
 
 wait_for_crd() {
@@ -115,6 +118,7 @@ wait_for_crd() {
 
 wait_to_start() {
     wait_to_start_in_namespace "$RHDH_NAMESPACE" "$@"
+    return $?
 }
 
 label() {
@@ -161,8 +165,12 @@ install() {
     fi
 
     backstage_install |& tee -a "${TMP_DIR}/backstage-install.log"
+    exit_code=${PIPESTATUS[0]}
+    if [ "$exit_code" -ne 0 ]; then
+        log_error "Installation failed!!!"
+        return "$exit_code"
+    fi
     psql_debug
-
     log_info "Waiting for all the users and groups to be created in Keycloak"
     wait
 }
@@ -250,11 +258,13 @@ backstage_install() {
     until $clin create -f "template/backstage/techdocs-pvc.yaml"; do $clin delete pvc rhdh-techdocs --ignore-not-found=true; done
     if [ "$INSTALL_METHOD" == "helm" ]; then
         install_rhdh_with_helm
+        install_exit_code=$?
     elif [ "$INSTALL_METHOD" == "olm" ]; then
         install_rhdh_with_olm
+        install_exit_code=$?
     else
         log_error "Invalid install method: $INSTALL_METHOD, currently allowed methods are helm or olm"
-        return 1
+        exit 1
     fi
     date --utc -Ins >"${TMP_DIR}/populate-before"
     # shellcheck disable=SC2064
@@ -265,6 +275,10 @@ backstage_install() {
             $clin create -f template/backstage/rhdh-metrics-service.yaml
         fi
         envsubst <template/backstage/rhdh-servicemonitor.yaml | $clin create -f -
+    fi
+    if [ "$install_exit_code" -ne 0 ]; then
+        log_error "RHDH installation with install method $INSTALL_METHOD failed"
+        return $install_exit_code
     fi
     log_info "RHDH Installed, waiting for the catalog to be populated"
     timeout=600
@@ -359,6 +373,7 @@ install_rhdh_with_helm() {
     helm upgrade "${RHDH_HELM_RELEASE_NAME}" -i ${RHDH_HELM_REPO} ${version_arg} -n "${RHDH_NAMESPACE}" --values "$TMP_DIR/chart-values.yaml"
     wait_to_start statefulset "${RHDH_HELM_RELEASE_NAME}-postgresql-read" 300 300
     wait_to_start deployment "${RHDH_HELM_RELEASE_NAME}-developer-hub" 300 300
+    return $?
 }
 
 install_rhdh_with_olm() {
@@ -395,6 +410,7 @@ install_rhdh_with_olm() {
 
     wait_to_start statefulset "backstage-psql-developer-hub" 300 300
     wait_to_start deployment "backstage-developer-hub" 300 300
+    return $?
 }
 
 # shellcheck disable=SC2016,SC1001,SC2086
