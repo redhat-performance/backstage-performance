@@ -30,15 +30,20 @@ export RHDH_IMAGE_REGISTRY ?=
 export RHDH_IMAGE_REPO ?=
 export RHDH_IMAGE_TAG ?=
 
+# RHDH base version
+export RHDH_BASE_VERSION ?= 1.7
+
 # RHDH Helm chart to deploy
 export RHDH_NAMESPACE ?= rhdh-performance
-export RHDH_HELM_REPO ?= https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/rhdh-1.6-rhel-9/installation
+export RHDH_HELM_REPO ?= oci://quay.io/rhdh/chart
 export RHDH_HELM_CHART ?= redhat-developer-hub
+# RHDH_HELM_CHART_VERSION auto-determined in deploy.sh if empty
 export RHDH_HELM_CHART_VERSION ?=
 export RHDH_HELM_RELEASE_NAME ?= rhdh
 
 # RHDH OLM subscription to deploy
-export RHDH_OLM_INDEX_IMAGE ?= quay.io/rhdh/iib:1.6-v$(shell oc version -o json | jq -r '.openshiftVersion' | sed -r -e "s,([0-9]+\.[0-9]+)\..+,\1,")-x86_64
+# RHDH_OLM_INDEX_IMAGE auto-determined in deploy.sh if empty
+export RHDH_OLM_INDEX_IMAGE ?=
 export RHDH_OLM_CHANNEL ?= fast
 export RHDH_OLM_WATCH_EXT_CONF ?= true
 
@@ -98,7 +103,7 @@ namespace:
 .PHONY: deploy-rhdh-helm
 deploy-rhdh-helm: $(TMP_DIR)
 	date --utc -Ins>$(TMP_DIR)/deploy-before
-	cd ./ci-scripts/rhdh-setup/; ./deploy.sh -i "$(AUTH_PROVIDER)"
+	cd ./ci-scripts/rhdh-setup/; ./deploy.sh -i "$(AUTH_PROVIDER)" || true
 	date --utc -Ins>$(TMP_DIR)/deploy-after
 
 ## Undeploy RHDH with Helm
@@ -120,7 +125,7 @@ $(ARTIFACT_DIR):
 .PHONY: deploy-rhdh-olm
 deploy-rhdh-olm: $(TMP_DIR)
 	date --utc -Ins>$(TMP_DIR)/deploy-before
-	cd ./ci-scripts/rhdh-setup; ./deploy.sh -o -i "$(AUTH_PROVIDER)"
+	cd ./ci-scripts/rhdh-setup; ./deploy.sh -o -i "$(AUTH_PROVIDER)" || true
 	date --utc -Ins>$(TMP_DIR)/deploy-after
 
 ## Undeploy RHDH with OLM
