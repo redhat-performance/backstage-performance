@@ -52,7 +52,7 @@ curl -s "$log_url" > "$TMPFIFODIR/mypipe" &
 
 while IFS=$'\n' read -r line; do
     case "$line" in
-        \[*)
+        /logs/artifacts/*)
             [[ -n "$heading" ]] && show_errors
             heading="$line"
             cleanup_errors
