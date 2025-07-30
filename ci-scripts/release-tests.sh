@@ -36,7 +36,7 @@ export USE_PR_BRANCH=true
 export WAIT_FOR_SEARCH_INDEX=false
 export RHDH_HELM_CHART=redhat-developer-hub
 export AUTH_PROVIDER=keycloak
-export RHDH_HELM_REPO='$RHDH_HELM_REPO'
+export RHDH_HELM_CHART_VERSION='$RHDH_HELM_CHART_VERSION'
 " >>test.env
 
     git commit -am "chore($ticket): $testname on $branch"
@@ -82,12 +82,12 @@ function _test() {
     ticket="$3"
 
     branch_old="test-$VERSION_NEW-$nick-$VERSION_OLD"
-    export RHDH_HELM_REPO="$RHDH_HELM_REPO_OLD"
+    export RHDH_HELM_CHART_VERSION="$RHDH_HELM_CHART_VERSION_OLD"
     export SOURCE_BRANCH="$SOURCE_BRANCH_OLD"
     configure_run "$ticket" "$branch_old" "$name"
 
     branch_new="test-$VERSION_NEW-$nick-$VERSION_NEW"
-    export RHDH_HELM_REPO="$RHDH_HELM_REPO_NEW"
+    export RHDH_HELM_CHART_VERSION="$RHDH_HELM_CHART_VERSION_NEW"
     export SOURCE_BRANCH="$SOURCE_BRANCH_NEW"
     configure_run "$ticket" "$branch_new" "$name"
 }
@@ -132,12 +132,12 @@ function storage_limit_test() {
 }
 
 # !!! Configure here !!!
-VERSION_OLD="1.5"
-VERSION_NEW="1.6"
-RHDH_HELM_REPO_OLD="https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/refs/heads/redhat-developer-hub-1.5-178-CI/installation"
-RHDH_HELM_REPO_NEW="https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/refs/heads/redhat-developer-hub-1.6-72-CI/installation"
-SOURCE_BRANCH_OLD=rhdh-v1.5.x
+VERSION_OLD="1.6"
+VERSION_NEW="1.7"
+RHDH_HELM_CHART_VERSION_OLD=1.6.3
+RHDH_HELM_CHART_VERSION_NEW=1.7-122-CI
+SOURCE_BRANCH_OLD=rhdh-v1.6.x
 SOURCE_BRANCH_NEW=main
-compare_previous_test "RHIDP-6832"
-entity_burden_test "RHIDP-6841"
-storage_limit_test "RHIDP-6834"
+compare_previous_test "RHIDP-7893"
+entity_burden_test "RHIDP-7898"
+storage_limit_test "RHIDP-7894"
