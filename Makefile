@@ -232,10 +232,18 @@ endif
 
 ##	=== Maintanence ===
 
+## Backup the locust images in quay.io
+.PHONY: backup-locust-images
+backup-locust-images:
+	$(eval BACKUP_TIMESTAMP := $(shell date +%Y%m%d-%H%M%S --utc))
+	skopeo copy --src-no-creds docker://quay.io/backstage-performance/locust:latest docker://quay.io/backstage-performance/locust:backup-$(BACKUP_TIMESTAMP)
+	skopeo copy --src-no-creds docker://quay.io/backstage-performance/locust_exporter:latest docker://quay.io/backstage-performance/locust_exporter:backup-$(BACKUP_TIMESTAMP)
+	skopeo copy --src-no-creds docker://quay.io/backstage-performance/locust-k8s-operator:latest docker://quay.io/backstage-performance/locust-k8s-operator:backup-$(BACKUP_TIMESTAMP)
+
 ## Make the locust images in quay.io up to date with docker.io
 ## Requires write permissions to quay.io/backstage-performance organization or individual repos
 .PHONY: update-locust-images
-update-locust-images:
+update-locust-images: backup-locust-images
 	skopeo copy --src-no-creds docker://docker.io/locustio/locust:latest docker://quay.io/backstage-performance/locust:latest
 	skopeo copy --src-no-creds docker://docker.io/containersol/locust_exporter:latest docker://quay.io/backstage-performance/locust_exporter:latest
 	skopeo copy --src-no-creds docker://docker.io/lotest/locust-k8s-operator:latest docker://quay.io/backstage-performance/locust-k8s-operator:latest

@@ -9,3 +9,4 @@ benchmark-after
 load-test.log
 shellcheck
 .artifacts*
+*.local
