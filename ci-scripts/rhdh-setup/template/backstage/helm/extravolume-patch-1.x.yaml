@@ -17,6 +17,7 @@ extraVolumes:
             requests:
               # -- Size of the volume that will contain the dynamic plugins. It should be large enough to contain all the plugins.
               storage: 2Gi
+          storageClassName: "gp3-csi"
   - name: dynamic-plugins
     configMap:
       defaultMode: 420
@@ -32,8 +33,15 @@ extraVolumes:
       optional: true
       secretName: dynamic-plugins-npmrc
   - name: techdocs-data
-    persistentVolumeClaim:
-      claimName: rhdh-techdocs
+    ephemeral:
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 5Gi
+          storageClassName: "gp3-csi"
 initContainers:
   - name: install-dynamic-plugins
     image: '{{ include "backstage.image" . }}'
