@@ -491,8 +491,8 @@ setup_monitoring() {
     if $cli -n openshift-monitoring get cm cluster-monitoring-config; then
         $cli -n openshift-monitoring extract configmap/cluster-monitoring-config --to=- --keys=config.yaml >"$config"
     else
-        $cli -n openshift-monitoring create configmap cluster-monitoring-config
         echo "" >"$config"
+        $cli -n openshift-monitoring create configmap cluster-monitoring-config --from-file=config.yaml="$config"
     fi
 
     update_config=0
