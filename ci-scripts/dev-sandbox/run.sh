@@ -58,7 +58,7 @@ for r in $(seq -w 1 "$number_of_runs"); do
     make clean-users
     collect_counts "$TEST_ID-counts-pre"
     cmd="go run setup/main.go --users $number_of_users_per_run --default $number_of_users_per_run --custom $number_of_users_with_workloads_per_run --template=$template $workloads --username $TEST_ID --testname=$TEST_ID --verbose --idler-timeout 15s --skip-install-operators"
-    yes | $cmd |& tee "$TEST_ID.log" && out="tmp/results/$(date +%F_%T)-counts.csv"
+    yes | $cmd 2>&1| tee "$TEST_ID.log" && out="tmp/results/$(date +%F_%T)-counts.csv"
     collect_counts "$TEST_ID-counts-post"
 done
 date --utc -Ins >"${ARTIFACT_DIR}/benchmark-after"

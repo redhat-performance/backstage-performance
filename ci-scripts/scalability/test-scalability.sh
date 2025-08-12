@@ -133,8 +133,8 @@ for w in "${workers[@]}"; do
                                 make clean-local undeploy-rhdh
                                 setup_artifacts="$SCALABILITY_ARTIFACTS/$index/setup/${counter}"
                                 mkdir -p "$setup_artifacts"
-                                ARTIFACT_DIR=$setup_artifacts ./ci-scripts/setup.sh |& tee "$setup_artifacts/setup.log"
-                                wait_for_indexing |& tee "$setup_artifacts/after-setup-search.log"
+                                ARTIFACT_DIR=$setup_artifacts ./ci-scripts/setup.sh 2>&1| tee "$setup_artifacts/setup.log"
+                                wait_for_indexing 2>&1| tee "$setup_artifacts/after-setup-search.log"
                                 for au_sr in "${active_users_spawn_rate[@]}"; do
                                     IFS=":" read -ra tokens <<<"${au_sr}"
                                     au=${tokens[0]}                                          # active users
@@ -151,9 +151,9 @@ for w in "${workers[@]}"; do
                                     make clean
                                     test_artifacts="$SCALABILITY_ARTIFACTS/$index/test/${counter}/${au}u"
                                     mkdir -p "$test_artifacts"
-                                    wait_for_indexing |& tee "$test_artifacts/before-test-search.log"
-                                    ARTIFACT_DIR=$test_artifacts ./ci-scripts/test.sh |& tee "$test_artifacts/test.log"
-                                    ARTIFACT_DIR=$test_artifacts ./ci-scripts/collect-results.sh |& tee "$test_artifacts/collect-results.log"
+                                    wait_for_indexing 2>&1| tee "$test_artifacts/before-test-search.log"
+                                    ARTIFACT_DIR=$test_artifacts ./ci-scripts/test.sh 2>&1| tee "$test_artifacts/test.log"
+                                    ARTIFACT_DIR=$test_artifacts ./ci-scripts/collect-results.sh 2>&1| tee "$test_artifacts/collect-results.log"
                                     jq ".metadata.scalability.iteration = ${counter}" "$test_artifacts/benchmark.json" > $$.json
                                     mv -vf $$.json "$test_artifacts/benchmark.json"
                                     (( counter += 1 ))

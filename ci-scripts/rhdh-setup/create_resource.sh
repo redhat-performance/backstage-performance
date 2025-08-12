@@ -159,7 +159,7 @@ create_group() {
     fi
   done
   if [[ $attempt -gt $max_attempts ]]; then
-    log_error "Unable to create the $groupname group in $max_attempts attempts, giving up!" |& tee -a "$TMP_DIR/create_group.log"
+    log_error "Unable to create the $groupname group in $xmax_attempts attempts, giving up!" 2>&1| tee -a "$TMP_DIR/create_group.log"
   fi
 }
 
@@ -252,7 +252,7 @@ create_user() {
     fi
   done
   if [[ $attempt -gt $max_attempts ]]; then
-    log_error "Unable to create the $username user in $max_attempts attempts, giving up!" |& tee -a "$TMP_DIR/create_user.log"
+    log_error "Unable to create the $username user in $max_attempts attempts, giving up!" 2>&1| tee -a "$TMP_DIR/create_user.log"
   fi
 }
 
@@ -319,7 +319,7 @@ rhdh_token() {
     --data-urlencode "redirect_uri=${REDIRECT_URL}" \
     --data-urlencode "scope=openid email profile" \
     --data-urlencode "response_type=code" \
-    "$(keycloak_url)/auth/realms/$REALM/protocol/openid-connect/auth" |& tee "$TMP_DIR/auth_url.log" | grep -oP 'action="\K[^"]+')
+    "$(keycloak_url)/auth/realms/$REALM/protocol/openid-connect/auth" 2>&1| tee "$TMP_DIR/auth_url.log" | grep -oP 'action="\K[^"]+')
 
   execution=$(echo "$AUTH_URL" | grep -oP 'execution=\K[^&]+')
   tab_id=$(echo "$AUTH_URL" | grep -oP 'tab_id=\K[^&]+')
@@ -332,7 +332,7 @@ rhdh_token() {
     --data-urlencode "tab_id=${tab_id}" \
     --data-urlencode "execution=${execution}" \
     --write-out "%{redirect_url}" \
-    "$AUTHENTICATE_URL" |& tee "$TMP_DIR/code_url.log")
+    "$AUTHENTICATE_URL" 2>&1| tee "$TMP_DIR/code_url.log")
 
   code=$(echo "$CODE_URL" | grep -oP 'code=\K[^"]+')
   session_state=$(echo "$CODE_URL" | grep -oP 'session_state=\K[^&]+')

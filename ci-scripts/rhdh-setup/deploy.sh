@@ -157,14 +157,14 @@ install() {
     appurl=$(oc whoami --show-console)
     export OPENSHIFT_APP_DOMAIN=${appurl#*.}
     $cli create namespace "${RHDH_NAMESPACE}" --dry-run=client -o yaml | $cli apply -f -
-    keycloak_install |& tee "${TMP_DIR}/keycloak_install.log"
+    keycloak_install 2>&1| tee "${TMP_DIR}/keycloak_install.log"
 
     if $PRE_LOAD_DB; then
         log_info "Creating users and groups in Keycloak in background"
-        create_users_groups |& tee -a "${TMP_DIR}/create-users-groups.log" &
+        create_users_groups 2>&1| tee -a "${TMP_DIR}/create-users-groups.log" &
     fi
 
-    backstage_install |& tee -a "${TMP_DIR}/backstage-install.log"
+    backstage_install 2>&1| tee -a "${TMP_DIR}/backstage-install.log"
     exit_code=${PIPESTATUS[0]}
     if [ "$exit_code" -ne 0 ]; then
         log_error "Installation failed!!!"
