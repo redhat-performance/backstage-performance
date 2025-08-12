@@ -66,10 +66,10 @@ export RHDH_INSTALL_METHOD ?= helm
 PYTHON_VENV=.venv
 
 # Local directory to store temporary files
-export TMP_DIR ?= $(shell readlink -m .tmp)
+export TMP_DIR ?= $(shell readlink -f .tmp)
 
 # Local directory to store artifacts
-export ARTIFACT_DIR ?= $(shell readlink -m .artifacts)
+export ARTIFACT_DIR ?= $(shell readlink -f .artifacts)
 
 export PROJ_ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 

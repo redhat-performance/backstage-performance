@@ -19,7 +19,7 @@
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1090,SC1091
-source "$(readlink -m "$SCRIPT_DIR"/../../test.env)"
+source "$(readlink -f "$SCRIPT_DIR"/../../test.env)"
 
 set -e
 
@@ -129,7 +129,7 @@ if [[ ! $(command -v skopeo) ]]; then
 fi
 
 # TMPDIR=$(mktemp -d)
-TMPDIR=$(readlink -m "${TMP_DIR:-.tmp}")
+TMPDIR=$(readlink -f "${TMP_DIR:-.tmp}")
 
 # shellcheck disable=SC2086
 authfile=$TMPDIR/authfile

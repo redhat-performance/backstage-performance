@@ -2,16 +2,16 @@
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1090,SC1091
-source "$(readlink -m "$SCRIPT_DIR"/../../test.env)"
+source "$(readlink -f "$SCRIPT_DIR"/../../test.env)"
 
 export TMP_DIR WORKDIR
 
 POPULATION_CONCURRENCY=${POPULATION_CONCURRENCY:-10}
 COMPONENT_SHARD_SIZE=${COMPONENT_SHARD_SIZE:-500}
 
-TMP_DIR=${TMP_DIR:-$(readlink -m .tmp)}
+TMP_DIR=${TMP_DIR:-$(readlink -f .tmp)}
 mkdir -p "$TMP_DIR"
-WORKDIR=$(readlink -m .)
+WORKDIR=$(readlink -f .)
 
 kc_lockfile="$TMP_DIR/kc.lockfile"
 

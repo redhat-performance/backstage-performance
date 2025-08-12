@@ -2,18 +2,18 @@
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1090,SC1091
-source "$(readlink -m "$SCRIPT_DIR/../../test.env")"
+source "$(readlink -f "$SCRIPT_DIR/../../test.env")"
 
-rootdir=$(readlink -m "$SCRIPT_DIR/../..")
+rootdir=$(readlink -f "$SCRIPT_DIR/../..")
 
 export ARTIFACT_DIR
 ARTIFACT_DIR="${ARTIFACT_DIR:-"$rootdir/.artifacts"}"
 
 export TMP_DIR
-TMP_DIR=$(readlink -m "${TMP_DIR:-"$rootdir/.tmp"}")
+TMP_DIR=$(readlink -f "${TMP_DIR:-"$rootdir/.tmp"}")
 mkdir -p "${TMP_DIR}"
 
-WSTC=$(readlink -m "$rootdir/.toolchain-e2e.git")
+WSTC=$(readlink -f "$rootdir/.toolchain-e2e.git")
 
 export RHDH_INSTALL_METHOD=${RHDH_INSTALL_METHOD:-olm}
 export RHDH_WORKLOADS_TEMPLATE_NAME=${RHDH_WORKLOADS_TEMPLATE_NAME:-default}

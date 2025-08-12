@@ -8,7 +8,7 @@ echo -e "\n === Installing and setting up RHDH ===\n"
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1090,SC1091
-source "$(readlink -m "$SCRIPT_DIR"/../test.env)"
+source "$(readlink -f "$SCRIPT_DIR"/../test.env)"
 
 export GITHUB_TOKEN GITHUB_USER GITHUB_REPO QUAY_TOKEN KUBECONFIG PRE_LOAD_DB
 
@@ -27,7 +27,7 @@ export COMPONENT_COUNT=${COMPONENT_COUNT:-1000}
 export BACKSTAGE_USER_COUNT=${BACKSTAGE_USER_COUNT:-1000}
 export GROUP_COUNT=${GROUP_COUNT:-250}
 
-ARTIFACT_DIR=$(readlink -m "${ARTIFACT_DIR:-.artifacts}")
+ARTIFACT_DIR=$(readlink -f "${ARTIFACT_DIR:-.artifacts}")
 mkdir -p "$ARTIFACT_DIR"
 
 rate_limits_csv="${ARTIFACT_DIR}/gh-rate-limits-remaining.setup.csv"

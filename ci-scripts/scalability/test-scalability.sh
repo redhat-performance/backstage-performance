@@ -2,7 +2,7 @@
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1090,SC1091
-source "$(readlink -m "$SCRIPT_DIR"/../../test.env)"
+source "$(readlink -f "$SCRIPT_DIR"/../../test.env)"
 
 export PRE_LOAD_DB=${PRE_LOAD_DB:-true}
 export RHDH_HELM_REPO=${RHDH_HELM_REPO:-https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/refs/heads/redhat-developer-hub-1.5-147-CI/installation}
@@ -81,7 +81,7 @@ wait_for_indexing() {
     fi
 }
 pushd ../../
-ARTIFACT_DIR=$(readlink -m "${ARTIFACT_DIR:-.artifacts}")
+ARTIFACT_DIR=$(readlink -f "${ARTIFACT_DIR:-.artifacts}")
 mkdir -p "${ARTIFACT_DIR}"
 
 SCALABILITY_ARTIFACTS="$ARTIFACT_DIR/scalability"

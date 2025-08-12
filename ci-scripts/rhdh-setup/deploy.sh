@@ -3,7 +3,7 @@ set -uo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1090,SC1091
-source "$(readlink -m "$SCRIPT_DIR"/../../test.env)"
+source "$(readlink -f "$SCRIPT_DIR"/../../test.env)"
 
 # shellcheck disable=SC1091
 source ./create_resource.sh
@@ -72,7 +72,7 @@ export LOG_STATEMENT_SAMPLE_RATE="${LOG_STATEMENT_SAMPLE_RATE:-0.7}"
 
 export INSTALL_METHOD=helm
 
-TMP_DIR=$(readlink -m "${TMP_DIR:-.tmp}")
+TMP_DIR=$(readlink -f "${TMP_DIR:-.tmp}")
 mkdir -p "${TMP_DIR}"
 
 wait_to_start_in_namespace() {
