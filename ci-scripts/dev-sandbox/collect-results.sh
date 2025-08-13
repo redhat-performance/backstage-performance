@@ -56,7 +56,7 @@ while read -r baseline_counts_csv; do
     done <"$baseline_counts_csv"
 done <<<"$(find "${ARTIFACT_DIR}/dev-sandbox/" -name '*baseline-counts-post.csv')"
 
-echo "$(date --utc -Ins) Setting up tool to collect monitoring data"
+echo "$(date -u -Ins) Setting up tool to collect monitoring data"
 
 PYTHON_VENV_DIR="$rootdir/.venv"
 python3 -m venv "$PYTHON_VENV_DIR"
@@ -71,7 +71,7 @@ set +u
 deactivate
 set -u
 
-echo "$(date --utc -Ins) Collecting monitoring data"
+echo "$(date -u -Ins) Collecting monitoring data"
 set +u
 # shellcheck disable=SC1090,SC1091
 source "$PYTHON_VENV_DIR/bin/activate"
@@ -82,8 +82,8 @@ monitoring_collection_log=$ARTIFACT_DIR/monitoring-collection.log
 monitoring_collection_dir=$ARTIFACT_DIR/monitoring-collection-raw-data-dir
 mkdir -p "$monitoring_collection_dir"
 
-mstart=$(date --utc --date "$(cat "${ARTIFACT_DIR}/benchmark-before")" --iso-8601=seconds)
-mend=$(date --utc --date "$(cat "${ARTIFACT_DIR}/benchmark-after")" --iso-8601=seconds)
+mstart=$(date -u --date "$(cat "${ARTIFACT_DIR}/benchmark-before")" --iso-8601=seconds)
+mend=$(date -u --date "$(cat "${ARTIFACT_DIR}/benchmark-after")" --iso-8601=seconds)
 mhost=$(kubectl -n openshift-monitoring get route -l app.kubernetes.io/name=thanos-query -o json | jq --raw-output '.items[0].spec.host')
 status_data.py \
     --status-data-file "$monitoring_collection_data" \

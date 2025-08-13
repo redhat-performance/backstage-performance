@@ -102,9 +102,9 @@ namespace:
 ## Deploy RHDH with Helm
 .PHONY: deploy-rhdh-helm
 deploy-rhdh-helm: $(TMP_DIR)
-	date --utc -Ins>$(TMP_DIR)/deploy-before
+	date -u -Ins>$(TMP_DIR)/deploy-before
 	cd ./ci-scripts/rhdh-setup/; ./deploy.sh -i "$(AUTH_PROVIDER)" || true
-	date --utc -Ins>$(TMP_DIR)/deploy-after
+	date -u -Ins>$(TMP_DIR)/deploy-after
 
 ## Undeploy RHDH with Helm
 .PHONY: undeploy-rhdh-helm
@@ -124,9 +124,9 @@ $(ARTIFACT_DIR):
 ## Deploy RHDH with OLM
 .PHONY: deploy-rhdh-olm
 deploy-rhdh-olm: $(TMP_DIR)
-	date --utc -Ins>$(TMP_DIR)/deploy-before
+	date -u -Ins>$(TMP_DIR)/deploy-before
 	cd ./ci-scripts/rhdh-setup; ./deploy.sh -o -i "$(AUTH_PROVIDER)" || true
-	date --utc -Ins>$(TMP_DIR)/deploy-after
+	date -u -Ins>$(TMP_DIR)/deploy-after
 
 ## Undeploy RHDH with OLM
 .PHONY: undeploy-rhdh-olm
@@ -187,12 +187,12 @@ else
 endif
 	cat locust-test-template.yaml | envsubst | kubectl apply --namespace $(LOCUST_NAMESPACE) -f -
 	kubectl create --namespace $(LOCUST_NAMESPACE) configmap locust.$(SCENARIO) --from-file scenarios/$(SCENARIO).py --dry-run=client -o yaml | kubectl apply --namespace $(LOCUST_NAMESPACE) -f -
-	date --utc -Ins>$(TMP_DIR)/benchmark-before
+	date -u -Ins>$(TMP_DIR)/benchmark-before
 	timeout=$$(date -d "680 seconds" "+%s"); while [ -z "$$(kubectl get --namespace $(LOCUST_NAMESPACE) pod -l performance-test-pod-name=$(SCENARIO)-test-master -o name)" ]; do if [ "$$(date "+%s")" -gt "$$timeout" ]; then echo "ERROR: Timeout waiting for locust master pod to start"; exit 1; else echo "Waiting for locust master pod to start..."; sleep 5s; fi; done
 	kubectl wait --namespace $(LOCUST_NAMESPACE) --for=condition=Ready=true $$(kubectl get --namespace $(LOCUST_NAMESPACE) pod -l performance-test-pod-name=$(SCENARIO)-test-master -o name) --timeout=60s
 	@echo "Getting locust master log:"
 	kubectl logs --namespace $(LOCUST_NAMESPACE) -f -l performance-test-pod-name=$(SCENARIO)-test-master | tee load-test.log
-	date --utc -Ins>$(TMP_DIR)/benchmark-after
+	date -u -Ins>$(TMP_DIR)/benchmark-after
 ifeq ($(RHDH_INSTALL_METHOD),helm)
 	oc exec rhdh-postgresql-primary-0 -n $(RHDH_NAMESPACE) -- sh -c 'cat  /var/lib/pgsql/data/userdata/log/postgresql*.log'>postgresql.log
 else

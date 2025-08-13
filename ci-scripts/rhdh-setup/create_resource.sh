@@ -265,7 +265,7 @@ create_users() {
 
 token_lockfile="$TMP_DIR/token.lockfile"
 log() {
-  echo "{\"level\":\"${2:-info}\",\"ts\":\"$(date --utc -Ins)\",\"message\":\"$1\"}"
+  echo "{\"level\":\"${2:-info}\",\"ts\":\"$(date -u -Ins)\",\"message\":\"$1\"}"
 }
 
 log_info() {

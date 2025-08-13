@@ -205,18 +205,18 @@ keycloak_install() {
 }
 
 create_users_groups() {
-    date --utc -Ins >"${TMP_DIR}/populate-users-groups-before"
+    date -u -Ins >"${TMP_DIR}/populate-users-groups-before"
     create_groups
     create_users
-    date --utc -Ins >"${TMP_DIR}/populate-users-groups-after"
+    date -u -Ins >"${TMP_DIR}/populate-users-groups-after"
 }
 
 create_objs() {
     if [[ ${GITHUB_USER} ]] && [[ ${GITHUB_REPO} ]]; then
-        date --utc -Ins >"${TMP_DIR}/populate-catalog-before"
+        date -u -Ins >"${TMP_DIR}/populate-catalog-before"
         create_per_grp create_cmp COMPONENT_COUNT
         create_per_grp create_api API_COUNT
-        date --utc -Ins >"${TMP_DIR}/populate-catalog-after"
+        date -u -Ins >"${TMP_DIR}/populate-catalog-after"
     else
         log_warn "skipping component creating. GITHUB_REPO and GITHUB_USER not set"
         exit 1
@@ -266,9 +266,9 @@ backstage_install() {
         log_error "Invalid install method: $INSTALL_METHOD, currently allowed methods are helm or olm"
         exit 1
     fi
-    date --utc -Ins >"${TMP_DIR}/populate-before"
+    date -u -Ins >"${TMP_DIR}/populate-before"
     # shellcheck disable=SC2064
-    trap "date --utc -Ins >'${TMP_DIR}/populate-after'" EXIT
+    trap "date -u -Ins >'${TMP_DIR}/populate-after'" EXIT
     if ${RHDH_METRIC}; then
         log_info "Setting up RHDH metrics"
         if [ "${AUTH_PROVIDER}" == "keycloak" ]; then
@@ -517,11 +517,11 @@ setup_monitoring() {
 
     # Setup user workload monitoring
     log_info "Enabling user workload monitoring"
-    before=$(date --utc +%s)
+    before=$(date -u +%s)
     while true; do
         count=$(kubectl -n "openshift-user-workload-monitoring" get StatefulSet -l operator.prometheus.io/name=user-workload -o name 2>/dev/null | wc -l)
         [ "$count" -gt 0 ] && break
-        now=$(date --utc +%s)
+        now=$(date -u +%s)
         if [[ $((now - before)) -ge "300" ]]; then
             log_error "Required StatefulSet did not appeared before timeout"
             exit 1

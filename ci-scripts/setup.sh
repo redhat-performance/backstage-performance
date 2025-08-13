@@ -60,5 +60,5 @@ kill_rate_limits() {
 }
 trap kill_rate_limits EXIT
 
-echo "$(date --utc -Ins) Running deployment script"
+echo "$(date -u -Ins) Running deployment script"
 make ci-deploy

@@ -51,7 +51,7 @@ number_of_users_with_workloads_per_run=${3:-2000}
 template="$TMP_DIR/rhdh-perf.workloads.yaml"
 echo "Using $RHDH_WORKLOADS_TEMPLATE template --> $template"
 envsubst <"$RHDH_WORKLOADS_TEMPLATE" >"$template"
-date --utc -Ins >"${ARTIFACT_DIR}/benchmark-before"
+date -u -Ins >"${ARTIFACT_DIR}/benchmark-before"
 for r in $(seq -w 1 "$number_of_runs"); do
     TEST_ID="run$r"
     echo "Running $TEST_ID"
@@ -61,4 +61,4 @@ for r in $(seq -w 1 "$number_of_runs"); do
     yes | $cmd 2>&1| tee "$TEST_ID.log" && out="tmp/results/$(date +%F_%T)-counts.csv"
     collect_counts "$TEST_ID-counts-post"
 done
-date --utc -Ins >"${ARTIFACT_DIR}/benchmark-after"
+date -u -Ins >"${ARTIFACT_DIR}/benchmark-after"

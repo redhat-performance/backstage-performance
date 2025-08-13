@@ -27,7 +27,7 @@ set -e -u -o pipefail
 
 function log() {
     local text="${1}"
-    echo "$( date --utc -Ins ) ${text}"
+    echo "$( date -u -Ins ) ${text}"
 }
 
 function assert_int() {

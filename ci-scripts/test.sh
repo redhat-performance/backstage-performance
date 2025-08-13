@@ -71,5 +71,5 @@ kill_rate_limits() {
 }
 trap kill_rate_limits EXIT
 
-echo "$(date --utc -Ins) Running the test"
+echo "$(date -u -Ins) Running the test"
 make ci-run

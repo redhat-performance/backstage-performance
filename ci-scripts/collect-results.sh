@@ -105,7 +105,7 @@ try_gather_file postgresql.log
 # Metrics
 PYTHON_VENV_DIR=.venv
 
-echo "$(date --utc -Ins) Setting up tool to collect monitoring data"
+echo "$(date -u -Ins) Setting up tool to collect monitoring data"
 python3 -m venv $PYTHON_VENV_DIR
 set +u
 # shellcheck disable=SC1090,SC1091
@@ -117,7 +117,7 @@ set +u
 deactivate
 set -u
 
-echo "$(date --utc -Ins) Collecting monitoring data"
+echo "$(date -u -Ins) Collecting monitoring data"
 set +u
 # shellcheck disable=SC1090,SC1091
 source $PYTHON_VENV_DIR/bin/activate
@@ -131,8 +131,8 @@ timestamp_diff() {
 
 # populate phase
 if [ "$PRE_LOAD_DB" == "true" ]; then
-    mstart=$(date --utc --date "$(cat "${ARTIFACT_DIR}/populate-before")" --iso-8601=seconds)
-    mend=$(date --utc --date "$(cat "${ARTIFACT_DIR}/populate-after")" --iso-8601=seconds)
+    mstart=$(date -u --date "$(cat "${ARTIFACT_DIR}/populate-before")" --iso-8601=seconds)
+    mend=$(date -u --date "$(cat "${ARTIFACT_DIR}/populate-after")" --iso-8601=seconds)
     mhost=$(kubectl -n openshift-monitoring get route -l app.kubernetes.io/name=thanos-query -o json | jq --raw-output '.items[0].spec.host')
 
     deploy_started=$(cat "${ARTIFACT_DIR}/deploy-before")
@@ -179,8 +179,8 @@ if [ "$PRE_LOAD_DB" == "true" ]; then
         -d &>>"$monitoring_collection_log"
 fi
 # test phase
-mstart=$(date --utc --date "$(cat "${ARTIFACT_DIR}/benchmark-before")" --iso-8601=seconds)
-mend=$(date --utc --date "$(cat "${ARTIFACT_DIR}/benchmark-after")" --iso-8601=seconds)
+mstart=$(date -u --date "$(cat "${ARTIFACT_DIR}/benchmark-before")" --iso-8601=seconds)
+mend=$(date -u --date "$(cat "${ARTIFACT_DIR}/benchmark-after")" --iso-8601=seconds)
 mhost=$(kubectl -n openshift-monitoring get route -l app.kubernetes.io/name=thanos-query -o json | jq --raw-output '.items[0].spec.host')
 mversion=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' "scenarios/$(cat "${ARTIFACT_DIR}/benchmark-scenario").py")
 benchmark_started=$(cat "${ARTIFACT_DIR}/benchmark-before")
@@ -227,14 +227,14 @@ if [ "$RHDH_INSTALL_METHOD" == "helm" ] && ${ENABLE_PROFILING}; then
     cpu_profile_file="$ARTIFACT_DIR/rhdh.cpu.profile"
     memory_profile_file="$ARTIFACT_DIR/rhdh.heapsnapshot"
     pod="$($clin get pod -l app.kubernetes.io/name=developer-hub -o name)"
-    echo "[INFO][$(date --utc -Ins)] Collecting CPU profile into $cpu_profile_file"
+    echo "[INFO][$(date -u -Ins)] Collecting CPU profile into $cpu_profile_file"
     $clin exec "$pod" -c backstage-backend -- /bin/bash -c 'find /opt/app-root/src -name "*v8.log" -exec base64 -w0 {} \;' | base64 -d >"$cpu_profile_file"
-    echo "[INFO][$(date --utc -Ins)] Collecting heap snapshot into $memory_profile_file"
+    echo "[INFO][$(date -u -Ins)] Collecting heap snapshot into $memory_profile_file"
     # shellcheck disable=SC2016
     $clin exec "$pod" -c backstage-backend -- /bin/bash -c 'for i in $(ls /proc | grep "^[0-9]"); do if [ -f /proc/$i/cmdline ]; then if $(cat /proc/$i/cmdline | grep node); then kill -s USR1 $i; break; fi; fi; done'
-    echo "[INFO][$(date --utc -Ins)] Waiting for 3 minutes till the heap snapshot is written down"
+    echo "[INFO][$(date -u -Ins)] Waiting for 3 minutes till the heap snapshot is written down"
     sleep 3m
-    echo "[INFO][$(date --utc -Ins)] Downloading heap snapshot..."
+    echo "[INFO][$(date -u -Ins)] Downloading heap snapshot..."
     $clin exec "$pod" -c backstage-backend -- /bin/bash -c 'find /opt/app-root/src -name "*.heapsnapshot" -exec base64 -w0 {} \;' | base64 -d >"$memory_profile_file"
 fi
 
