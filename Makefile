@@ -74,7 +74,7 @@ export ARTIFACT_DIR ?= $(shell readlink -m .artifacts)
 export PROJ_ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
 # Name of the namespace to install locust operator as well as to run Pods of master and workers.
-LOCUST_NAMESPACE ?= locust-operator
+export LOCUST_NAMESPACE ?= locust-operator
 
 # Helm repository name to install locust operator from
 LOCUST_OPERATOR_REPO=locust-k8s-operator
@@ -144,7 +144,8 @@ deploy-locust: namespace
 		echo "Helm repo \"$(LOCUST_OPERATOR_REPO)\" already exists"; \
 	fi
 	@if ! helm list --namespace $(LOCUST_NAMESPACE) | grep -q "$(LOCUST_OPERATOR)"; then \
-		helm install $(LOCUST_OPERATOR) locust-k8s-operator/locust-k8s-operator --namespace $(LOCUST_NAMESPACE) --values ./config/locust-k8s-operator.values.yaml; \
+		envsubst<./config/locust-k8s-operator.values.yaml > $(TMP_DIR)/locust-k8s-operator.values.yaml; \
+		helm install $(LOCUST_OPERATOR) locust-k8s-operator/locust-k8s-operator --namespace $(LOCUST_NAMESPACE) --values $(TMP_DIR)/locust-k8s-operator.values.yaml; \
 	else \
 		echo "Helm release \"$(LOCUST_OPERATOR)\" already exists"; \
 	fi
@@ -154,6 +155,8 @@ deploy-locust: namespace
 .PHONY: undeploy-locust
 undeploy-locust: clean
 	@kubectl delete namespace $(LOCUST_NAMESPACE) --wait
+	@kubectl delete clusterrolebinding $(LOCUST_NAMESPACE)-locust-k8s-operator --wait
+	@kubectl delete clusterrole $(LOCUST_NAMESPACE)-locust-k8s-operator --wait
 	@helm repo remove $(LOCUST_OPERATOR_REPO)
 
 ##	=== Testing ===

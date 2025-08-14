@@ -19,3 +19,6 @@ config:
     metricsExporter:
       image: "quay.io/backstage-performance/locust_exporter:latest"
       pullPolicy: Always
+
+serviceAccount:
+  name: ${LOCUST_NAMESPACE}-locust-k8s-operator
