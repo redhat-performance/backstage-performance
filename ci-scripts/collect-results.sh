@@ -8,14 +8,14 @@ echo -e "\n === Collecting test results and metrics ===\n"
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1090,SC1091
-source "$(readlink -f "$SCRIPT_DIR"/../test.env)"
+source "$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$SCRIPT_DIR"/../test.env)"
 
-ARTIFACT_DIR=$(readlink -f "${ARTIFACT_DIR:-.artifacts}")
+ARTIFACT_DIR=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "${ARTIFACT_DIR:-.artifacts}")
 mkdir -p "${ARTIFACT_DIR}"
 
 export TMP_DIR
 
-TMP_DIR=$(readlink -f "${TMP_DIR:-.tmp}")
+TMP_DIR=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "${TMP_DIR:-.tmp}")
 mkdir -p "${TMP_DIR}"
 
 RHDH_NAMESPACE=${RHDH_NAMESPACE:-rhdh-performance}

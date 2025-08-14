@@ -2,16 +2,16 @@
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1090,SC1091
-source "$(readlink -f "$SCRIPT_DIR"/../../test.env)"
+source "$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$SCRIPT_DIR"/../../test.env)"
 
 export TMP_DIR WORKDIR
 
 POPULATION_CONCURRENCY=${POPULATION_CONCURRENCY:-10}
 COMPONENT_SHARD_SIZE=${COMPONENT_SHARD_SIZE:-500}
 
-TMP_DIR=${TMP_DIR:-$(readlink -f .tmp)}
+TMP_DIR=${TMP_DIR:-$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' .tmp)}
 mkdir -p "$TMP_DIR"
-WORKDIR=$(readlink -f .)
+WORKDIR=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' .)
 
 kc_lockfile="$TMP_DIR/kc.lockfile"
 

@@ -8,9 +8,9 @@ echo -e "\n === Collecting test results and metrics for RHDH scalability test ==
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1090,SC1091
-source "$(readlink -f "$SCRIPT_DIR"/../../test.env)"
+source "$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$SCRIPT_DIR"/../../test.env)"
 
-ARTIFACT_DIR=$(readlink -f "${ARTIFACT_DIR:-.artifacts}")
+ARTIFACT_DIR=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "${ARTIFACT_DIR:-.artifacts}")
 mkdir -p "$ARTIFACT_DIR"
 
 SCALABILITY_ARTIFACTS="$ARTIFACT_DIR/scalability"
@@ -71,7 +71,7 @@ for w in "${workers[@]}"; do
                                     echo "[$iteration] Looking for benchmark.json..."
                                     benchmark_json="$(find "${ARTIFACT_DIR}" -name benchmark.json | grep "$iteration" || true)"
                                     if [ -n "$benchmark_json" ]; then
-                                        benchmark_json="$(readlink -f "$benchmark_json")"
+                                        benchmark_json="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$benchmark_json")"
                                         echo "[$iteration] Gathering data from $benchmark_json"
                                         jq_cmd="\"$((a + c))\" \
                                         + $csv_delim_quoted + \"${a}\" \
