@@ -101,7 +101,7 @@ clone_and_upload() {
   git config user.email rhdh-performance-bot@redhat.com
   tmp_branch=$(mktemp -u XXXXXXXXXX)
   git checkout -b "$tmp_branch"
-  mapfile -t files < <(find "$TMP_DIR" -name "$1")
+  files=($(python3 -c "import subprocess; out=subprocess.check_output('find \"$TMP_DIR\" -name \"$1\"', shell=True).decode().splitlines(); print(' '.join(out))"))
   for filename in "${files[@]}"; do
     cp -vf "$filename" "$(basename "$filename")"
     git add "$(basename "$filename")"
@@ -159,7 +159,7 @@ create_group() {
     fi
   done
   if [[ $attempt -gt $max_attempts ]]; then
-    log_error "Unable to create the $groupname group in $xmax_attempts attempts, giving up!" 2>&1| tee -a "$TMP_DIR/create_group.log"
+    log_error "Unable to create the $groupname group in $max_attempts attempts, giving up!" 2>&1| tee -a "$TMP_DIR/create_group.log"
   fi
 }
 
