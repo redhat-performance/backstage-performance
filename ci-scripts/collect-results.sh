@@ -126,7 +126,7 @@ set -u
 timestamp_diff() {
     started="$1"
     ended="$2"
-    echo "$(date -d "$ended" +"%s.%N") - $(date -d "$started" +"%s.%N")" | bc
+    python3 -c "import sys; from datetime import datetime; st = datetime.strptime(\"$started\", '%a %b %d %H:%M:%S %Z %Y'); et = datetime.strptime(\"$ended\", '%a %b %d %H:%M:%S %Z %Y'); t=(et - st).total_seconds();print(f'{t:.9f}')"
 }
 
 # populate phase
