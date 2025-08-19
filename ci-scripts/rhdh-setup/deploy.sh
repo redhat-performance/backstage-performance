@@ -83,7 +83,8 @@ wait_to_start_in_namespace() {
     wait_timeout=${5:-300}
     rn=$resource/$name
     description=${6:-$rn}
-    timeout_timestamp=$(date -d "$initial_timeout seconds" "+%s")
+    timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$initial_timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
+
     interval=10s
     while ! /bin/bash -c "$cli -n $namespace get $rn -o name"; do
         if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
@@ -103,7 +104,7 @@ wait_for_crd() {
     initial_timeout=${2:-300}
     rn=crd/$name
     description=${3:-$rn}
-    timeout_timestamp=$(date -d "$initial_timeout seconds" "+%s")
+    timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$initial_timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
     interval=10s
     while ! /bin/bash -c "$cli get $rn"; do
         if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
@@ -282,7 +283,7 @@ backstage_install() {
     fi
     log_info "RHDH Installed, waiting for the catalog to be populated"
     timeout=600
-    timeout_timestamp=$(date -d "$timeout seconds" "+%s")
+    timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
     last_count=-1
     for entity_type in Component Api; do
         while true; do
@@ -305,7 +306,7 @@ backstage_install() {
                 fi
                 if [[ "$last_count" != "$b_count" ]]; then # reset the timeout if current count changes
                     log_info "The current '$entity_type' count changed, resetting waiting timeout to $timeout seconds"
-                    timeout_timestamp=$(date -d "$timeout seconds" "+%s")
+                    timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
                     last_count=$b_count
                 fi
                 if [[ $b_count -ge $e_count ]]; then

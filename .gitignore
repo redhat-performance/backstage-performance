@@ -10,3 +10,4 @@ load-test.log
 shellcheck
 .artifacts*
 *.local
+**/.DS_Store

@@ -59,7 +59,7 @@ wait_for_indexing() {
         HOST="https://$(oc get routes "${rhdh_route}" -n "${RHDH_NAMESPACE:-rhdh-performance}" -o jsonpath='{.spec.host}')"
 
         start=$(date +%s)
-        timeout_timestamp=$(date -d "3600 seconds" "+%s")
+        timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int(3600); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
         while true; do
             echo "Waiting for the search indexing to finish..."
             if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then

@@ -293,7 +293,7 @@ log_token_err() {
 }
 
 keycloak_token() {
-  curl -s -k "$(keycloak_url)/auth/realms/master/protocol/openid-connect/token" -d username=admin -d "password=$1" -d 'grant_type=password' -d 'client_id=admin-cli' | jq -r ".expires_in_timestamp = $(date -d '30 seconds' +%s)"
+  curl -s -k "$(keycloak_url)/auth/realms/master/protocol/openid-connect/token" -d username=admin -d "password=$1" -d 'grant_type=password' -d 'client_id=admin-cli' | jq -r ".expires_in_timestamp = $(python3 -c 'from datetime import datetime, timedelta; t_add=int(30); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))')"
 }
 
 rhdh_token() {
@@ -305,7 +305,8 @@ rhdh_token() {
   CLIENTID="backstage"
 
   if [[ "${AUTH_PROVIDER}" != "keycloak" ]]; then
-    ACCESS_TOKEN=$(curl -s -k --cookie "$COOKIE" --cookie-jar "$COOKIE" "$(backstage_url)/api/auth/guest/refresh" | jq -r ".backstageIdentity" | jq -r ".expires_in_timestamp = $(date -d '50 minutes' +%s)")
+    # Corrected jq command for non-keycloak provider
+    ACCESS_TOKEN=$(curl -s -k --cookie "$COOKIE" --cookie-jar "$COOKIE" "$(backstage_url)/api/auth/guest/refresh" | jq -r ".backstageIdentity | .expires_in_timestamp = $(python3 -c 'from datetime import datetime, timedelta; t_add=int(50*60); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))')")
     echo "$ACCESS_TOKEN"
     return
   fi
@@ -339,11 +340,12 @@ rhdh_token() {
 
   # shellcheck disable=SC2001
   CODE_URL=$(echo "$CODE_URL" | sed -e 's/\&amp;/\&/g')
+
   ACCESS_TOKEN=$(curl -k -sSL --dump-header "$TMP_DIR/get_rhdh_token_headers.log" --cookie "$COOKIE" --cookie-jar "$COOKIE" \
     --data-urlencode "code=$code" \
     --data-urlencode "session_state=$session_state" \
     --data-urlencode "state=$state" \
-    "$CODE_URL" | tee -a "$TMP_DIR/get_rhdh_token.log" | jq -r ".backstageIdentity" | jq -r ".expires_in_timestamp = $(date -d '30 minutes' +%s)")
+    "$CODE_URL" | tee -a "$TMP_DIR/get_rhdh_token.log" | jq ".backstageIdentity | .expires_in_timestamp = $(python3 -c 'from datetime import datetime, timedelta; t_add=int(30*60); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))')")
   echo "$ACCESS_TOKEN"
 }
 
@@ -367,7 +369,7 @@ get_token() {
   #shellcheck disable=SC2064
   trap "rm -rf $token_lockfile; exit" INT TERM EXIT HUP
 
-  timeout_timestamp=$(date -d "$token_timeout seconds" "+%s")
+  timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$token_timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
   while [ ! -f "$token_file" ] || [ ! -s "$token_file" ] || [ -z "$(jq -rc '.expires_in_timestamp' "$token_file")" ] || [ "$(date +%s)" -gt "$(jq -rc '.expires_in_timestamp' "$token_file")" ] || [ "$(jq -rc "$token_field" "$token_file")" == "null" ]; do
     if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
       log_token_err "Timeout getting $token_type token"

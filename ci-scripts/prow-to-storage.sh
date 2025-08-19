@@ -47,7 +47,7 @@ if [ -z "$HORREUM_API_TOKEN" ]; then
 fi
 
 function format_date() {
-    date -d "$1" +%FT%TZ --utc
+    python3 -c "from datetime import datetime, timezone;dt = datetime.strptime('$1', '%a %b %d %H:%M:%S %Z %Y');dt_utc = dt.replace(tzinfo=timezone.utc);output_format = '%Y-%m-%dT%H:%M:%SZ';print(dt_utc.strftime('%Y-%m-%dT%H:%M:%SZ'))"
 }
 
 function download() {

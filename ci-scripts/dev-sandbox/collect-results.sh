@@ -113,7 +113,7 @@ while read -r metric_csv; do
             if [[ $line =~ ^timestamp ]]; then
                 echo "$timestamp;$value"
             else
-                echo "$(date -d "@$timestamp" --utc "+%F %T");$value"
+                python3 -c "from datetime import datetime, timezone; dt = datetime.fromtimestamp(int('$timestamp'), tz=timezone.utc); print(dt.strftime('%Y-%m-%d %H:%M:%S') + ';' + '$value')"
             fi
         done <"$tmp_csv" >>"$metric_csv"
         rm -f "$tmp_csv"
