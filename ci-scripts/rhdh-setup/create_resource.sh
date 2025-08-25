@@ -19,16 +19,33 @@ COOKIE="$TMP_DIR/cookie.jar"
 
 keycloak_url() {
   f="$TMP_DIR/keycloak.url"
-  exec 4>"$kc_lockfile"
-  flock 4 || {
-    echo "Failed to acquire lock"
-    exit 1
-  }
+  if command -v  flock >/dev/null 2>&1; then
+    exec 4>"$kc_lockfile"
+    flock 4 || {
+      echo "Failed to acquire lock"
+      exit 1
+    }
 
-  if [ ! -f "$f" ]; then
-    echo -n "https://$(oc get routes keycloak -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')" >"$f"
+    if [ ! -f "$f" ]; then
+      echo -n "https://$(oc get routes keycloak -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')" >"$f"
+    fi
+    flock -u 4
+  elif command -v  shlock >/dev/null 2>&1; then
+    LOCKFILE="$TMP_DIR/kc_lockfile"
+    trap 'rm -f "$LOCKFILE"' EXIT
+
+    if ! shlock -f "$LOCKFILE" -p $$; then
+      echo "Failed to acquire lock"
+      exit 1
+    fi
+
+    if [ ! -f "$f" ]; then
+      echo -n "https://$(oc get routes keycloak -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')" >"$f"
+    fi
+  else
+    echo "Either flock or shlock must exist"
+    return 1
   fi
-  flock -u 4
   cat "$f"
 }
 
@@ -36,24 +53,51 @@ bs_lockfile="$TMP_DIR/bs.lockfile"
 
 backstage_url() {
   f="$TMP_DIR/backstage.url"
-  exec 5>"$bs_lockfile"
-  flock 5 || {
-    echo "Failed to acquire lock"
-    exit 1
-  }
-  if [ ! -f "$f" ]; then
-    if [ "$RHDH_INSTALL_METHOD" == "helm" ]; then
-      rhdh_route="$(oc -n "${RHDH_NAMESPACE}" get routes -l app.kubernetes.io/instance="${RHDH_HELM_RELEASE_NAME}" -o jsonpath='{.items[0].metadata.name}')"
-    else
-      if [ "$AUTH_PROVIDER" == "keycloak" ]; then
-        rhdh_route="rhdh"
+  if command -v flock >/dev/null 2>&1; then
+    exec 5>"$bs_lockfile"
+    flock 5 || {
+      echo "Failed to acquire lock"
+      exit 1
+    }
+    if [[ ! -f "$f" ]]; then
+      if [ "$RHDH_INSTALL_METHOD" == "helm" ]; then
+        rhdh_route="$(oc -n "${RHDH_NAMESPACE}" get routes -l app.kubernetes.io/instance="${RHDH_HELM_RELEASE_NAME}" -o jsonpath='{.items[0].metadata.name}')"
       else
-        rhdh_route="backstage-developer-hub"
+        if [ "$AUTH_PROVIDER" == "keycloak" ]; then
+          rhdh_route="rhdh"
+        else
+          rhdh_route="backstage-developer-hub"
+        fi
       fi
+      echo -n "https://$(oc get routes "${rhdh_route}" -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')" >"$f"
     fi
-    echo -n "https://$(oc get routes "${rhdh_route}" -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')" >"$f"
+    flock -u 5
+  elif command -v shlock >/dev/null 2>&1; then
+    f="$TMP_DIR/backstage.url"
+    LOCKFILE="$TMP_DIR/bs_lockfile"
+    trap 'rm -f "$LOCKFILE"' EXIT
+
+    if ! shlock -f "$LOCKFILE" -p $$; then
+      echo "Failed to acquire lock"
+      exit 1
+    fi
+
+    if [[ ! -f "$f" ]]; then
+      if [ "$RHDH_INSTALL_METHOD" == "helm" ]; then
+        rhdh_route="$(oc -n "${RHDH_NAMESPACE}" get routes -l app.kubernetes.io/instance="${RHDH_HELM_RELEASE_NAME}" -o jsonpath='{.items[0].metadata.name}')"
+      else
+        if [ "$AUTH_PROVIDER" == "keycloak" ]; then
+          rhdh_route="rhdh"
+        else
+          rhdh_route="backstage-developer-hub"
+        fi
+      fi
+      echo -n "https://$(oc get routes "${rhdh_route}" -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')" >"$f"
+    fi
+  else
+    echo "Either flock or shlock must exist"
+    exit 1
   fi
-  flock -u 5
   cat "$f"
 }
 
@@ -101,7 +145,13 @@ clone_and_upload() {
   git config user.email rhdh-performance-bot@redhat.com
   tmp_branch=$(mktemp -u XXXXXXXXXX)
   git checkout -b "$tmp_branch"
-  files=($(python3 -c "import subprocess; out=subprocess.check_output('find \"$TMP_DIR\" -name \"$1\"', shell=True).decode().splitlines(); print(' '.join(out))"))
+  out=$(python3 -c "import subprocess; print(subprocess.check_output('find \"$TMP_DIR\" -name \"$1\"', shell=True).decode())")
+
+  files=()
+  while IFS= read -r line; do
+      files+=("$line")
+  done <<< "$out"
+
   for filename in "${files[@]}"; do
     cp -vf "$filename" "$(basename "$filename")"
     git add "$(basename "$filename")"
@@ -251,6 +301,7 @@ create_user() {
       ((attempt++))
     fi
   done
+
   if [[ $attempt -gt $max_attempts ]]; then
     log_error "Unable to create the $username user in $max_attempts attempts, giving up!" 2>&1| tee -a "$TMP_DIR/create_user.log"
   fi
@@ -312,7 +363,7 @@ rhdh_token() {
   fi
 
   LOGIN_URL=$(curl -I -k -sSL --dump-header "$TMP_DIR/login_url_headers.log" --cookie "$COOKIE" --cookie-jar "$COOKIE" "$REFRESH_URL")
-  state=$(echo "$LOGIN_URL" | grep -oP 'state=\K[^ ]+' | sed 's/%2F/\//g;s/%3A/:/g')
+  state=$(echo "$LOGIN_URL" | grep -oE 'state=[^&]+' | grep -oE '[^=]+$' | sed 's/%2F/\//g;s/%3A/:/g')
 
   AUTH_URL=$(curl -k -sSL --dump-header "$TMP_DIR/auth_url_headers.log"--get --cookie "$COOKIE" --cookie-jar "$COOKIE" \
     --data-urlencode "client_id=${CLIENTID}" \
@@ -320,10 +371,10 @@ rhdh_token() {
     --data-urlencode "redirect_uri=${REDIRECT_URL}" \
     --data-urlencode "scope=openid email profile" \
     --data-urlencode "response_type=code" \
-    "$(keycloak_url)/auth/realms/$REALM/protocol/openid-connect/auth" 2>&1| tee "$TMP_DIR/auth_url.log" | grep -oP 'action="\K[^"]+')
+    "$(keycloak_url)/auth/realms/$REALM/protocol/openid-connect/auth" 2>&1| tee "$TMP_DIR/auth_url.log" | grep -oE 'action="[^"]+"' | grep -oE '"[^"]+"' | tr -d '"')
 
-  execution=$(echo "$AUTH_URL" | grep -oP 'execution=\K[^&]+')
-  tab_id=$(echo "$AUTH_URL" | grep -oP 'tab_id=\K[^&]+')
+  execution=$(echo "$AUTH_URL" | grep -oE 'execution=[^&]+' | grep -oE '[^=]+$')
+  tab_id=$(echo "$AUTH_URL" | grep -oE 'tab_id=[^&]+' | grep -oE '[^=]+$')
   # shellcheck disable=SC2001
   AUTHENTICATE_URL=$(echo "$AUTH_URL" | sed -e 's/\&amp;/\&/g')
 
@@ -335,8 +386,8 @@ rhdh_token() {
     --write-out "%{redirect_url}" \
     "$AUTHENTICATE_URL" 2>&1| tee "$TMP_DIR/code_url.log")
 
-  code=$(echo "$CODE_URL" | grep -oP 'code=\K[^"]+')
-  session_state=$(echo "$CODE_URL" | grep -oP 'session_state=\K[^&]+')
+  code=$(echo "$CODE_URL" | grep -oE 'code=[^&]+' | grep -oE '[^=]+$')
+  session_state=$(echo "$CODE_URL" | grep -oE 'session_state=[^&]+' | grep -oE '[^=]+$')
 
   # shellcheck disable=SC2001
   CODE_URL=$(echo "$CODE_URL" | sed -e 's/\&amp;/\&/g')
