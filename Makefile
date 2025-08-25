@@ -188,8 +188,7 @@ endif
 	cat locust-test-template.yaml | envsubst | kubectl apply --namespace $(LOCUST_NAMESPACE) -f -
 	kubectl create --namespace $(LOCUST_NAMESPACE) configmap locust.$(SCENARIO) --from-file scenarios/$(SCENARIO).py --dry-run=client -o yaml | kubectl apply --namespace $(LOCUST_NAMESPACE) -f -
 	date -u -Ins>$(TMP_DIR)/benchmark-before
-	add_time=680
-	timeout=$$(python3 -c "from datetime import datetime, timedelta; t_add=int('$add_time'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))"); while [ -z "$$(kubectl get --namespace $(LOCUST_NAMESPACE) pod -l performance-test-pod-name=$(SCENARIO)-test-master -o name)" ]; do if [ "$$(date "+%s")" -gt "$$timeout" ]; then echo "ERROR: Timeout waiting for locust master pod to start"; exit 1; else echo "Waiting for locust master pod to start..."; sleep 5s; fi; done
+	timeout=$$(python3 -c "from datetime import datetime, timedelta;t_add=int('680'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))"); while [ -z "$$(kubectl get --namespace $(LOCUST_NAMESPACE) pod -l performance-test-pod-name=$(SCENARIO)-test-master -o name)" ]; do if [ "$$(date "+%s")" -gt "$$timeout" ]; then echo "ERROR: Timeout waiting for locust master pod to start"; exit 1; else echo "Waiting for locust master pod to start..."; sleep 5s; fi; done
 	kubectl wait --namespace $(LOCUST_NAMESPACE) --for=condition=Ready=true $$(kubectl get --namespace $(LOCUST_NAMESPACE) pod -l performance-test-pod-name=$(SCENARIO)-test-master -o name) --timeout=60s
 	@echo "Getting locust master log:"
 	kubectl logs --namespace $(LOCUST_NAMESPACE) -f -l performance-test-pod-name=$(SCENARIO)-test-master | tee load-test.log
@@ -210,13 +209,22 @@ test-scalability:
 ## Run shellcheck on all of the shell scripts
 .PHONY: shellcheck
 shellcheck:
-	if [ ! -f ./shellcheck ]; then curl -sSL -o shellcheck.tar.xz https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.linux.x86_64.tar.xz; tar -xvf shellcheck.tar.xz --wildcards --strip-components=1 shellcheck-stable/shellcheck; rm -rvf shellcheck.tar.xz; fi
-	./shellcheck $$(find -name '*.sh')
+	if [ ! -f "shellcheck" ]; then \
+	  case "$$(uname -s)" in \
+	    Linux) url="https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.linux.x86_64.tar.xz" ;; \
+	    Darwin) url="https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.darwin.x86_64.tar.xz" ;; \
+	    *) echo "Unsupported OS: $$(uname -s)" >&2; exit 1 ;; \
+	  esac; \
+	  curl -sSL -o shellcheck.tar.xz $$url; \
+	  tar -xvf shellcheck.tar.xz --strip-components=1 shellcheck-stable/shellcheck; \
+	  rm -rvf shellcheck.tar.xz; \
+	fi; \
+	find . -name '*.sh' -exec shellcheck {} +
 
 ## Run all linters
 .PHONY: lint
 lint: shellcheck
-	shellcheck $$(find -name '*.sh')
+	find . -name '*.sh' -exec shellcheck {} +
 
 ##	=== CI ===
 
