@@ -124,9 +124,9 @@ source $PYTHON_VENV_DIR/bin/activate
 set -u
 
 timestamp_diff() {
-    started="$1"
-    ended="$2"
-    python3 -c "import sys; from datetime import datetime; st = datetime.strptime(\"$started\", '%a %b %d %H:%M:%S %Z %Y'); et = datetime.strptime(\"$ended\", '%a %b %d %H:%M:%S %Z %Y'); t=(et - st).total_seconds();print(f'{t:.9f}')"
+    started=$(python3 -c "from datetime import datetime; s='$1'; s=s.replace(',', '.'); d, f=s.split('.'); frac, tz=f.split('+'); print(datetime.fromisoformat(f'{d}.{frac[:6]}+{tz}'))")
+    ended=$(python3 -c "from datetime import datetime; s='$2'; s=s.replace(',', '.'); d, f=s.split('.'); frac, tz=f.split('+'); print(datetime.fromisoformat(f'{d}.{frac[:6]}+{tz}'))")
+    python3 -c "from datetime import datetime; st = datetime.strptime('$started', '%Y-%m-%d %H:%M:%S.%f%z'); et = datetime.strptime('$ended', '%Y-%m-%d %H:%M:%S.%f%z'); diff = et - st; print(f'{diff.total_seconds():.9f}')"
 }
 
 # populate phase
