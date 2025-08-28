@@ -82,8 +82,11 @@ monitoring_collection_log=$ARTIFACT_DIR/monitoring-collection.log
 monitoring_collection_dir=$ARTIFACT_DIR/monitoring-collection-raw-data-dir
 mkdir -p "$monitoring_collection_dir"
 
-mstart=$(date -u --date "$(cat "${ARTIFACT_DIR}/benchmark-before")" --iso-8601=seconds)
-mend=$(date -u --date "$(cat "${ARTIFACT_DIR}/benchmark-after")" --iso-8601=seconds)
+start_ts="$(cat "${ARTIFACT_DIR}/benchmark-before")"
+mstart=$(python3 -c "from datetime import datetime, timezone;ts ='$start_ts';dt_object = datetime.fromisoformat(ts.replace(',', '.'));formatted_ts = dt_object.strftime('%Y-%m-%dT%H:%M:%S%z');print(formatted_ts);")
+end_ts="$(cat "${ARTIFACT_DIR}/benchmark-after")"
+mend=$(python3 -c "from datetime import datetime, timezone;ts ='$end_ts';dt_object = datetime.fromisoformat(ts.replace(',', '.'));formatted_ts = dt_object.strftime('%Y-%m-%dT%H:%M:%S%z');print(formatted_ts);")
+
 mhost=$(kubectl -n openshift-monitoring get route -l app.kubernetes.io/name=thanos-query -o json | jq --raw-output '.items[0].spec.host')
 status_data.py \
     --status-data-file "$monitoring_collection_data" \

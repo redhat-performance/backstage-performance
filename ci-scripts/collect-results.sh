@@ -131,8 +131,10 @@ timestamp_diff() {
 
 # populate phase
 if [ "$PRE_LOAD_DB" == "true" ]; then
-    mstart=$(date -u --date "$(cat "${ARTIFACT_DIR}/populate-before")" --iso-8601=seconds)
-    mend=$(date -u --date "$(cat "${ARTIFACT_DIR}/populate-after")" --iso-8601=seconds)
+    start_ts="$(cat "${ARTIFACT_DIR}/populate-before")"
+    mstart=$(python3 -c "from datetime import datetime, timezone;ts ='$start_ts';dt_object = datetime.fromisoformat(ts.replace(',', '.'));formatted_ts = dt_object.strftime('%Y-%m-%dT%H:%M:%S%z');print(formatted_ts);")
+    end_ts="$(cat "${ARTIFACT_DIR}/populate-after")"
+    mend=$(python3 -c "from datetime import datetime, timezone;ts ='$end_ts';dt_object = datetime.fromisoformat(ts.replace(',', '.'));formatted_ts = dt_object.strftime('%Y-%m-%dT%H:%M:%S%z');print(formatted_ts);")
     mhost=$(kubectl -n openshift-monitoring get route -l app.kubernetes.io/name=thanos-query -o json | jq --raw-output '.items[0].spec.host')
 
     deploy_started=$(cat "${ARTIFACT_DIR}/deploy-before")
@@ -166,7 +168,7 @@ if [ "$PRE_LOAD_DB" == "true" ]; then
         measurements.timings.populate_catalog.started="$populate_catalog_started" \
         measurements.timings.populate_catalog.ended="$populate_catalog_ended" \
         measurements.timings.populate_catalog.duration="$populate_catalog_duration" \
-        -d &>"$monitoring_collection_log"
+        -d >"$monitoring_collection_log" 2>&1
     status_data.py \
         --status-data-file "$monitoring_collection_data" \
         --additional config/cluster_read_config.populate.yaml \
@@ -176,11 +178,14 @@ if [ "$PRE_LOAD_DB" == "true" ]; then
         --prometheus-host "https://$mhost" \
         --prometheus-port 443 \
         --prometheus-token "$($cli whoami -t)" \
-        -d &>>"$monitoring_collection_log"
+        -d >>"$monitoring_collection_log" 2>&1
 fi
 # test phase
-mstart=$(date -u --date "$(cat "${ARTIFACT_DIR}/benchmark-before")" --iso-8601=seconds)
-mend=$(date -u --date "$(cat "${ARTIFACT_DIR}/benchmark-after")" --iso-8601=seconds)
+start_ts="$(cat "${ARTIFACT_DIR}/benchmark-before")"
+mstart=$(python3 -c "from datetime import datetime, timezone;ts ='$start_ts';dt_object = datetime.fromisoformat(ts.replace(',', '.'));formatted_ts = dt_object.strftime('%Y-%m-%dT%H:%M:%S%z');print(formatted_ts);")
+end_ts="$(cat "${ARTIFACT_DIR}/benchmark-after")"
+mend=$(python3 -c "from datetime import datetime, timezone;ts ='$end_ts';dt_object = datetime.fromisoformat(ts.replace(',', '.'));formatted_ts = dt_object.strftime('%Y-%m-%dT%H:%M:%S%z');print(formatted_ts);")
+
 mhost=$(kubectl -n openshift-monitoring get route -l app.kubernetes.io/name=thanos-query -o json | jq --raw-output '.items[0].spec.host')
 mversion=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' "scenarios/$(cat "${ARTIFACT_DIR}/benchmark-scenario").py")
 benchmark_started=$(cat "${ARTIFACT_DIR}/benchmark-before")
@@ -194,7 +199,7 @@ status_data.py \
     name="RHDH load test $(cat "${ARTIFACT_DIR}/benchmark-scenario")" \
     metadata.scenario.name="$(cat "${ARTIFACT_DIR}/benchmark-scenario")" \
     metadata.scenario.version="$mversion" \
-    -d &>"$monitoring_collection_log"
+    -d >"$monitoring_collection_log" 2>&1
 status_data.py \
     --status-data-file "$monitoring_collection_data" \
     --additional config/cluster_read_config.test.yaml \
@@ -204,7 +209,7 @@ status_data.py \
     --prometheus-host "https://$mhost" \
     --prometheus-port 443 \
     --prometheus-token "$($cli whoami -t)" \
-    -d &>>"$monitoring_collection_log"
+    -d >>"$monitoring_collection_log" 2>&1
 #Scenario specific metrics
 if [ -f "scenarios/$(cat "${ARTIFACT_DIR}/benchmark-scenario").metrics.yaml" ]; then
     status_data.py \
@@ -216,7 +221,7 @@ if [ -f "scenarios/$(cat "${ARTIFACT_DIR}/benchmark-scenario").metrics.yaml" ]; 
         --prometheus-host "https://$mhost" \
         --prometheus-port 443 \
         --prometheus-token "$($cli whoami -t)" \
-        -d &>>"$monitoring_collection_log"
+        -d >>"$monitoring_collection_log" 2>&1
 fi
 set +u
 deactivate
