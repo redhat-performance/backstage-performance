@@ -83,16 +83,16 @@ monitoring_collection_dir=$ARTIFACT_DIR/monitoring-collection-raw-data-dir
 mkdir -p "$monitoring_collection_dir"
 
 start_ts="$(cat "${ARTIFACT_DIR}/benchmark-before")"
-mstart=$(python3 -c "from datetime import datetime, timezone;ts ='$start_ts';dt_object = datetime.fromisoformat(ts.replace(',', '.'));formatted_ts = dt_object.strftime('%Y-%m-%dT%H:%M:%S%z');print(formatted_ts);")
+mstart=$(python3 -c "from datetime import datetime, timezone;ts ='$start_ts';dt_object = datetime.fromisoformat(ts);formatted_ts = dt_object.strftime('%Y-%m-%dT%H:%M:%S%z');print(formatted_ts);")
 end_ts="$(cat "${ARTIFACT_DIR}/benchmark-after")"
-mend=$(python3 -c "from datetime import datetime, timezone;ts ='$end_ts';dt_object = datetime.fromisoformat(ts.replace(',', '.'));formatted_ts = dt_object.strftime('%Y-%m-%dT%H:%M:%S%z');print(formatted_ts);")
+mend=$(python3 -c "from datetime import datetime, timezone;ts ='$end_ts';dt_object = datetime.fromisoformat(ts));formatted_ts = dt_object.strftime('%Y-%m-%dT%H:%M:%S%z');print(formatted_ts);")
 
 mhost=$(kubectl -n openshift-monitoring get route -l app.kubernetes.io/name=thanos-query -o json | jq --raw-output '.items[0].spec.host')
 status_data.py \
     --status-data-file "$monitoring_collection_data" \
     --set \
     name="RHDH on Developer Sandbox Benchmark" \
-    -d &>"$monitoring_collection_log"
+    -d >"$monitoring_collection_log" 2>&1
 status_data.py \
     --status-data-file "$monitoring_collection_data" \
     --additional "$SCRIPT_DIR/metrics-config.yaml" \
@@ -102,7 +102,7 @@ status_data.py \
     --prometheus-host "https://$mhost" \
     --prometheus-port 443 \
     --prometheus-token "$($cli whoami -t)" \
-    -d &>>"$monitoring_collection_log"
+    -d >>"$monitoring_collection_log" 2>&1
 
 while read -r metric_csv; do
     {
