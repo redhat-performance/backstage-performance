@@ -8,14 +8,14 @@ echo -e "\n === Collecting test results and metrics ===\n"
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1090,SC1091
-source "$(readlink -m "$SCRIPT_DIR"/../test.env)"
+source "$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$SCRIPT_DIR"/../test.env)"
 
-ARTIFACT_DIR=$(readlink -m "${ARTIFACT_DIR:-.artifacts}")
+ARTIFACT_DIR=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "${ARTIFACT_DIR:-.artifacts}")
 mkdir -p "${ARTIFACT_DIR}"
 
 export TMP_DIR
 
-TMP_DIR=$(readlink -m "${TMP_DIR:-.tmp}")
+TMP_DIR=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "${TMP_DIR:-.tmp}")
 mkdir -p "${TMP_DIR}"
 
 RHDH_NAMESPACE=${RHDH_NAMESPACE:-rhdh-performance}
@@ -105,7 +105,7 @@ try_gather_file postgresql.log
 # Metrics
 PYTHON_VENV_DIR=.venv
 
-echo "$(date --utc -Ins) Setting up tool to collect monitoring data"
+echo "$(date -u -Ins) Setting up tool to collect monitoring data"
 python3 -m venv $PYTHON_VENV_DIR
 set +u
 # shellcheck disable=SC1090,SC1091
@@ -117,22 +117,24 @@ set +u
 deactivate
 set -u
 
-echo "$(date --utc -Ins) Collecting monitoring data"
+echo "$(date -u -Ins) Collecting monitoring data"
 set +u
 # shellcheck disable=SC1090,SC1091
 source $PYTHON_VENV_DIR/bin/activate
 set -u
 
 timestamp_diff() {
-    started="$1"
-    ended="$2"
-    echo "$(date -d "$ended" +"%s.%N") - $(date -d "$started" +"%s.%N")" | bc
+    started=$(python3 -c "from datetime import datetime; s='$1'; s=s.replace(',', '.'); d, f=s.split('.'); frac, tz=f.split('+'); print(datetime.fromisoformat(f'{d}.{frac[:6]}+{tz}'))")
+    ended=$(python3 -c "from datetime import datetime; s='$2'; s=s.replace(',', '.'); d, f=s.split('.'); frac, tz=f.split('+'); print(datetime.fromisoformat(f'{d}.{frac[:6]}+{tz}'))")
+    python3 -c "from datetime import datetime; st = datetime.strptime('$started', '%Y-%m-%d %H:%M:%S.%f%z'); et = datetime.strptime('$ended', '%Y-%m-%d %H:%M:%S.%f%z'); diff = et - st; print(f'{diff.total_seconds():.9f}')"
 }
 
 # populate phase
 if [ "$PRE_LOAD_DB" == "true" ]; then
-    mstart=$(date --utc --date "$(cat "${ARTIFACT_DIR}/populate-before")" --iso-8601=seconds)
-    mend=$(date --utc --date "$(cat "${ARTIFACT_DIR}/populate-after")" --iso-8601=seconds)
+    start_ts="$(cat "${ARTIFACT_DIR}/populate-before")"
+    mstart=$(python3 -c "from datetime import datetime, timezone;ts ='$start_ts';dt_object = datetime.fromisoformat(ts.replace(',', '.'));formatted_ts = dt_object.strftime('%Y-%m-%dT%H:%M:%S%z');print(formatted_ts);")
+    end_ts="$(cat "${ARTIFACT_DIR}/populate-after")"
+    mend=$(python3 -c "from datetime import datetime, timezone;ts ='$end_ts';dt_object = datetime.fromisoformat(ts.replace(',', '.'));formatted_ts = dt_object.strftime('%Y-%m-%dT%H:%M:%S%z');print(formatted_ts);")
     mhost=$(kubectl -n openshift-monitoring get route -l app.kubernetes.io/name=thanos-query -o json | jq --raw-output '.items[0].spec.host')
 
     deploy_started=$(cat "${ARTIFACT_DIR}/deploy-before")
@@ -166,7 +168,7 @@ if [ "$PRE_LOAD_DB" == "true" ]; then
         measurements.timings.populate_catalog.started="$populate_catalog_started" \
         measurements.timings.populate_catalog.ended="$populate_catalog_ended" \
         measurements.timings.populate_catalog.duration="$populate_catalog_duration" \
-        -d &>"$monitoring_collection_log"
+        -d >"$monitoring_collection_log" 2>&1
     status_data.py \
         --status-data-file "$monitoring_collection_data" \
         --additional config/cluster_read_config.populate.yaml \
@@ -176,11 +178,14 @@ if [ "$PRE_LOAD_DB" == "true" ]; then
         --prometheus-host "https://$mhost" \
         --prometheus-port 443 \
         --prometheus-token "$($cli whoami -t)" \
-        -d &>>"$monitoring_collection_log"
+        -d >>"$monitoring_collection_log" 2>&1
 fi
 # test phase
-mstart=$(date --utc --date "$(cat "${ARTIFACT_DIR}/benchmark-before")" --iso-8601=seconds)
-mend=$(date --utc --date "$(cat "${ARTIFACT_DIR}/benchmark-after")" --iso-8601=seconds)
+start_ts="$(cat "${ARTIFACT_DIR}/benchmark-before")"
+mstart=$(python3 -c "from datetime import datetime, timezone;ts ='$start_ts';dt_object = datetime.fromisoformat(ts.replace(',', '.'));formatted_ts = dt_object.strftime('%Y-%m-%dT%H:%M:%S%z');print(formatted_ts);")
+end_ts="$(cat "${ARTIFACT_DIR}/benchmark-after")"
+mend=$(python3 -c "from datetime import datetime, timezone;ts ='$end_ts';dt_object = datetime.fromisoformat(ts.replace(',', '.'));formatted_ts = dt_object.strftime('%Y-%m-%dT%H:%M:%S%z');print(formatted_ts);")
+
 mhost=$(kubectl -n openshift-monitoring get route -l app.kubernetes.io/name=thanos-query -o json | jq --raw-output '.items[0].spec.host')
 mversion=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' "scenarios/$(cat "${ARTIFACT_DIR}/benchmark-scenario").py")
 benchmark_started=$(cat "${ARTIFACT_DIR}/benchmark-before")
@@ -194,7 +199,7 @@ status_data.py \
     name="RHDH load test $(cat "${ARTIFACT_DIR}/benchmark-scenario")" \
     metadata.scenario.name="$(cat "${ARTIFACT_DIR}/benchmark-scenario")" \
     metadata.scenario.version="$mversion" \
-    -d &>"$monitoring_collection_log"
+    -d >"$monitoring_collection_log" 2>&1
 status_data.py \
     --status-data-file "$monitoring_collection_data" \
     --additional config/cluster_read_config.test.yaml \
@@ -204,7 +209,7 @@ status_data.py \
     --prometheus-host "https://$mhost" \
     --prometheus-port 443 \
     --prometheus-token "$($cli whoami -t)" \
-    -d &>>"$monitoring_collection_log"
+    -d >>"$monitoring_collection_log" 2>&1
 #Scenario specific metrics
 if [ -f "scenarios/$(cat "${ARTIFACT_DIR}/benchmark-scenario").metrics.yaml" ]; then
     status_data.py \
@@ -216,7 +221,7 @@ if [ -f "scenarios/$(cat "${ARTIFACT_DIR}/benchmark-scenario").metrics.yaml" ]; 
         --prometheus-host "https://$mhost" \
         --prometheus-port 443 \
         --prometheus-token "$($cli whoami -t)" \
-        -d &>>"$monitoring_collection_log"
+        -d >>"$monitoring_collection_log" 2>&1
 fi
 set +u
 deactivate
@@ -227,14 +232,14 @@ if [ "$RHDH_INSTALL_METHOD" == "helm" ] && ${ENABLE_PROFILING}; then
     cpu_profile_file="$ARTIFACT_DIR/rhdh.cpu.profile"
     memory_profile_file="$ARTIFACT_DIR/rhdh.heapsnapshot"
     pod="$($clin get pod -l app.kubernetes.io/name=developer-hub -o name)"
-    echo "[INFO][$(date --utc -Ins)] Collecting CPU profile into $cpu_profile_file"
+    echo "[INFO][$(date -u -Ins)] Collecting CPU profile into $cpu_profile_file"
     $clin exec "$pod" -c backstage-backend -- /bin/bash -c 'find /opt/app-root/src -name "*v8.log" -exec base64 -w0 {} \;' | base64 -d >"$cpu_profile_file"
-    echo "[INFO][$(date --utc -Ins)] Collecting heap snapshot into $memory_profile_file"
+    echo "[INFO][$(date -u -Ins)] Collecting heap snapshot into $memory_profile_file"
     # shellcheck disable=SC2016
     $clin exec "$pod" -c backstage-backend -- /bin/bash -c 'for i in $(ls /proc | grep "^[0-9]"); do if [ -f /proc/$i/cmdline ]; then if $(cat /proc/$i/cmdline | grep node); then kill -s USR1 $i; break; fi; fi; done'
-    echo "[INFO][$(date --utc -Ins)] Waiting for 3 minutes till the heap snapshot is written down"
+    echo "[INFO][$(date -u -Ins)] Waiting for 3 minutes till the heap snapshot is written down"
     sleep 3m
-    echo "[INFO][$(date --utc -Ins)] Downloading heap snapshot..."
+    echo "[INFO][$(date -u -Ins)] Downloading heap snapshot..."
     $clin exec "$pod" -c backstage-backend -- /bin/bash -c 'find /opt/app-root/src -name "*.heapsnapshot" -exec base64 -w0 {} \;' | base64 -d >"$memory_profile_file"
 fi
 

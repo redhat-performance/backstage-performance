@@ -2,12 +2,12 @@
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1090,SC1091
-source "$(readlink -m "$SCRIPT_DIR/../../test.env")"
+source "$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$SCRIPT_DIR/../../test.env")"
 
-rootdir=$(readlink -m "$SCRIPT_DIR/../..")
+rootdir=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$SCRIPT_DIR/../..")
 
 export TMP_DIR
-TMP_DIR=$(readlink -m "${TMP_DIR:-"$rootdir/.tmp"}")
+TMP_DIR=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "${TMP_DIR:-"$rootdir/.tmp"}")
 mkdir -p "${TMP_DIR}"
 
 wait_for_deployment() {

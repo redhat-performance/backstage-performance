@@ -2,7 +2,7 @@
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1090,SC1091
-source "$(readlink -m "$SCRIPT_DIR"/../../test.env)"
+source "$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$SCRIPT_DIR"/../../test.env)"
 
 export PRE_LOAD_DB=${PRE_LOAD_DB:-true}
 export RHDH_HELM_REPO=${RHDH_HELM_REPO:-https://raw.githubusercontent.com/rhdh-bot/openshift-helm-charts/refs/heads/redhat-developer-hub-1.5-147-CI/installation}
@@ -59,7 +59,7 @@ wait_for_indexing() {
         HOST="https://$(oc get routes "${rhdh_route}" -n "${RHDH_NAMESPACE:-rhdh-performance}" -o jsonpath='{.spec.host}')"
 
         start=$(date +%s)
-        timeout_timestamp=$(date -d "3600 seconds" "+%s")
+        timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int(3600); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
         while true; do
             echo "Waiting for the search indexing to finish..."
             if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
@@ -81,7 +81,7 @@ wait_for_indexing() {
     fi
 }
 pushd ../../
-ARTIFACT_DIR=$(readlink -m "${ARTIFACT_DIR:-.artifacts}")
+ARTIFACT_DIR=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "${ARTIFACT_DIR:-.artifacts}")
 mkdir -p "${ARTIFACT_DIR}"
 
 SCALABILITY_ARTIFACTS="$ARTIFACT_DIR/scalability"
@@ -133,8 +133,8 @@ for w in "${workers[@]}"; do
                                 make clean-local undeploy-rhdh
                                 setup_artifacts="$SCALABILITY_ARTIFACTS/$index/setup/${counter}"
                                 mkdir -p "$setup_artifacts"
-                                ARTIFACT_DIR=$setup_artifacts ./ci-scripts/setup.sh |& tee "$setup_artifacts/setup.log"
-                                wait_for_indexing |& tee "$setup_artifacts/after-setup-search.log"
+                                ARTIFACT_DIR=$setup_artifacts ./ci-scripts/setup.sh 2>&1| tee "$setup_artifacts/setup.log"
+                                wait_for_indexing 2>&1| tee "$setup_artifacts/after-setup-search.log"
                                 for au_sr in "${active_users_spawn_rate[@]}"; do
                                     IFS=":" read -ra tokens <<<"${au_sr}"
                                     au=${tokens[0]}                                          # active users
@@ -151,9 +151,9 @@ for w in "${workers[@]}"; do
                                     make clean
                                     test_artifacts="$SCALABILITY_ARTIFACTS/$index/test/${counter}/${au}u"
                                     mkdir -p "$test_artifacts"
-                                    wait_for_indexing |& tee "$test_artifacts/before-test-search.log"
-                                    ARTIFACT_DIR=$test_artifacts ./ci-scripts/test.sh |& tee "$test_artifacts/test.log"
-                                    ARTIFACT_DIR=$test_artifacts ./ci-scripts/collect-results.sh |& tee "$test_artifacts/collect-results.log"
+                                    wait_for_indexing 2>&1| tee "$test_artifacts/before-test-search.log"
+                                    ARTIFACT_DIR=$test_artifacts ./ci-scripts/test.sh 2>&1| tee "$test_artifacts/test.log"
+                                    ARTIFACT_DIR=$test_artifacts ./ci-scripts/collect-results.sh 2>&1| tee "$test_artifacts/collect-results.log"
                                     jq ".metadata.scalability.iteration = ${counter}" "$test_artifacts/benchmark.json" > $$.json
                                     mv -vf $$.json "$test_artifacts/benchmark.json"
                                     (( counter += 1 ))

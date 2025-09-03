@@ -3,7 +3,7 @@ set -uo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1090,SC1091
-source "$(readlink -m "$SCRIPT_DIR"/../../test.env)"
+source "$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$SCRIPT_DIR"/../../test.env)"
 
 # shellcheck disable=SC1091
 source ./create_resource.sh
@@ -72,7 +72,7 @@ export LOG_STATEMENT_SAMPLE_RATE="${LOG_STATEMENT_SAMPLE_RATE:-0.7}"
 
 export INSTALL_METHOD=helm
 
-TMP_DIR=$(readlink -m "${TMP_DIR:-.tmp}")
+TMP_DIR=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "${TMP_DIR:-.tmp}")
 mkdir -p "${TMP_DIR}"
 
 wait_to_start_in_namespace() {
@@ -83,7 +83,8 @@ wait_to_start_in_namespace() {
     wait_timeout=${5:-300}
     rn=$resource/$name
     description=${6:-$rn}
-    timeout_timestamp=$(date -d "$initial_timeout seconds" "+%s")
+    timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$initial_timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
+
     interval=10s
     while ! /bin/bash -c "$cli -n $namespace get $rn -o name"; do
         if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
@@ -103,7 +104,7 @@ wait_for_crd() {
     initial_timeout=${2:-300}
     rn=crd/$name
     description=${3:-$rn}
-    timeout_timestamp=$(date -d "$initial_timeout seconds" "+%s")
+    timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$initial_timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
     interval=10s
     while ! /bin/bash -c "$cli get $rn"; do
         if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
@@ -157,14 +158,14 @@ install() {
     appurl=$(oc whoami --show-console)
     export OPENSHIFT_APP_DOMAIN=${appurl#*.}
     $cli create namespace "${RHDH_NAMESPACE}" --dry-run=client -o yaml | $cli apply -f -
-    keycloak_install |& tee "${TMP_DIR}/keycloak_install.log"
+    keycloak_install 2>&1| tee "${TMP_DIR}/keycloak_install.log"
 
     if $PRE_LOAD_DB; then
         log_info "Creating users and groups in Keycloak in background"
-        create_users_groups |& tee -a "${TMP_DIR}/create-users-groups.log" &
+        create_users_groups 2>&1| tee -a "${TMP_DIR}/create-users-groups.log" &
     fi
 
-    backstage_install |& tee -a "${TMP_DIR}/backstage-install.log"
+    backstage_install 2>&1| tee -a "${TMP_DIR}/backstage-install.log"
     exit_code=${PIPESTATUS[0]}
     if [ "$exit_code" -ne 0 ]; then
         log_error "Installation failed!!!"
@@ -205,18 +206,18 @@ keycloak_install() {
 }
 
 create_users_groups() {
-    date --utc -Ins >"${TMP_DIR}/populate-users-groups-before"
+    date -u -Ins >"${TMP_DIR}/populate-users-groups-before"
     create_groups
     create_users
-    date --utc -Ins >"${TMP_DIR}/populate-users-groups-after"
+    date -u -Ins >"${TMP_DIR}/populate-users-groups-after"
 }
 
 create_objs() {
     if [[ ${GITHUB_USER} ]] && [[ ${GITHUB_REPO} ]]; then
-        date --utc -Ins >"${TMP_DIR}/populate-catalog-before"
+        date -u -Ins >"${TMP_DIR}/populate-catalog-before"
         create_per_grp create_cmp COMPONENT_COUNT
         create_per_grp create_api API_COUNT
-        date --utc -Ins >"${TMP_DIR}/populate-catalog-after"
+        date -u -Ins >"${TMP_DIR}/populate-catalog-after"
     else
         log_warn "skipping component creating. GITHUB_REPO and GITHUB_USER not set"
         exit 1
@@ -266,9 +267,9 @@ backstage_install() {
         log_error "Invalid install method: $INSTALL_METHOD, currently allowed methods are helm or olm"
         exit 1
     fi
-    date --utc -Ins >"${TMP_DIR}/populate-before"
+    date -u -Ins >"${TMP_DIR}/populate-before"
     # shellcheck disable=SC2064
-    trap "date --utc -Ins >'${TMP_DIR}/populate-after'" EXIT
+    trap "date -u -Ins >'${TMP_DIR}/populate-after'" EXIT
     if ${RHDH_METRIC}; then
         log_info "Setting up RHDH metrics"
         if [ "${AUTH_PROVIDER}" == "keycloak" ]; then
@@ -282,7 +283,7 @@ backstage_install() {
     fi
     log_info "RHDH Installed, waiting for the catalog to be populated"
     timeout=600
-    timeout_timestamp=$(date -d "$timeout seconds" "+%s")
+    timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
     last_count=-1
     for entity_type in Component Api; do
         while true; do
@@ -305,7 +306,7 @@ backstage_install() {
                 fi
                 if [[ "$last_count" != "$b_count" ]]; then # reset the timeout if current count changes
                     log_info "The current '$entity_type' count changed, resetting waiting timeout to $timeout seconds"
-                    timeout_timestamp=$(date -d "$timeout seconds" "+%s")
+                    timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
                     last_count=$b_count
                 fi
                 if [[ $b_count -ge $e_count ]]; then
@@ -517,11 +518,11 @@ setup_monitoring() {
 
     # Setup user workload monitoring
     log_info "Enabling user workload monitoring"
-    before=$(date --utc +%s)
+    before=$(date -u +%s)
     while true; do
         count=$(kubectl -n "openshift-user-workload-monitoring" get StatefulSet -l operator.prometheus.io/name=user-workload -o name 2>/dev/null | wc -l)
         [ "$count" -gt 0 ] && break
-        now=$(date --utc +%s)
+        now=$(date -u +%s)
         if [[ $((now - before)) -ge "300" ]]; then
             log_error "Required StatefulSet did not appeared before timeout"
             exit 1

@@ -2,18 +2,18 @@
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1090,SC1091
-source "$(readlink -m "$SCRIPT_DIR/../../test.env")"
+source "$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$SCRIPT_DIR/../../test.env")"
 
-rootdir=$(readlink -m "$SCRIPT_DIR/../..")
+rootdir=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$SCRIPT_DIR/../..")
 
 export ARTIFACT_DIR
 ARTIFACT_DIR="${ARTIFACT_DIR:-"$rootdir/.artifacts"}"
 
 export TMP_DIR
-TMP_DIR=$(readlink -m "${TMP_DIR:-"$rootdir/.tmp"}")
+TMP_DIR=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "${TMP_DIR:-"$rootdir/.tmp"}")
 mkdir -p "${TMP_DIR}"
 
-WSTC=$(readlink -m "$rootdir/.toolchain-e2e.git")
+WSTC=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$rootdir/.toolchain-e2e.git")
 
 export RHDH_INSTALL_METHOD=${RHDH_INSTALL_METHOD:-olm}
 export RHDH_WORKLOADS_TEMPLATE_NAME=${RHDH_WORKLOADS_TEMPLATE_NAME:-default}
@@ -51,14 +51,14 @@ number_of_users_with_workloads_per_run=${3:-2000}
 template="$TMP_DIR/rhdh-perf.workloads.yaml"
 echo "Using $RHDH_WORKLOADS_TEMPLATE template --> $template"
 envsubst <"$RHDH_WORKLOADS_TEMPLATE" >"$template"
-date --utc -Ins >"${ARTIFACT_DIR}/benchmark-before"
+date -u -Ins >"${ARTIFACT_DIR}/benchmark-before"
 for r in $(seq -w 1 "$number_of_runs"); do
     TEST_ID="run$r"
     echo "Running $TEST_ID"
     make clean-users
     collect_counts "$TEST_ID-counts-pre"
     cmd="go run setup/main.go --users $number_of_users_per_run --default $number_of_users_per_run --custom $number_of_users_with_workloads_per_run --template=$template $workloads --username $TEST_ID --testname=$TEST_ID --verbose --idler-timeout 15s --skip-install-operators"
-    yes | $cmd |& tee "$TEST_ID.log" && out="tmp/results/$(date +%F_%T)-counts.csv"
+    yes | $cmd 2>&1| tee "$TEST_ID.log" && out="tmp/results/$(date +%F_%T)-counts.csv"
     collect_counts "$TEST_ID-counts-post"
 done
-date --utc -Ins >"${ARTIFACT_DIR}/benchmark-after"
+date -u -Ins >"${ARTIFACT_DIR}/benchmark-after"

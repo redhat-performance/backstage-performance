@@ -2,16 +2,16 @@
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1090,SC1091
-source "$(readlink -m "$SCRIPT_DIR"/../../test.env)"
+source "$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$SCRIPT_DIR"/../../test.env)"
 
 export TMP_DIR WORKDIR
 
 POPULATION_CONCURRENCY=${POPULATION_CONCURRENCY:-10}
 COMPONENT_SHARD_SIZE=${COMPONENT_SHARD_SIZE:-500}
 
-TMP_DIR=${TMP_DIR:-$(readlink -m .tmp)}
+TMP_DIR=${TMP_DIR:-$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' .tmp)}
 mkdir -p "$TMP_DIR"
-WORKDIR=$(readlink -m .)
+WORKDIR=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' .)
 
 kc_lockfile="$TMP_DIR/kc.lockfile"
 
@@ -19,16 +19,33 @@ COOKIE="$TMP_DIR/cookie.jar"
 
 keycloak_url() {
   f="$TMP_DIR/keycloak.url"
-  exec 4>"$kc_lockfile"
-  flock 4 || {
-    echo "Failed to acquire lock"
-    exit 1
-  }
+  if command -v  flock >/dev/null 2>&1; then
+    exec 4>"$kc_lockfile"
+    flock 4 || {
+      echo "Failed to acquire lock"
+      exit 1
+    }
 
-  if [ ! -f "$f" ]; then
-    echo -n "https://$(oc get routes keycloak -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')" >"$f"
+    if [ ! -f "$f" ]; then
+      echo -n "https://$(oc get routes keycloak -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')" >"$f"
+    fi
+    flock -u 4
+  elif command -v  shlock >/dev/null 2>&1; then
+    LOCKFILE="$TMP_DIR/kc_lockfile"
+    trap 'rm -f "$LOCKFILE"' EXIT
+
+    if ! shlock -f "$LOCKFILE" -p $$; then
+      echo "Failed to acquire lock"
+      exit 1
+    fi
+
+    if [ ! -f "$f" ]; then
+      echo -n "https://$(oc get routes keycloak -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')" >"$f"
+    fi
+  else
+    echo "Either flock or shlock must exist"
+    return 1
   fi
-  flock -u 4
   cat "$f"
 }
 
@@ -36,24 +53,51 @@ bs_lockfile="$TMP_DIR/bs.lockfile"
 
 backstage_url() {
   f="$TMP_DIR/backstage.url"
-  exec 5>"$bs_lockfile"
-  flock 5 || {
-    echo "Failed to acquire lock"
-    exit 1
-  }
-  if [ ! -f "$f" ]; then
-    if [ "$RHDH_INSTALL_METHOD" == "helm" ]; then
-      rhdh_route="$(oc -n "${RHDH_NAMESPACE}" get routes -l app.kubernetes.io/instance="${RHDH_HELM_RELEASE_NAME}" -o jsonpath='{.items[0].metadata.name}')"
-    else
-      if [ "$AUTH_PROVIDER" == "keycloak" ]; then
-        rhdh_route="rhdh"
+  if command -v flock >/dev/null 2>&1; then
+    exec 5>"$bs_lockfile"
+    flock 5 || {
+      echo "Failed to acquire lock"
+      exit 1
+    }
+    if [[ ! -f "$f" ]]; then
+      if [ "$RHDH_INSTALL_METHOD" == "helm" ]; then
+        rhdh_route="$(oc -n "${RHDH_NAMESPACE}" get routes -l app.kubernetes.io/instance="${RHDH_HELM_RELEASE_NAME}" -o jsonpath='{.items[0].metadata.name}')"
       else
-        rhdh_route="backstage-developer-hub"
+        if [ "$AUTH_PROVIDER" == "keycloak" ]; then
+          rhdh_route="rhdh"
+        else
+          rhdh_route="backstage-developer-hub"
+        fi
       fi
+      echo -n "https://$(oc get routes "${rhdh_route}" -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')" >"$f"
     fi
-    echo -n "https://$(oc get routes "${rhdh_route}" -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')" >"$f"
+    flock -u 5
+  elif command -v shlock >/dev/null 2>&1; then
+    f="$TMP_DIR/backstage.url"
+    LOCKFILE="$TMP_DIR/bs_lockfile"
+    trap 'rm -f "$LOCKFILE"' EXIT
+
+    if ! shlock -f "$LOCKFILE" -p $$; then
+      echo "Failed to acquire lock"
+      exit 1
+    fi
+
+    if [[ ! -f "$f" ]]; then
+      if [ "$RHDH_INSTALL_METHOD" == "helm" ]; then
+        rhdh_route="$(oc -n "${RHDH_NAMESPACE}" get routes -l app.kubernetes.io/instance="${RHDH_HELM_RELEASE_NAME}" -o jsonpath='{.items[0].metadata.name}')"
+      else
+        if [ "$AUTH_PROVIDER" == "keycloak" ]; then
+          rhdh_route="rhdh"
+        else
+          rhdh_route="backstage-developer-hub"
+        fi
+      fi
+      echo -n "https://$(oc get routes "${rhdh_route}" -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')" >"$f"
+    fi
+  else
+    echo "Either flock or shlock must exist"
+    exit 1
   fi
-  flock -u 5
   cat "$f"
 }
 
@@ -101,7 +145,13 @@ clone_and_upload() {
   git config user.email rhdh-performance-bot@redhat.com
   tmp_branch=$(mktemp -u XXXXXXXXXX)
   git checkout -b "$tmp_branch"
-  mapfile -t files < <(find "$TMP_DIR" -name "$1")
+  out=$(python3 -c "import subprocess; print(subprocess.check_output('find \"$TMP_DIR\" -name \"$1\"', shell=True).decode())")
+
+  files=()
+  while IFS= read -r line; do
+      files+=("$line")
+  done <<< "$out"
+
   for filename in "${files[@]}"; do
     cp -vf "$filename" "$(basename "$filename")"
     git add "$(basename "$filename")"
@@ -159,7 +209,7 @@ create_group() {
     fi
   done
   if [[ $attempt -gt $max_attempts ]]; then
-    log_error "Unable to create the $groupname group in $max_attempts attempts, giving up!" |& tee -a "$TMP_DIR/create_group.log"
+    log_error "Unable to create the $groupname group in $max_attempts attempts, giving up!" 2>&1| tee -a "$TMP_DIR/create_group.log"
   fi
 }
 
@@ -251,8 +301,9 @@ create_user() {
       ((attempt++))
     fi
   done
+
   if [[ $attempt -gt $max_attempts ]]; then
-    log_error "Unable to create the $username user in $max_attempts attempts, giving up!" |& tee -a "$TMP_DIR/create_user.log"
+    log_error "Unable to create the $username user in $max_attempts attempts, giving up!" 2>&1| tee -a "$TMP_DIR/create_user.log"
   fi
 }
 
@@ -265,7 +316,7 @@ create_users() {
 
 token_lockfile="$TMP_DIR/token.lockfile"
 log() {
-  echo "{\"level\":\"${2:-info}\",\"ts\":\"$(date --utc -Ins)\",\"message\":\"$1\"}"
+  echo "{\"level\":\"${2:-info}\",\"ts\":\"$(date -u -Ins)\",\"message\":\"$1\"}"
 }
 
 log_info() {
@@ -293,7 +344,7 @@ log_token_err() {
 }
 
 keycloak_token() {
-  curl -s -k "$(keycloak_url)/auth/realms/master/protocol/openid-connect/token" -d username=admin -d "password=$1" -d 'grant_type=password' -d 'client_id=admin-cli' | jq -r ".expires_in_timestamp = $(date -d '30 seconds' +%s)"
+  curl -s -k "$(keycloak_url)/auth/realms/master/protocol/openid-connect/token" -d username=admin -d "password=$1" -d 'grant_type=password' -d 'client_id=admin-cli' | jq -r ".expires_in_timestamp = $(python3 -c 'from datetime import datetime, timedelta; t_add=int(30); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))')"
 }
 
 rhdh_token() {
@@ -305,13 +356,14 @@ rhdh_token() {
   CLIENTID="backstage"
 
   if [[ "${AUTH_PROVIDER}" != "keycloak" ]]; then
-    ACCESS_TOKEN=$(curl -s -k --cookie "$COOKIE" --cookie-jar "$COOKIE" "$(backstage_url)/api/auth/guest/refresh" | jq -r ".backstageIdentity" | jq -r ".expires_in_timestamp = $(date -d '50 minutes' +%s)")
+    # Corrected jq command for non-keycloak provider
+    ACCESS_TOKEN=$(curl -s -k --cookie "$COOKIE" --cookie-jar "$COOKIE" "$(backstage_url)/api/auth/guest/refresh" | jq -r ".backstageIdentity | .expires_in_timestamp = $(python3 -c 'from datetime import datetime, timedelta; t_add=int(50*60); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))')")
     echo "$ACCESS_TOKEN"
     return
   fi
 
   LOGIN_URL=$(curl -I -k -sSL --dump-header "$TMP_DIR/login_url_headers.log" --cookie "$COOKIE" --cookie-jar "$COOKIE" "$REFRESH_URL")
-  state=$(echo "$LOGIN_URL" | grep -oP 'state=\K[^ ]+' | sed 's/%2F/\//g;s/%3A/:/g')
+  state=$(echo "$LOGIN_URL" | grep -oE 'state=[^&]+' | grep -oE '[^=]+$' | sed 's/%2F/\//g;s/%3A/:/g')
 
   AUTH_URL=$(curl -k -sSL --dump-header "$TMP_DIR/auth_url_headers.log"--get --cookie "$COOKIE" --cookie-jar "$COOKIE" \
     --data-urlencode "client_id=${CLIENTID}" \
@@ -319,10 +371,10 @@ rhdh_token() {
     --data-urlencode "redirect_uri=${REDIRECT_URL}" \
     --data-urlencode "scope=openid email profile" \
     --data-urlencode "response_type=code" \
-    "$(keycloak_url)/auth/realms/$REALM/protocol/openid-connect/auth" |& tee "$TMP_DIR/auth_url.log" | grep -oP 'action="\K[^"]+')
+    "$(keycloak_url)/auth/realms/$REALM/protocol/openid-connect/auth" 2>&1| tee "$TMP_DIR/auth_url.log" | grep -oE 'action="[^"]+"' | grep -oE '"[^"]+"' | tr -d '"')
 
-  execution=$(echo "$AUTH_URL" | grep -oP 'execution=\K[^&]+')
-  tab_id=$(echo "$AUTH_URL" | grep -oP 'tab_id=\K[^&]+')
+  execution=$(echo "$AUTH_URL" | grep -oE 'execution=[^&]+' | grep -oE '[^=]+$')
+  tab_id=$(echo "$AUTH_URL" | grep -oE 'tab_id=[^&]+' | grep -oE '[^=]+$')
   # shellcheck disable=SC2001
   AUTHENTICATE_URL=$(echo "$AUTH_URL" | sed -e 's/\&amp;/\&/g')
 
@@ -332,18 +384,19 @@ rhdh_token() {
     --data-urlencode "tab_id=${tab_id}" \
     --data-urlencode "execution=${execution}" \
     --write-out "%{redirect_url}" \
-    "$AUTHENTICATE_URL" |& tee "$TMP_DIR/code_url.log")
+    "$AUTHENTICATE_URL" 2>&1| tee "$TMP_DIR/code_url.log")
 
-  code=$(echo "$CODE_URL" | grep -oP 'code=\K[^"]+')
-  session_state=$(echo "$CODE_URL" | grep -oP 'session_state=\K[^&]+')
+  code=$(echo "$CODE_URL" | grep -oE 'code=[^&]+' | grep -oE '[^=]+$')
+  session_state=$(echo "$CODE_URL" | grep -oE 'session_state=[^&]+' | grep -oE '[^=]+$')
 
   # shellcheck disable=SC2001
   CODE_URL=$(echo "$CODE_URL" | sed -e 's/\&amp;/\&/g')
+
   ACCESS_TOKEN=$(curl -k -sSL --dump-header "$TMP_DIR/get_rhdh_token_headers.log" --cookie "$COOKIE" --cookie-jar "$COOKIE" \
     --data-urlencode "code=$code" \
     --data-urlencode "session_state=$session_state" \
     --data-urlencode "state=$state" \
-    "$CODE_URL" | tee -a "$TMP_DIR/get_rhdh_token.log" | jq -r ".backstageIdentity" | jq -r ".expires_in_timestamp = $(date -d '30 minutes' +%s)")
+    "$CODE_URL" | tee -a "$TMP_DIR/get_rhdh_token.log" | jq ".backstageIdentity | .expires_in_timestamp = $(python3 -c 'from datetime import datetime, timedelta; t_add=int(30*60); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))')")
   echo "$ACCESS_TOKEN"
 }
 
@@ -367,7 +420,7 @@ get_token() {
   #shellcheck disable=SC2064
   trap "rm -rf $token_lockfile; exit" INT TERM EXIT HUP
 
-  timeout_timestamp=$(date -d "$token_timeout seconds" "+%s")
+  timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$token_timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
   while [ ! -f "$token_file" ] || [ ! -s "$token_file" ] || [ -z "$(jq -rc '.expires_in_timestamp' "$token_file")" ] || [ "$(date +%s)" -gt "$(jq -rc '.expires_in_timestamp' "$token_file")" ] || [ "$(jq -rc "$token_field" "$token_file")" == "null" ]; do
     if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
       log_token_err "Timeout getting $token_type token"

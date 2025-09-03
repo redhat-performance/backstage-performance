@@ -8,7 +8,7 @@ echo -e "\n === Executing RHDH load test ===\n"
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1090,SC1091
-source "$(readlink -m "$SCRIPT_DIR"/../test.env)"
+source "$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$SCRIPT_DIR"/../test.env)"
 
 export SCENARIO RHDH_INSTALL_METHOD AUTH_PROVIDER RHDH_NAMESPACE
 
@@ -38,7 +38,7 @@ export HOST
 HOST="https://$(oc get routes "$rhdh_route" -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')"
 # end-of testing env
 
-ARTIFACT_DIR=$(readlink -m "${ARTIFACT_DIR:-.artifacts}")
+ARTIFACT_DIR=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "${ARTIFACT_DIR:-.artifacts}")
 mkdir -p "${ARTIFACT_DIR}"
 
 rate_limits_csv="${ARTIFACT_DIR}/gh-rate-limits-remaining.test.csv"
@@ -71,5 +71,5 @@ kill_rate_limits() {
 }
 trap kill_rate_limits EXIT
 
-echo "$(date --utc -Ins) Running the test"
+echo "$(date -u -Ins) Running the test"
 make ci-run

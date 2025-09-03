@@ -4,15 +4,15 @@ export RHDH_OPERATOR_NAMESPACE=rhdh-operator
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1090,SC1091
-source "$(readlink -m "$SCRIPT_DIR/../../test.env")"
+source "$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$SCRIPT_DIR/../../test.env")"
 
-rootdir=$(readlink -m "$SCRIPT_DIR/../..")
+rootdir=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$SCRIPT_DIR/../..")
 
 export ARTIFACT_DIR
 ARTIFACT_DIR="${ARTIFACT_DIR:-"$rootdir/.artifacts"}"
 
 export TMP_DIR
-TMP_DIR=$(readlink -m "${TMP_DIR:-"$rootdir/.tmp"}")
+TMP_DIR=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "${TMP_DIR:-"$rootdir/.tmp"}")
 mkdir -p "${TMP_DIR}"
 
 cli="oc"
@@ -56,7 +56,7 @@ while read -r baseline_counts_csv; do
     done <"$baseline_counts_csv"
 done <<<"$(find "${ARTIFACT_DIR}/dev-sandbox/" -name '*baseline-counts-post.csv')"
 
-echo "$(date --utc -Ins) Setting up tool to collect monitoring data"
+echo "$(date -u -Ins) Setting up tool to collect monitoring data"
 
 PYTHON_VENV_DIR="$rootdir/.venv"
 python3 -m venv "$PYTHON_VENV_DIR"
@@ -71,7 +71,7 @@ set +u
 deactivate
 set -u
 
-echo "$(date --utc -Ins) Collecting monitoring data"
+echo "$(date -u -Ins) Collecting monitoring data"
 set +u
 # shellcheck disable=SC1090,SC1091
 source "$PYTHON_VENV_DIR/bin/activate"
@@ -82,14 +82,17 @@ monitoring_collection_log=$ARTIFACT_DIR/monitoring-collection.log
 monitoring_collection_dir=$ARTIFACT_DIR/monitoring-collection-raw-data-dir
 mkdir -p "$monitoring_collection_dir"
 
-mstart=$(date --utc --date "$(cat "${ARTIFACT_DIR}/benchmark-before")" --iso-8601=seconds)
-mend=$(date --utc --date "$(cat "${ARTIFACT_DIR}/benchmark-after")" --iso-8601=seconds)
+start_ts="$(cat "${ARTIFACT_DIR}/benchmark-before")"
+mstart=$(python3 -c "from datetime import datetime, timezone;ts ='$start_ts';dt_object = datetime.fromisoformat(ts.replace(',', '.'));formatted_ts = dt_object.strftime('%Y-%m-%dT%H:%M:%S%z');print(formatted_ts);")
+end_ts="$(cat "${ARTIFACT_DIR}/benchmark-after")"
+mend=$(python3 -c "from datetime import datetime, timezone;ts ='$end_ts';dt_object = datetime.fromisoformat(ts.replace(',', '.')));formatted_ts = dt_object.strftime('%Y-%m-%dT%H:%M:%S%z');print(formatted_ts);")
+
 mhost=$(kubectl -n openshift-monitoring get route -l app.kubernetes.io/name=thanos-query -o json | jq --raw-output '.items[0].spec.host')
 status_data.py \
     --status-data-file "$monitoring_collection_data" \
     --set \
     name="RHDH on Developer Sandbox Benchmark" \
-    -d &>"$monitoring_collection_log"
+    -d >"$monitoring_collection_log" 2>&1
 status_data.py \
     --status-data-file "$monitoring_collection_data" \
     --additional "$SCRIPT_DIR/metrics-config.yaml" \
@@ -99,7 +102,7 @@ status_data.py \
     --prometheus-host "https://$mhost" \
     --prometheus-port 443 \
     --prometheus-token "$($cli whoami -t)" \
-    -d &>>"$monitoring_collection_log"
+    -d >>"$monitoring_collection_log" 2>&1
 
 while read -r metric_csv; do
     {
@@ -113,7 +116,7 @@ while read -r metric_csv; do
             if [[ $line =~ ^timestamp ]]; then
                 echo "$timestamp;$value"
             else
-                echo "$(date -d "@$timestamp" --utc "+%F %T");$value"
+                python3 -c "from datetime import datetime, timezone; dt = datetime.fromtimestamp(int('$timestamp'), tz=timezone.utc); print(dt.strftime('%Y-%m-%d %H:%M:%S') + ';' + '$value')"
             fi
         done <"$tmp_csv" >>"$metric_csv"
         rm -f "$tmp_csv"
