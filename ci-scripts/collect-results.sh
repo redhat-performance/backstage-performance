@@ -124,17 +124,17 @@ source $PYTHON_VENV_DIR/bin/activate
 set -u
 
 timestamp_diff() {
-    started="$1"
-    ended="$2"
+    started=$(python3 -c "from datetime import datetime; s='$1'; s=s.replace(',', '.'); d, f=s.split('.'); frac, tz=f.split('+'); print(datetime.fromisoformat(f'{d}.{frac[:6]}+{tz}'))")
+    ended=$(python3 -c "from datetime import datetime; s='$2'; s=s.replace(',', '.'); d, f=s.split('.'); frac, tz=f.split('+'); print(datetime.fromisoformat(f'{d}.{frac[:6]}+{tz}'))")
     python3 -c "from datetime import datetime; st = datetime.strptime('$started', '%Y-%m-%d %H:%M:%S.%f%z'); et = datetime.strptime('$ended', '%Y-%m-%d %H:%M:%S.%f%z'); diff = et - st; print(f'{diff.total_seconds():.9f}')"
 }
 
 # populate phase
 if [ "$PRE_LOAD_DB" == "true" ]; then
     start_ts="$(cat "${ARTIFACT_DIR}/populate-before")"
-    mstart=$(python3 -c "from datetime import datetime, timezone;ts ='$start_ts';dt_object = datetime.fromisoformat(ts);formatted_ts = dt_object.strftime('%Y-%m-%dT%H:%M:%S%z');print(formatted_ts);")
+    mstart=$(python3 -c "from datetime import datetime, timezone;ts ='$start_ts';dt_object = datetime.fromisoformat(ts.replace(',', '.'));formatted_ts = dt_object.strftime('%Y-%m-%dT%H:%M:%S%z');print(formatted_ts);")
     end_ts="$(cat "${ARTIFACT_DIR}/populate-after")"
-    mend=$(python3 -c "from datetime import datetime, timezone;ts ='$end_ts';dt_object = datetime.fromisoformat(ts);formatted_ts = dt_object.strftime('%Y-%m-%dT%H:%M:%S%z');print(formatted_ts);")
+    mend=$(python3 -c "from datetime import datetime, timezone;ts ='$end_ts';dt_object = datetime.fromisoformat(ts.replace(',', '.'));formatted_ts = dt_object.strftime('%Y-%m-%dT%H:%M:%S%z');print(formatted_ts);")
     mhost=$(kubectl -n openshift-monitoring get route -l app.kubernetes.io/name=thanos-query -o json | jq --raw-output '.items[0].spec.host')
 
     deploy_started=$(cat "${ARTIFACT_DIR}/deploy-before")
@@ -182,9 +182,9 @@ if [ "$PRE_LOAD_DB" == "true" ]; then
 fi
 # test phase
 start_ts="$(cat "${ARTIFACT_DIR}/benchmark-before")"
-mstart=$(python3 -c "from datetime import datetime, timezone;ts ='$start_ts';dt_object = datetime.fromisoformat(ts);formatted_ts = dt_object.strftime('%Y-%m-%dT%H:%M:%S%z');print(formatted_ts);")
+mstart=$(python3 -c "from datetime import datetime, timezone;ts ='$start_ts';dt_object = datetime.fromisoformat(ts.replace(',', '.'));formatted_ts = dt_object.strftime('%Y-%m-%dT%H:%M:%S%z');print(formatted_ts);")
 end_ts="$(cat "${ARTIFACT_DIR}/benchmark-after")"
-mend=$(python3 -c "from datetime import datetime, timezone;ts ='$end_ts';dt_object = datetime.fromisoformat(ts);formatted_ts = dt_object.strftime('%Y-%m-%dT%H:%M:%S%z');print(formatted_ts);")
+mend=$(python3 -c "from datetime import datetime, timezone;ts ='$end_ts';dt_object = datetime.fromisoformat(ts.replace(',', '.'));formatted_ts = dt_object.strftime('%Y-%m-%dT%H:%M:%S%z');print(formatted_ts);")
 
 mhost=$(kubectl -n openshift-monitoring get route -l app.kubernetes.io/name=thanos-query -o json | jq --raw-output '.items[0].spec.host')
 mversion=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' "scenarios/$(cat "${ARTIFACT_DIR}/benchmark-scenario").py")
