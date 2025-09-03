@@ -28,7 +28,7 @@ extraContainers:
         containerPort: 4180
         protocol: TCP
     imagePullPolicy: IfNotPresent
-    image: quay.io/oauth2-proxy/oauth2-proxy:v7.8.1
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.12.0
     args:
       - "--provider=oidc"
       - "--email-domain=*"
@@ -36,4 +36,3 @@ extraContainers:
       - "--http-address=0.0.0.0:4180"
       - "--skip-provider-button"
       - "--show-debug-on-error=true"
-      - "--scope=openid email profile"

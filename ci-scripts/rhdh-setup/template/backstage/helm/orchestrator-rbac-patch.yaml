@@ -1,0 +1,11 @@
+    p, role:default/a, orchestrator.workflow.read, read, allow
+    p, role:default/a, orchestrator.workflow.execute, create, allow
+    p, role:default/a, orchestrator.workflow, read, allow
+    p, role:default/a, orchestrator.workflow, use, allow
+    p, role:default/a, orchestrator.workflow.instance.read, read, allow
+    p, role:default/a, orchestrator.workflow.instance.abort, delete, allow
+    p, role:default/a, orchestrator.workflow.instances.read, read, allow
+    p, role:default/a, scaffolder.action.execute, use, allow
+    p, role:default/a, scaffolder.task.create, create, allow
+    p, role:default/a, scaffolder.task.read, read, allow
+    p, role:default/a, scaffolder.task.cancel, delete, allow
