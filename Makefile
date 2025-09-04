@@ -185,6 +185,16 @@ endif
 else
 	@echo "no changes"
 endif
+	@if [ "$$RHDH_INSTALL_METHOD" == "olm" ]; then \
+	    if [ "$$AUTH_PROVIDER" == "keycloak" ]; then \
+	        rhdh_route="rhdh"; \
+	    else \
+	        rhdh_route="backstage-developer-hub"; \
+	    fi; \
+	elif [ "$$RHDH_INSTALL_METHOD" == "helm" ]; then \
+	    rhdh_route="$$(oc -n "$$RHDH_NAMESPACE" get routes -l app.kubernetes.io/instance="$${RHDH_HELM_RELEASE_NAME}" -o jsonpath='{.items[0].metadata.name}')"; \
+	fi; \
+	HOST="https://$$(oc get routes "$$rhdh_route" -n "$$RHDH_NAMESPACE" -o jsonpath='{.spec.host}')"; \
 	cat locust-test-template.yaml | envsubst | kubectl apply --namespace $(LOCUST_NAMESPACE) -f -
 	kubectl create --namespace $(LOCUST_NAMESPACE) configmap locust.$(SCENARIO) --from-file scenarios/$(SCENARIO).py --dry-run=client -o yaml | kubectl apply --namespace $(LOCUST_NAMESPACE) -f -
 	date -u -Ins>$(TMP_DIR)/benchmark-before
