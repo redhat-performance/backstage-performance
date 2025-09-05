@@ -47,6 +47,7 @@
 # Interesting CI environment variables
 {% for var in [
   'BUILD_ID',
+  'BASE_HOST',
   'HOSTNAME',
   'JOB_NAME',
   'OPENSHIFT_API',

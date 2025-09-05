@@ -7,7 +7,8 @@ endif
 export SCENARIO ?= baseline-test
 
 # Used to set --host option of locust CLI (base URL to load test). See https://docs.locust.io/en/stable/configuration.html#command-line-options for details
-export HOST ?= http://localhost
+# If unsed or empty, the value is determined automatically from RHDH route
+export BASE_HOST ?=
 
 export KEYCLOAK_USER_PASS ?= $(shell mktemp -u XXXXXXXXXX)
 # Used to set --users option of locust CLI (Peak number of concurrent Locust users.). See https://docs.locust.io/en/stable/configuration.html#command-line-options for details
@@ -185,16 +186,18 @@ endif
 else
 	@echo "no changes"
 endif
-	@if [ "$$RHDH_INSTALL_METHOD" == "olm" ]; then \
-	    if [ "$$AUTH_PROVIDER" == "keycloak" ]; then \
-	        rhdh_route="rhdh"; \
-	    else \
-	        rhdh_route="backstage-developer-hub"; \
-	    fi; \
-	elif [ "$$RHDH_INSTALL_METHOD" == "helm" ]; then \
-	    rhdh_route="$$(oc -n "$$RHDH_NAMESPACE" get routes -l app.kubernetes.io/instance="$${RHDH_HELM_RELEASE_NAME}" -o jsonpath='{.items[0].metadata.name}')"; \
+	@ if [ -z "$$BASE_HOST" ]; then \
+	    if [ "$$RHDH_INSTALL_METHOD" == "olm" ]; then \
+				if [ "$$AUTH_PROVIDER" == "keycloak" ]; then \
+						rhdh_route="rhdh"; \
+				else \
+						rhdh_route="backstage-developer-hub"; \
+				fi; \
+		elif [ "$$RHDH_INSTALL_METHOD" == "helm" ]; then \
+				rhdh_route="$$(oc -n "$$RHDH_NAMESPACE" get routes -l app.kubernetes.io/instance="$${RHDH_HELM_RELEASE_NAME}" -o jsonpath='{.items[0].metadata.name}')"; \
+		fi; \
+	  BASE_HOST="https://$$(oc get routes "$$rhdh_route" -n "$$RHDH_NAMESPACE" -o jsonpath='{.spec.host}')"; \
 	fi; \
-	HOST="https://$$(oc get routes "$$rhdh_route" -n "$$RHDH_NAMESPACE" -o jsonpath='{.spec.host}')"; \
 	cat locust-test-template.yaml | envsubst | kubectl apply --namespace $(LOCUST_NAMESPACE) -f -
 	kubectl create --namespace $(LOCUST_NAMESPACE) configmap locust.$(SCENARIO) --from-file scenarios/$(SCENARIO).py --dry-run=client -o yaml | kubectl apply --namespace $(LOCUST_NAMESPACE) -f -
 	date -u -Ins>$(TMP_DIR)/benchmark-before

@@ -56,7 +56,7 @@ wait_for_indexing() {
         fi
     fi
     if [ "$WAIT_FOR_SEARCH_INDEX" == "true" ]; then
-        HOST="https://$(oc get routes "${rhdh_route}" -n "${RHDH_NAMESPACE:-rhdh-performance}" -o jsonpath='{.spec.host}')"
+        BASE_HOST="https://$(oc get routes "${rhdh_route}" -n "${RHDH_NAMESPACE:-rhdh-performance}" -o jsonpath='{.spec.host}')"
 
         start=$(date +%s)
         timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int(3600); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
@@ -67,7 +67,7 @@ wait_for_indexing() {
                 exit 1
             else
                 ACCESS_TOKEN=$(get_token "rhdh")
-                count="$(curl -sk "$HOST/api/search/query?term=&types%5B0%5D=software-catalog" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Authorization: Bearer '"$ACCESS_TOKEN" | jq -rc '.numberOfResults')"
+                count="$(curl -sk "$BASE_HOST/api/search/query?term=&types%5B0%5D=software-catalog" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Authorization: Bearer '"$ACCESS_TOKEN" | jq -rc '.numberOfResults')"
                 if [ "$count" != "null" ]; then
                     finish=$(date +%s)
                     echo "Search query returned non-empty set ($count) - indexing has finished in $((finish - start))s"
