@@ -6,7 +6,7 @@ spec:
   image: quay.io/backstage-performance/locust:latest
   imagePullPolicy: Always
   masterCommandSeed: --locustfile /lotest/src/${SCENARIO}.py
-    --host ${HOST}
+    --host ${BASE_HOST}
     --users ${USERS}
     --spawn-rate ${SPAWN_RATE}
     --run-time ${DURATION}

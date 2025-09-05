@@ -34,8 +34,8 @@ else
     echo "Invalid RHDH install method: $RHDH_INSTALL_METHOD"
     exit 1
 fi
-export HOST
-HOST="https://$(oc get routes "$rhdh_route" -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')"
+export BASE_HOST
+BASE_HOST="https://$(oc get routes "$rhdh_route" -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')"
 # end-of testing env
 
 ARTIFACT_DIR=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "${ARTIFACT_DIR:-.artifacts}")
