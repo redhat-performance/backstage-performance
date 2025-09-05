@@ -31,7 +31,7 @@ read -ra rbac_policy_size <<<"${SCALE_RBAC_POLICY_SIZE:-10000}"
 
 read -ra catalog_apis_components <<<"${SCALE_CATALOG_SIZES:-1:1 10000:10000}"
 
-read -ra replicas <<<"${SCALE_REPLICAS:-5}"
+read -ra replicas <<<"${SCALE_RHDH_REPLICAS:-5}"
 
 read -ra db_storages <<<"${SCALE_DB_STORAGES:-1Gi 2Gi}"
 
