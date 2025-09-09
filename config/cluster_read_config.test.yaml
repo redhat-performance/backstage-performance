@@ -93,6 +93,7 @@
   'SCALE_BS_USERS_GROUPS',
   'SCALE_CATALOG_SIZES',
   'SCALE_RHDH_REPLICAS',
+  'SCALE_RHDH_DB_REPLICAS',
   'SCALE_DB_STORAGES'
 ] %}
 - name: metadata.env.{{ var }}
