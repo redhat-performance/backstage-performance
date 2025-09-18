@@ -216,6 +216,7 @@ create_group() {
 export RBAC_POLICY_ALL_GROUPS_ADMIN="all_groups_admin" #default
 export RBAC_POLICY_STATIC="static"
 export RBAC_POLICY_USER_IN_MULTIPLE_GROUPS="user_in_multiple_groups"
+export RBAC_POLICY_NESTED_GROUPS="nested_groups"
 
 create_rbac_policy() {
   policy="${1:-$RBAC_POLICY_ALL_GROUPS_ADMIN}"
@@ -248,6 +249,18 @@ create_rbac_policy() {
       echo "    g, group:default/g${i}, role:default/a" >>"$TMP_DIR/group-rbac.yaml"
     done
     ;;
+  "$RBAC_POLICY_NESTED_GROUPS")
+    N="${RBAC_POLICY_SIZE:-$GROUP_COUNT}"
+    K=$(awk -v n="$N" 'BEGIN{print int(sqrt(n))}')
+    if [ "$K" -lt 1 ]; then K=1; fi
+    for i in $(seq 1 "$K"); do
+      echo "    g, group:default/g${i}, role:default/a" >>"$TMP_DIR/group-rbac.yaml"
+    done
+    for i in $(seq $((K+1)) "$N"); do
+      parent_group=$(( i - K ))
+      echo "    g, group:default/g${i}, parent:default/g${parent_group}" >>"$TMP_DIR/group-rbac.yaml"
+    done
+    ;;
   \?)
     log_error "Invalid RBAC policy: ${policy}"
     exit 1
@@ -269,7 +282,7 @@ create_user() {
   [[ $grp -eq 0 ]] && grp=${GROUP_COUNT}
   groups="["
   case $RBAC_POLICY in
-  "$RBAC_POLICY_ALL_GROUPS_ADMIN" | "$RBAC_POLICY_STATIC")
+  "$RBAC_POLICY_ALL_GROUPS_ADMIN" | "$RBAC_POLICY_STATIC" | "$RBAC_POLICY_NESTED_GROUPS")
     groups="$groups\"g${grp}\""
     ;;
   "$RBAC_POLICY_USER_IN_MULTIPLE_GROUPS")
