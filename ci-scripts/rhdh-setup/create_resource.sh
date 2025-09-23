@@ -189,23 +189,50 @@ create_cmp() {
   envsubst '${grp_indx} ${cmp_indx}' <"$WORKDIR/template/component/component.template" >>"$TMP_DIR/component-$shard_indx.yaml"
 }
 
+get_group_path_by_name() {
+  local input="$1"
+
+  local group_name="$input"
+  token=$(get_token)
+
+  response=$(curl -s -k --location --request GET "$(keycloak_url)/auth/admin/realms/backstage/groups?search=${group_name}" \
+    -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer $token" 2>&1)
+
+  if [[ "$response" == "["* ]] && [[ "$response" == *"]" ]] && [[ "$response" != "[]" ]]; then
+    group_path=$(echo "$response" | jq -r --stream --arg name "$group_name" '
+      [., inputs] |
+      map(select(.[0][-1] == "name" and .[1] == $name) | .[0][:-1]) as $paths |
+      if $paths | length > 0 then
+        map(select(.[0] == ($paths[0] + ["path"]))) | .[0][1]
+      else empty end
+    ')
+    if [ -n "$group_path" ] && [ "$group_path" != "null" ]; then
+      echo "$group_path"
+    else
+      return 1
+    fi
+  else
+    return 1
+  fi
+}
+
 get_group_id_by_name() {
   group_name="$1"
   token=$(get_token)
 
-  response=$(curl -s -k --location --request GET "$(keycloak_url)/auth/admin/realms/backstage/groups" \
+  response=$(curl -s -k --location --request GET "$(keycloak_url)/auth/admin/realms/backstage/groups?search=${group_name}" \
     -H 'Content-Type: application/json' \
     -H "Authorization: Bearer $token" 2>&1)
-
-  if echo "$response" | jq -e 'type == "array"' >/dev/null 2>&1; then
-    group_id=$(echo "$response" | jq -r --arg name "$group_name" '.[] | select(.name==$name) | .id' | head -n1)
-
-    if [ -z "$group_id" ] || [ "$group_id" = "null" ]; then
-      group_id=$(echo "$response" | jq -r --arg name "$group_name" '
-        [.. | objects | select(has("name") and .name==$name)] | .[0].id // empty
-      ' | head -n1)
-    fi
-
+  
+  if [[ "$response" == "["* ]] && [[ "$response" == *"]" ]] && [[ "$response" != "[]" ]]; then
+    group_id=$(echo "$response" | jq -r --stream --arg name "$group_name" '
+      [., inputs] |
+      map(select(.[0][-1] == "name" and .[1] == $name) | .[0][:-1]) as $paths |
+      if $paths | length > 0 then
+        map(select(.[0] == ($paths[0] + ["id"]))) | .[0][1]
+      else empty end
+    ')
     if [ -n "$group_id" ] && [ "$group_id" != "null" ]; then
       echo "$group_id"
     else
@@ -217,7 +244,7 @@ get_group_id_by_name() {
 }
 
 assign_parent_group() {
-  local idx="${1}"  # 2..N
+  local idx="${1}"
   if [ "$idx" -eq 2 ]; then
     parent_group_name="g1"
   else
@@ -232,7 +259,7 @@ assign_parent_group() {
     parent_id="$(get_group_id_by_name "$parent_group_name")"
     [ -n "$parent_id" ] && [ "$parent_id" != "null" ] && break
     log_warn "Parent $parent_group_name not found (attempt $attempt). Waiting..." >>"$TMP_DIR/create_group.log"
-    ((attempt++)); sleep 2
+    ((attempt++));
   done
   if [ -z "$parent_id" ] || [ "$parent_id" = "null" ]; then
     log_error "Parent $parent_group_name missing after $max_attempts attempts; cannot create $child_name" 2>&1 | tee -a "$TMP_DIR/create_group.log"
@@ -250,7 +277,7 @@ assign_parent_group() {
       return 0
     fi
     log_warn "Unable to create child $child_name under $parent_group_name at attempt $attempt. [$response]" >>"$TMP_DIR/create_group.log"
-    ((attempt++)); sleep 2
+    ((attempt++));
   done
   log_error "Unable to create child $child_name under $parent_group_name in $max_attempts attempts" 2>&1 | tee -a "$TMP_DIR/create_group.log"
   return 1
@@ -266,7 +293,6 @@ create_group() {
     [ "$N" -gt "$GROUP_COUNT" ] && N="$GROUP_COUNT"
 
     if [[ "$idx" -eq 1 || "$idx" -gt "$N" ]]; then
-      log_info "Creating top-level group g${idx}" >>"$TMP_DIR/create_group.log"
       groupname="g${idx}"
       while ((attempt <= max_attempts)); do
         token=$(get_token)
@@ -284,7 +310,6 @@ create_group() {
       return 1
     else
       groupname="g$((idx - 1))_1"
-      log_info "Creating nested group $groupname" >>"$TMP_DIR/create_group.log"
       assign_parent_group "$idx" && return
       log_warn "Nested group $groupname creation failed; retrying..." >>"$TMP_DIR/create_group.log"
       return 1
@@ -346,7 +371,6 @@ create_rbac_policy() {
     done
     ;;
   "$RBAC_POLICY_NESTED_GROUPS")
-    : >"$TMP_DIR/group-rbac.yaml"
     N="${RBAC_POLICY_SIZE:-$GROUP_COUNT}"
     [ "$N" -gt "$GROUP_COUNT" ] && N="$GROUP_COUNT"
 
@@ -388,8 +412,18 @@ create_user() {
   [[ $grp -eq 0 ]] && grp=${GROUP_COUNT}
   groups="["
   case $RBAC_POLICY in
-  "$RBAC_POLICY_ALL_GROUPS_ADMIN" | "$RBAC_POLICY_STATIC" | "$RBAC_POLICY_NESTED_GROUPS")
+  "$RBAC_POLICY_ALL_GROUPS_ADMIN" | "$RBAC_POLICY_STATIC")
     groups="$groups\"g${grp}\""
+    ;;
+  "$RBAC_POLICY_NESTED_GROUPS")
+    [[ $grp -eq 0 ]] && grp=${GROUP_COUNT}
+    if [[ $grp -eq 1 || $grp -gt ${RBAC_POLICY_SIZE} ]]; then
+      groups="$groups\"g${grp}\""
+    else
+      group_name="g$((grp - 1))_1"
+      group_path=$(get_group_path_by_name "$group_name")
+      groups="$groups\"$group_path\""
+    fi
     ;;
   "$RBAC_POLICY_USER_IN_MULTIPLE_GROUPS")
     if [ "$user_index" -eq 1 ]; then
@@ -564,5 +598,5 @@ get_token() {
   rm -rf "$token_lockfile"
 }
 
-export -f keycloak_url backstage_url get_token keycloak_token rhdh_token create_rbac_policy create_group create_user log log_info log_warn log_error log_token log_token_info log_token_err get_group_id_by_name assign_parent_group
+export -f keycloak_url backstage_url get_token keycloak_token rhdh_token create_rbac_policy create_group create_user log log_info log_warn log_error log_token log_token_info log_token_err get_group_id_by_name assign_parent_group get_group_path_by_name
 export kc_lockfile bs_lockfile token_lockfile
