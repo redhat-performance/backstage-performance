@@ -1,1 +1,3 @@
 locust==2.37.13
+matplotlib==3.10.3
+pyyaml==6.0.3
