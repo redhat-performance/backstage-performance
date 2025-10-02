@@ -1,0 +1,100 @@
+metrics:
+  RPS_Avg:
+    title: "Average RHDH Throughput"
+    label: "Requests Per Second"
+    units: "req/s"
+  
+  RPS_Max:
+    title: "Maximal RHDH Throughput"
+    label: "Requests Per Second"
+    units: "req/s"
+  
+  RHDH_CPU_Avg:
+    title: "Average RHDH CPU Usage"
+    label: "CPU Usage"
+    units: "vCPU"
+  
+  RHDH_CPU_Max:
+    title: "Maximal RHDH CPU Usage"
+    label: "CPU Usage"
+    units: "%"
+  
+  RHDH_Memory_Avg:
+    title: "RHDH Memory Consumption"
+    label: "Memory Usage"
+    units: "MiB"
+  
+  RHDH_Memory_Max:
+    title: "Maximal RHDH Memory Consumption"
+    label: "Memory Usage"
+    units: "MiB"
+  
+  RHDH_DB_CPU_Avg:
+    title: "Average RHDH DB CPU Usage"
+    label: "CPU Usage"
+    units: "vCPU"
+  
+  RHDH_DB_CPU_Max:
+    title: "Maximal RHDH DB CPU Usage"
+    label: "CPU Usage"
+    units: "vCPU"
+  
+  RHDH_DB_Memory_Avg:
+    title: "Average RHDH DB Memory Consumption"
+    label: "Memory Usage"
+    units: "MiB"
+  
+  RHDH_DB_Memory_Max:
+    title: "Maximal RHDH DB Memory Consumption"
+    label: "Memory Usage"
+    units: "MiB"
+  
+  Failures:
+    title: "Total Failures"
+    label: "Failures"
+    units: "#"
+  
+  Fail_Ratio_Avg:
+    title: "Failure Rate"
+    label: "Failure Rate"
+    units: "%"
+  
+  Response_Time_Avg:
+    title: "Average RHDH Response Time"
+    label: "Response Time"
+    units: "ms"
+  
+  Response_Time_Max:
+    title: "Maximal RHDH Response Time"
+    label: "Response Time"
+    units: "ms"
+  
+  Components_Response_Time_Avg:
+    title: "Average Response Time (Get All Components)"
+    label: "Response Time"
+    units: "ms"
+  
+  Components_Response_Time_Max:
+    title: "Maximal Response Time (Get All Components)"
+    label: "Response Time"
+    units: "ms"
+  
+  ComponentsOwnedByUserGroup_Response_Time_Avg:
+    title: "Average Response Time (Get Components Owned By Group)"
+    label: "Response Time"
+    units: "ms"
+  
+  ComponentsOwnedByUserGroup_Response_Time_Max:
+    title: "Maximal Response Time (Get Components Owned By Group)"
+    label: "Components Owned By User Group Response Time (Maximum)"
+    units: "ms"
+  
+  PopulateUsersGroupsDuration:
+    title: "Populate Users and Groups Duration"
+    label: "Duration"
+    units: "s"
+  
+  RHDH_DB_Test_Storage_Used:
+    title: "RHDH DB Storage Usage"
+    label: "Storage Used"
+    units: "MiB"
