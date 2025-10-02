@@ -38,7 +38,7 @@ export RHDH_BASE_VERSION=${RHDH_BASE_VERSION:-1.7}
 
 export RHDH_HELM_REPO=${RHDH_HELM_REPO:-oci://quay.io/rhdh/chart}
 export RHDH_HELM_CHART=${RHDH_HELM_CHART:-redhat-developer-hub}
-export RHDH_HELM_CHART_VERSION=${RHDH_HELM_CHART_VERSION:-$(skopeo list-tags docker://quay.io/rhdh/chart | jq -rc '.Tags[]' | grep "${RHDH_BASE_VERSION//./\.}"'-.*' | sort -V | tail -n1)}
+export RHDH_HELM_CHART_VERSION=${RHDH_HELM_CHART_VERSION:-$(skopeo list-tags docker://quay.io/rhdh/chart | jq -rc '.Tags[]' | grep "${RHDH_BASE_VERSION//./\\.}"'-.*' | sort -V | tail -n1)}
 
 OCP_VER="$(oc version -o json | jq -r '.openshiftVersion' | sed -r -e "s#([0-9]+\.[0-9]+)\..+#\1#")"
 export RHDH_OLM_INDEX_IMAGE="${RHDH_OLM_INDEX_IMAGE:-quay.io/rhdh/iib:${RHDH_BASE_VERSION}-v${OCP_VER}-x86_64}"
