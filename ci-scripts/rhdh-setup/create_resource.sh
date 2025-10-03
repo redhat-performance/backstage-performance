@@ -417,10 +417,12 @@ create_user() {
     ;;
   "$RBAC_POLICY_NESTED_GROUPS")
     [[ $grp -eq 0 ]] && grp=${GROUP_COUNT}
-    if [[ $grp -eq 1 || $grp -gt ${RBAC_POLICY_SIZE} ]]; then
+    if [[ $grp -eq $RBAC_POLICY_SIZE ]]; then
+      groups="$groups\"g1\""
+    elif [[ $grp -gt ${RBAC_POLICY_SIZE} ]]; then
       groups="$groups\"g${grp}\""
     else
-      group_name="g$((grp - 1))_1"
+      group_name="g$((RBAC_POLICY_SIZE - grp))_1"
       group_path=$(get_group_path_by_name "$group_name")
       groups="$groups\"$group_path\""
     fi
