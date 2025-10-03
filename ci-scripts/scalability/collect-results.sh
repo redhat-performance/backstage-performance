@@ -7,6 +7,14 @@ set -o pipefail
 echo -e "\n === Collecting test results and metrics for RHDH scalability test ===\n"
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+PYTHON_VENV_DIR="$SCRIPT_DIR/../../.venv"
+python3 -m venv "$PYTHON_VENV_DIR"
+set +u
+# shellcheck disable=SC1090,SC1091
+source "$PYTHON_VENV_DIR/bin/activate"
+set -u
+python3 -m pip install --quiet -U pip
+python3 -m pip install --quiet -r "$SCRIPT_DIR/../../requirements.txt"
 # shellcheck disable=SC1090,SC1091
 source "$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$SCRIPT_DIR"/../../test.env)"
 
@@ -41,6 +49,7 @@ csv_delim_quoted="\"$csv_delim\""
 
 echo "Collecting scalability data"
 counter=1
+rhdh_version=""
 for w in "${workers[@]}"; do
     for r in "${rhdh_replicas[@]}"; do
         for dbr in "${rhdh_db_replicas[@]}"; do
@@ -70,7 +79,7 @@ for w in "${workers[@]}"; do
                                         [[ "${#tokens[@]}" == 1 ]] && c="" || c="${tokens[1]}" # components
                                         index="${r}r-${dbr}dbr-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c"
                                         iteration="${index}/test/${counter}/${active_users}u"
-                                        (( counter += 1 ))
+                                        ((counter += 1))
                                         echo "[$iteration] Looking for benchmark.json..."
                                         benchmark_json="$(find "${ARTIFACT_DIR}" -name benchmark.json | grep "$iteration" || true)"
                                         if [ -n "$benchmark_json" ]; then
@@ -90,6 +99,9 @@ for w in "${workers[@]}"; do
                                             + $csv_delim_quoted + (.measurements.cluster.pv_stats.test.\"rhdh-postgresql\".available_bytes.min | tostring) \
                                             + $csv_delim_quoted + (.measurements.cluster.pv_stats.test.\"rhdh-postgresql\".capacity_bytes.max | tostring)"
                                             sed -Ee 's/: ([0-9]+\.[0-9]*[X]+[0-9e\+-]*|[0-9]*X+[0-9]*\.[0-9e\+-]*|[0-9]*X+[0-9]*\.[0-9]*X+[0-9e\+-]+)/: "\1"/g' "$benchmark_json" | jq -rc "$jq_cmd" >>"$output"
+                                            if [ -z "$rhdh_version" ]; then
+                                                rhdh_version=$(jq -r '.metadata.image."konflux.additional-tags" | split(", ") | map(select(test("[0-9]\\.[0-9]-[0-9]+"))) | .[0]' "$benchmark_json" || true)
+                                            fi
                                         else
                                             echo "[$iteration] Unable to find benchmark.json"
                                             for _ in $(seq 1 "$(echo "$header" | tr -cd "$csv_delim" | wc -c)"); do
@@ -110,6 +122,38 @@ done
 
 echo "Collecting scalability summary"
 ./ci-scripts/runs-to-csv.sh "$ARTIFACT_DIR" >"$ARTIFACT_DIR/summary.csv"
+
+echo "Generating RHDH performance summary charts"
+metrics="RPS_Avg \
+RPS_Max \
+RHDH_CPU_Avg \
+RHDH_CPU_Max \
+RHDH_Memory_Avg \
+RHDH_Memory_Max \
+RHDH_DB_CPU_Avg \
+RHDH_DB_CPU_Max \
+RHDH_DB_Memory_Avg \
+RHDH_DB_Memory_Max \
+Failures \
+Fail_Ratio_Avg \
+Response_Time_Avg \
+Response_Time_Max \
+Components_Response_Time_Avg \
+Components_Response_Time_Max \
+ComponentsOwnedByUserGroup_Response_Time_Avg \
+ComponentsOwnedByUserGroup_Response_Time_Max \
+RHDH_DB_Test_Storage_Used \
+PopulateUsersGroupsDuration"
+
+# Metrics
+for x_axis_scale_label in "ActiveUsers:linear:Active Users" "RBAC_POLICY_SIZE:log:RBAC Policy Size"; do
+    IFS=":" read -ra tokens <<<"${x_axis_scale_label}"
+    xa="${tokens[0]}"                                         # x_axis
+    [[ "${#tokens[@]}" -lt 2 ]] && xs="" || xs="${tokens[1]}" # x_scale
+    [[ "${#tokens[@]}" -lt 2 ]] && xn="" || xn="${tokens[2]}" # x_label
+    #shellcheck disable=SC2086
+    python3 ./ci-scripts/scalability/rhdh-perf-chart.py --current "$ARTIFACT_DIR/summary.csv" --current-version "$rhdh_version" --metrics $metrics --metrics-metadata "$SCRIPT_DIR/rhdh-perf-chart_metric-metadata.yaml" --x-axis "$xa" --x-scale "$xs" --x-label "$xn" --scenario "$xn" --output-dir "$ARTIFACT_DIR"
+done
 
 echo "Collecting error reports"
 find "$ARTIFACT_DIR/scalability" -name error-report.txt | sort -V | while IFS= read -r error_report; do
