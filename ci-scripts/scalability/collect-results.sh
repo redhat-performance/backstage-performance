@@ -152,7 +152,7 @@ for x_axis_scale_label in "ActiveUsers:linear:Active Users" "RBAC_POLICY_SIZE:lo
     [[ "${#tokens[@]}" -lt 2 ]] && xs="" || xs="${tokens[1]}" # x_scale
     [[ "${#tokens[@]}" -lt 2 ]] && xn="" || xn="${tokens[2]}" # x_label
     #shellcheck disable=SC2086
-    python3 ./ci-scripts/scalability/rhdh-perf-chart.py --current "$ARTIFACT_DIR/summary.csv" --current-version "$rhdh_version" --metrics $metrics --metrics-metadata "$SCRIPT_DIR/rhdh-perf-chart_metric-metadata.yaml" --x-axis "$xa" --x-scale "$xs" --x-label "$xn" --scenario "$xn" --annotate-values --output-dir "$ARTIFACT_DIR"
+    python3 ./ci-scripts/scalability/rhdh-perf-chart.py --current "$ARTIFACT_DIR/summary.csv" --current-version "$rhdh_version" --metrics $metrics --metrics-metadata "$SCRIPT_DIR/rhdh-perf-chart_metric-metadata.yaml" --x-axis "$xa" --x-scale "$xs" --x-label "$xn" --scenario "$xn" --output-dir "$ARTIFACT_DIR"
 done
 
 echo "Collecting error reports"
