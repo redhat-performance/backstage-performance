@@ -52,6 +52,7 @@ for w in "${workers[@]}"; do
     for r_c in "${rhdh_replicas[@]}"; do
         IFS=":" read -ra tokens <<<"${r_c}"
         r="${tokens[0]}"
+        [[ "${#tokens[@]}" == 1 ]] && dbr="" || dbr="${tokens[1]}"
         for bu_bg in "${bs_users_groups[@]}"; do
             IFS=":" read -ra tokens <<<"${bu_bg}"
             bu="${tokens[0]}"                                        # backstage users
@@ -61,7 +62,7 @@ for w in "${workers[@]}"; do
                     for au_sr in "${active_users_spawn_rate[@]}"; do
                         IFS=":" read -ra tokens <<<"${au_sr}"
                         active_users=${tokens[0]}
-                        output="$ARTIFACT_DIR/scalability_c-${r}r-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${active_users}u-${counter}.csv"
+                        output="$ARTIFACT_DIR/scalability_c-${r}r-${dbr}dbr-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${active_users}u-${counter}.csv"
                         header="CatalogSize${csv_delim}Apis${csv_delim}Components${csv_delim}MaxActiveUsers${csv_delim}AverageRPS${csv_delim}MaxRPS${csv_delim}AverageRT${csv_delim}MaxRT${csv_delim}Failures${csv_delim}FailRate${csv_delim}DBStorageUsed${csv_delim}DBStorageAvailable${csv_delim}DBStorageCapacity"
                         for cr_cl in "${cpu_requests_limits[@]}"; do
                             IFS=":" read -ra tokens <<<"${cr_cl}"
@@ -76,7 +77,7 @@ for w in "${workers[@]}"; do
                                     IFS=":" read -ra tokens <<<"${a_c}"
                                     a="${tokens[0]}"                                       # apis
                                     [[ "${#tokens[@]}" == 1 ]] && c="" || c="${tokens[1]}" # components
-                                    index="${r}r-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c"
+                                    index="${r}r-${dbr}dbr-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c"
                                     iteration="${index}/test/${counter}/${active_users}u"
                                     (( counter += 1 ))
                                     echo "[$iteration] Looking for benchmark.json..."
@@ -98,6 +99,9 @@ for w in "${workers[@]}"; do
                                         + $csv_delim_quoted + (.measurements.cluster.pv_stats.test.\"rhdh-postgresql\".available_bytes.min | tostring) \
                                         + $csv_delim_quoted + (.measurements.cluster.pv_stats.test.\"rhdh-postgresql\".capacity_bytes.max | tostring)"
                                         sed -Ee 's/: ([0-9]+\.[0-9]*[X]+[0-9e\+-]*|[0-9]*X+[0-9]*\.[0-9e\+-]*|[0-9]*X+[0-9]*\.[0-9]*X+[0-9e\+-]+)/: "\1"/g' "$benchmark_json" | jq -rc "$jq_cmd" >>"$output"
+                                        if [ -z "$rhdh_version" ]; then
+                                            rhdh_version=$(jq -r '.metadata.image."konflux.additional-tags" | split(", ") | map(select(test("[0-9]\\.[0-9]-[0-9]+"))) | .[0]' "$benchmark_json" || true)
+                                        fi
                                     else
                                         echo "[$iteration] Unable to find benchmark.json"
                                         for _ in $(seq 1 "$(echo "$header" | tr -cd "$csv_delim" | wc -c)"); do
