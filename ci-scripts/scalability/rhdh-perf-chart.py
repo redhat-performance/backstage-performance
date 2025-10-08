@@ -5,6 +5,7 @@ import csv
 import os
 import argparse
 import yaml
+import math
 from datetime import datetime
 
 # Parse command line arguments
@@ -67,6 +68,8 @@ parser.add_argument('--scenario', default='RHDH Scalability',
                     help='Name of the scenario (default: RHDH Scalability)')
 parser.add_argument('--x-scale', choices=['linear', 'log'], default='linear',
                     help='Scale for x-axis: linear or log (default: linear)')
+parser.add_argument('--y-scale', choices=['linear', 'log'], default='linear',
+                    help='Scale for y-axis: linear or log (default: linear)')
 parser.add_argument('--output-dir', default='.',
                     help='Directory to save the HTML file with embedded charts (default: current directory)')
 parser.add_argument('--generate-html', action='store_true', default=True,
@@ -128,6 +131,7 @@ if args.previous:
     csv_files.insert(0, previous_csv)
 x_axis = args.x_axis
 x_scale = args.x_scale
+y_scale = args.y_scale
 output_dir = args.output_dir
 generate_html = args.generate_html
 
@@ -283,6 +287,7 @@ def generate_chart(metric, csv_files, labels, x_axis, x_scale, metadata=None):
         ),
         yaxis=dict(
             title=y_label,
+            type='log' if y_scale == 'log' else 'linear',
             showgrid=True,
             gridcolor='lightgray',
             gridwidth=1,
@@ -308,17 +313,24 @@ def generate_chart(metric, csv_files, labels, x_axis, x_scale, metadata=None):
         x_max = max(max(x) for x in all_x if x)
         y_max = max(max(y) for y in all_metric_values if y)
         xaxis_min = 0
+        yaxis_min = 0
         if x_scale == 'log':
             # For log scale, ensure we have reasonable bounds
             # Use powers of 10 that encompass the data range
-            import math
             xaxis_max = math.trunc(math.log10(x_max))+1.0
         else:
             # For linear scale, use linear range calculation
             xaxis_max = x_max * 1.1
+        if y_scale == 'log':
+            # For log scale, ensure we have reasonable bounds
+            # Use powers of 10 that encompass the data range
+            yaxis_max = math.trunc(math.log10(y_max))+1.0
+        else:
+            # For linear scale, use linear range calculation
+            yaxis_max = y_max * 1.1
 
         fig.update_xaxes(range=[xaxis_min, xaxis_max])
-        fig.update_yaxes(range=[0, y_max * 1.1])
+        fig.update_yaxes(range=[yaxis_min, yaxis_max])
 
     # Convert to HTML div with responsive configuration and custom download filename
     # Create a safe filename from the chart title and x-axis
