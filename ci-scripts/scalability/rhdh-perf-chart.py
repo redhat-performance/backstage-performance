@@ -16,31 +16,31 @@ parser = argparse.ArgumentParser(
 Examples:
   # Generate chart for a single metric using explicit CSV files
   rhdh-perf-chart.py --previous v1.6.3_summary.csv --current v1.7-122_summary.csv --metric RHDH_Memory_Avg
-  
+
   # Generate charts for current version only (no comparison)
   rhdh-perf-chart.py --current v1.7-122_summary.csv --output-dir ./charts
-  
+
   # Generate charts using directories (summary.csv will be auto-appended)
   rhdh-perf-chart.py --previous /path/to/v1.6.3/results --current /path/to/v1.7-122/results --metrics RHDH_Memory_Avg RHDH_CPU_Avg --x-axis RBAC_POLICY_SIZE --x-scale log --output-dir ./charts
-  
+
   # Auto-detect and generate charts for all numeric columns with single HTML file containing embedded SVG charts
   rhdh-perf-chart.py --previous v1.6.3_summary.csv --current v1.7-122_summary.csv --output-dir ./charts
-  
+
   # Generate only chart data without HTML output using mixed inputs (file + directory)
   rhdh-perf-chart.py --previous v1.6.3_summary.csv --current /path/to/v1.7-122/results --metrics RHDH_Memory_Avg RHDH_CPU_Avg --no-html
-  
+
   # Generate charts with value annotations at data points
   rhdh-perf-chart.py --previous v1.6.3_summary.csv --current v1.7-122_summary.csv --annotate-values --output-dir ./charts
-  
+
   # Generate charts with annotations and specific metrics
   rhdh-perf-chart.py --previous v1.6.3_summary.csv --current v1.7-122_summary.csv --metrics RHDH_Memory_Avg RHDH_CPU_Avg --annotate-values --x-scale log
-  
+
   # Generate charts with custom metadata for labels and units
   rhdh-perf-chart.py --previous v1.6.3_summary.csv --current v1.7-122_summary.csv --metrics-metadata rhdh-perf-chart_metric-metadata.yaml --output-dir ./charts
-  
+
   # Generate charts with custom version labels for plot legends
   rhdh-perf-chart.py --previous v1.6.3_summary.csv --current v1.7-122_summary.csv --previous-version "v1.6.3 (Baseline)" --current-version "v1.7-122 (Latest)" --output-dir ./charts
-  
+
 YAML metadata format:
   metrics:
     RHDH_Memory_Avg:
@@ -168,6 +168,28 @@ def extract_version(filename):
         version = '.'.join(parts[3:-1])
         return version
     return parent
+
+
+def log_upper_bound(value):
+    if value == 0:
+        return 0
+    log_val = math.log10(math.fabs(value))
+    # If value is exactly at a power of 10 boundary, go one step further
+    if log_val == math.floor(log_val):
+        return math.copysign(1, value) * (math.ceil(log_val) + 1)
+    else:
+        return math.copysign(1, value) * math.ceil(log_val)
+
+
+def log_lower_bound(value):
+    if value == 0:
+        return -1
+    log_val = math.log10(math.fabs(value))
+    # If value is exactly at a power of 10 boundary, go one step further
+    if log_val == math.ceil(log_val):
+        return math.copysign(1, value) * (math.floor(log_val) - 1)
+    else:
+        return math.copysign(1, value) * math.floor(log_val)
 
 
 def generate_chart(metric, csv_files, labels, x_axis, x_scale, metadata=None):
@@ -310,23 +332,28 @@ def generate_chart(metric, csv_files, labels, x_axis, x_scale, metadata=None):
 
     # Set axis ranges
     if all_x and all_metric_values:
+        x_min = min(min(x) for x in all_x if x)
         x_max = max(max(x) for x in all_x if x)
+        y_min = min(min(y) for y in all_metric_values if y)
         y_max = max(max(y) for y in all_metric_values if y)
-        xaxis_min = 0
-        yaxis_min = 0
+
         if x_scale == 'log':
             # For log scale, ensure we have reasonable bounds
             # Use powers of 10 that encompass the data range
-            xaxis_max = math.trunc(math.log10(x_max))+1.0
+            xaxis_min = log_lower_bound(x_min)
+            xaxis_max = log_upper_bound(x_max)
         else:
             # For linear scale, use linear range calculation
+            xaxis_min = 0
             xaxis_max = x_max * 1.1
         if y_scale == 'log':
             # For log scale, ensure we have reasonable bounds
             # Use powers of 10 that encompass the data range
-            yaxis_max = math.trunc(math.log10(y_max))+1.0
+            yaxis_min = log_lower_bound(y_min) if y_min < 0.1 else -1
+            yaxis_max = log_upper_bound(y_max)
         else:
             # For linear scale, use linear range calculation
+            yaxis_min = 0
             yaxis_max = y_max * 1.1
 
         fig.update_xaxes(range=[xaxis_min, xaxis_max])
@@ -512,10 +539,12 @@ def generate_html_summary(chart_data, labels, output_dir, metadata=None):
             metric_info = metadata['metrics'][metric_name]
             if 'title' in metric_info:
                 chart_title = metric_info['title']
-        
+
         # Create safe filename like individual downloads
-        safe_title = chart_title.replace(' ', '_').replace(':', '').replace('/', '_')
-        safe_x_axis = x_axis.replace(' ', '_').replace(':', '').replace('/', '_')
+        safe_title = chart_title.replace(
+            ' ', '_').replace(':', '').replace('/', '_')
+        safe_x_axis = x_axis.replace(' ', '_').replace(
+            ':', '').replace('/', '_')
         download_filename = f"{safe_title}-{safe_x_axis}.png"
 
         html_content += f'''
