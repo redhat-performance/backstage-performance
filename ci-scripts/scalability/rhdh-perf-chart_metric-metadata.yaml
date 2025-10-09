@@ -20,7 +20,7 @@ metrics:
     units: "%"
   
   RHDH_Memory_Avg:
-    title: "RHDH Memory Consumption"
+    title: "Average RHDH Memory Consumption"
     label: "Memory Usage"
     units: "MiB"
   
