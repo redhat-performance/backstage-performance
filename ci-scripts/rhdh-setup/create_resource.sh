@@ -572,7 +572,7 @@ get_token() {
         log_token_err "Unable to get $token_type token, re-attempting"
       fi
     else
-      keycloak_pass=$(oc -n "${RHDH_NAMESPACE}" get secret credential-rhdh-sso -o template --template='{{.data.ADMIN_PASSWORD}}' | base64 -d)
+      keycloak_pass=$(oc -n "${RHDH_NAMESPACE}" get secret credential-rhdh-keycloak -o template --template='{{.data.ADMIN_PASSWORD}}' | base64 -d)
       if ! keycloak_token "$keycloak_pass" >"$token_file"; then
         log_token_err "Unable to get $token_type token, re-attempting"
       fi

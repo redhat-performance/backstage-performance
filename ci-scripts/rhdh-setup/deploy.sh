@@ -238,8 +238,8 @@ keycloak_install() {
     )
     envsubst <template/keycloak/keycloak-op.yaml | $clin apply -f -
     envsubst <template/backstage/perf-test-secrets.yaml | $clin apply -f -
-    grep -m 1 "rhsso-operator" <($clin get pods -w)
-    wait_to_start deployment rhsso-operator 300 300
+    grep -m 1 "rhbk-operator" <($clin get pods -w)
+    wait_to_start deployment rhbk-operator 300 300
     envsubst <template/keycloak/keycloak.yaml | $clin apply -f -
     wait_to_start statefulset keycloak 450 600
     envsubst <template/keycloak/keycloakRealm.yaml | $clin apply -f -
