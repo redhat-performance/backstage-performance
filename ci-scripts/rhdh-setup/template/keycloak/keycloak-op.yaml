@@ -1,7 +1,7 @@
 apiVersion: operators.coreos.com/v1
 kind: OperatorGroup
 metadata:
-  name: rhsso-operator-group
+  name: rhbk-operator-group
 spec:
   targetNamespaces:
     - ${RHDH_NAMESPACE}
@@ -9,10 +9,10 @@ spec:
 apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
 metadata:
-  name: rhsso-operator
+  name: rhbk-operator
 spec:
-  channel: stable
-  name: rhsso-operator
+  channel: stable-v26.2
+  name: rhbk-operator
   source: redhat-operators
   sourceNamespace: openshift-marketplace
   installPlanApproval: Automatic

@@ -3,7 +3,7 @@ kind: KeycloakRealm
 metadata:
   name: backstage
   labels:
-    app: sso
+    app: keycloak
 spec:
   realm:
     id: "backstage"
@@ -12,4 +12,4 @@ spec:
     displayName: "Backstage Realm"
   instanceSelector:
     matchLabels:
-      app: sso
+      app: keycloak

@@ -3,7 +3,7 @@ kind: KeycloakClient
 metadata:
   name: backstage
   labels:
-    app: sso
+    app: keycloak
 spec:
   client:
     clientId: backstage
@@ -22,7 +22,7 @@ spec:
     standardFlowEnabled: true
   realmSelector:
     matchLabels:
-      app: sso
+      app: keycloak
   serviceAccountClientRoles:
     realm-management:
     - query-groups

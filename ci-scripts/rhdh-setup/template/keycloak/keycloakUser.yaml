@@ -3,11 +3,11 @@ kind: KeycloakUser
 metadata:
   name: guru
   labels:
-    app: sso
+    app: keycloak
 spec:
   realmSelector:
     matchLabels:
-      app: sso
+      app: keycloak
   user:
     username: guru
     firstName: Guru
