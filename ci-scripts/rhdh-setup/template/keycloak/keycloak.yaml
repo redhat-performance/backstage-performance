@@ -1,4 +1,4 @@
-apiVersion: keycloak.org/v1alpha1
+apiVersion: k8s.keycloak.org/v2alpha1
 kind: Keycloak
 metadata:
   name: rhdh-keycloak
@@ -6,5 +6,14 @@ metadata:
     app: keycloak
 spec:
   instances: ${RHDH_KEYCLOAK_REPLICAS}
-  externalAccess:
-    enabled: True
+  hostname:
+    strict: false
+  http:
+    httpEnabled: true
+  ingress:
+    enabled: true
+  additionalOptions:
+    - name: hostname-strict
+      value: "false"
+    - name: http-enabled
+      value: "true"

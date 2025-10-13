@@ -241,8 +241,7 @@ keycloak_install() {
     grep -m 1 "rhbk-operator" <($clin get pods -w)
     wait_to_start deployment rhbk-operator 300 300
     envsubst <template/keycloak/keycloak.yaml | $clin apply -f -
-    wait_to_start statefulset keycloak 450 600
-    envsubst <template/keycloak/keycloakRealm.yaml | $clin apply -f -
+    wait_to_start statefulset rhdh-keycloak 450 600
     if [ "$INSTALL_METHOD" == "helm" ]; then
         export OAUTH2_REDIRECT_URI="https://${RHDH_HELM_RELEASE_NAME}-developer-hub-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}/oauth2/callback"
     elif [ "$INSTALL_METHOD" == "olm" ]; then
@@ -252,9 +251,8 @@ keycloak_install() {
             export OAUTH2_REDIRECT_URI="https://backstage-developer-hub-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}/oauth2/callback"
         fi
     fi
-    envsubst <template/keycloak/keycloakClient.yaml | $clin apply -f -
     # shellcheck disable=SC2016
-    envsubst '${KEYCLOAK_USER_PASS}' <template/keycloak/keycloakUser.yaml | $clin apply -f -
+    envsubst '${KEYCLOAK_CLIENT_SECRET} ${OAUTH2_REDIRECT_URI} ${KEYCLOAK_USER_PASS}' <template/keycloak/keycloakRealmImport.yaml | $clin apply -f -
 }
 
 create_users_groups() {
