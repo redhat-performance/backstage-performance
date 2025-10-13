@@ -253,6 +253,7 @@ keycloak_install() {
     fi
     # shellcheck disable=SC2016
     envsubst '${KEYCLOAK_CLIENT_SECRET} ${OAUTH2_REDIRECT_URI} ${KEYCLOAK_USER_PASS}' <template/keycloak/keycloakRealmImport.yaml | $clin apply -f -
+    $clin create secret generic keycloak-client-secret-backstage --from-literal=CLIENT_ID=backstage --from-literal=CLIENT_SECRET="$KEYCLOAK_CLIENT_SECRET" --dry-run=client -o yaml | oc apply -f -
 }
 
 create_users_groups() {
