@@ -1,6 +1,5 @@
 global:
   clusterRouterBase: ${OPENSHIFT_APP_DOMAIN}
-  host: "${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}"
   imagePullSecrets:
     - rhdh-pull-secret
   dynamic:
@@ -16,24 +15,9 @@ global:
         disabled: false
       - package: ./dynamic-plugins/dist/backstage-plugin-techdocs-backend-dynamic
         disabled: false
-route:
-  enabled: true
-  host: "${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}"
-  path: /
-  tls:
-    enabled: true
-    insecureEdgeTerminationPolicy: Redirect
-    termination: edge
-  wildcardPolicy: None
 upstream:
   backstage:
     appConfig:
-      app:
-        baseUrl: "https://${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}"
-      backend:
-        baseUrl: "https://${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}"
-        cors:
-          origin: "https://${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}"
         database:
           connection:
             password: "${POSTGRESQL_ADMIN_PASSWORD}"
@@ -44,16 +28,6 @@ upstream:
               options:
                 secret: ${BACKEND_SECRET}
                 subject: legacy-catalog
-    args:
-      - "--config"
-      - app-config.yaml
-      - "--config"
-      - app-config.example.yaml
-      - "--config"
-      - app-config.example.production.yaml
-    command:
-      - node
-      - packages/backend
     containerPorts:
       backend: 7007
     extraAppConfig:
@@ -100,28 +74,11 @@ upstream:
       registry: ${RHDH_IMAGE_REGISTRY}
       repository: ${RHDH_IMAGE_REPO}
       tag: ${RHDH_IMAGE_TAG}
-    installDir: /app
     replicas: ${RHDH_DEPLOYMENT_REPLICAS}
-    revisionHistoryLimit: 10
-  clusterDomain: cluster.local
-  diagnosticMode:
-    args:
-      - infinity
-    command:
-      - sleep
-    enabled: false
-  ingress:
-    enabled: false
-    host: "{{ .Values.global.host }}"
-    tls:
-      enabled: false
   metrics:
     serviceMonitor:
       enabled: ${RHDH_METRIC}
       path: /metrics
-  nameOverride: developer-hub
-  networkPolicy:
-    enabled: false
   postgresql:
     auth:
       secretKeys:
@@ -147,10 +104,6 @@ upstream:
         enabled: true
         mountPath: /var/lib/pgsql/data
         size: "${RHDH_DB_STORAGE}"
-      podSecurityContext:
-        enabled: false
-      securityContext:
-        enabled: false
     architecture: replication
     replication:
       enabled: true
@@ -172,13 +125,8 @@ upstream:
       securityContext:
         enabled: false
   service:
-    externalTrafficPolicy: Cluster
     ports:
       backend: 7007
       name: http-backend
       targetPort: backend
-    sessionAffinity: None
     type: ClusterIP
-  serviceAccount:
-    automountServiceAccountToken: true
-    create: false
