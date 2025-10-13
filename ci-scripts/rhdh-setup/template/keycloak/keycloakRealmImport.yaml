@@ -1,0 +1,44 @@
+apiVersion: k8s.keycloak.org/v2alpha1
+kind: KeycloakRealmImport
+metadata:
+  name: backstage-realm-import
+  labels:
+    app: keycloak
+spec:
+  keycloakCRName: rhdh-keycloak
+  realm:
+    id: "backstage"
+    realm: "backstage"
+    enabled: true
+    displayName: "Backstage Realm"
+    clients:
+      - clientId: backstage
+        secret: ${KEYCLOAK_CLIENT_SECRET}
+        clientAuthenticatorType: client-secret
+        defaultClientScopes:
+          - profile
+          - email
+          - roles
+        directAccessGrantsEnabled: true
+        implicitFlowEnabled: false
+        publicClient: false
+        redirectUris:
+          - ${OAUTH2_REDIRECT_URI}
+        serviceAccountsEnabled: true
+        standardFlowEnabled: true
+        serviceAccountClientRoles:
+          realm-management:
+            - query-groups
+            - query-users
+            - view-users
+    users:
+      - username: guru
+        firstName: Guru
+        lastName: RHDH Admin
+        email: guru@test.com
+        enabled: true
+        emailVerified: true
+        credentials:
+          - type: password
+            value: ${KEYCLOAK_USER_PASS}
+            temporary: false
