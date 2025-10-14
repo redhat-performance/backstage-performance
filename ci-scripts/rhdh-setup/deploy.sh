@@ -158,14 +158,14 @@ install() {
     appurl=$(oc whoami --show-console)
     export OPENSHIFT_APP_DOMAIN=${appurl#*.}
     $cli create namespace "${RHDH_NAMESPACE}" --dry-run=client -o yaml | $cli apply -f -
-    keycloak_install 2>&1| tee "${TMP_DIR}/keycloak_install.log"
+    keycloak_install 2>&1 | tee "${TMP_DIR}/keycloak_install.log"
 
     if $PRE_LOAD_DB; then
         log_info "Creating users and groups in Keycloak in background"
-        create_users_groups 2>&1| tee -a "${TMP_DIR}/create-users-groups.log" &
+        create_users_groups 2>&1 | tee -a "${TMP_DIR}/create-users-groups.log" &
     fi
 
-    backstage_install 2>&1| tee -a "${TMP_DIR}/backstage-install.log"
+    backstage_install 2>&1 | tee -a "${TMP_DIR}/backstage-install.log"
     exit_code=${PIPESTATUS[0]}
     if [ "$exit_code" -ne 0 ]; then
         log_error "Installation failed!!!"
@@ -192,12 +192,12 @@ keycloak_install() {
     wait_to_start statefulset keycloak 450 600
     envsubst <template/keycloak/keycloakRealm.yaml | $clin apply -f -
     if [ "$INSTALL_METHOD" == "helm" ]; then
-        export OAUTH2_REDIRECT_URI=https://${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}/oauth2/callback
+        export OAUTH2_REDIRECT_URI="https://${RHDH_HELM_RELEASE_NAME}-developer-hub-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}/oauth2/callback"
     elif [ "$INSTALL_METHOD" == "olm" ]; then
         if [ "$AUTH_PROVIDER" == "keycloak" ]; then
-            export OAUTH2_REDIRECT_URI=https://rhdh-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}/oauth2/callback
+            export OAUTH2_REDIRECT_URI="https://rhdh-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}/oauth2/callback"
         else
-            export OAUTH2_REDIRECT_URI=https://backstage-developer-hub-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}/oauth2/callback
+            export OAUTH2_REDIRECT_URI="https://backstage-developer-hub-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}/oauth2/callback"
         fi
     fi
     envsubst <template/keycloak/keycloakClient.yaml | $clin apply -f -
@@ -229,18 +229,7 @@ backstage_install() {
     cp "template/backstage/app-config.yaml" "$TMP_DIR/app-config.yaml"
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '. |= . + {"signInPage":"oauth2Proxy"}' "$TMP_DIR/app-config.yaml"; fi
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '. |= . + {"auth":{"environment":"production","providers":{"oauth2Proxy":{}}}}' "$TMP_DIR/app-config.yaml"; else yq -i '. |= . + {"auth":{"providers":{"guest":{"dangerouslyAllowOutsideDevelopment":true}}}}' "$TMP_DIR/app-config.yaml"; fi
-    if [ "$INSTALL_METHOD" == "helm" ]; then
-        base_url="https://${RHDH_HELM_RELEASE_NAME}-${RHDH_HELM_CHART}-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}"
-    elif [ "$INSTALL_METHOD" == "olm" ]; then
-        if [ "$AUTH_PROVIDER" == "keycloak" ]; then
-            base_url="https://rhdh-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}"
-        else
-            base_url="https://backstage-developer-hub-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}"
-        fi
-    fi
-    yq -i '.app.baseUrl="'"$base_url"'"' "$TMP_DIR/app-config.yaml"
-    yq -i '.backend.baseUrl="'"$base_url"'"' "$TMP_DIR/app-config.yaml"
-    yq -i '.backend.cors.origin="'"$base_url"'"' "$TMP_DIR/app-config.yaml"
+
     until envsubst <template/backstage/secret-rhdh-pull-secret.yaml | $clin apply -f -; do $clin delete secret rhdh-pull-secret --ignore-not-found=true; done
     if ${ENABLE_RBAC}; then yq -i '. |= . + load("template/backstage/'$INSTALL_METHOD'/app-rbac-patch.yaml")' "$TMP_DIR/app-config.yaml"; fi
     if ${PRE_LOAD_DB}; then
