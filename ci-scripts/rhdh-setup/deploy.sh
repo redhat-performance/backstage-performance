@@ -240,8 +240,26 @@ keycloak_install() {
     envsubst <template/backstage/perf-test-secrets.yaml | $clin apply -f -
     grep -m 1 "rhbk-operator" <($clin get pods -w)
     wait_to_start deployment rhbk-operator 300 300
+
+    export KEYCLOAK_DB_PASSWORD
+    KEYCLOAK_DB_PASSWORD=$(mktemp -u XXXXXXXXXX)
+    export KEYCLOAK_DB_STORAGE
+    KEYCLOAK_DB_STORAGE=${KEYCLOAK_DB_STORAGE:-${RHDH_DB_STORAGE:-1Gi}}
+
+    log_info "Creating Keycloak PostgreSQL database with storage: $KEYCLOAK_DB_STORAGE"
+    envsubst <template/keycloak/keycloak-postgresql.yaml | $clin apply -f -
+    wait_to_start statefulset keycloak-postgresql 300 300
+
+    $clin create secret generic keycloak-db-user --from-literal=keycloak-db-user=keycloak --dry-run=client -o yaml | $clin apply -f -
+
     envsubst <template/keycloak/keycloak.yaml | $clin apply -f -
     wait_to_start statefulset rhdh-keycloak 450 600
+
+    $clin create route edge keycloak \
+        --service=rhdh-keycloak-service \
+        --port=8080 \
+        --dry-run=client -o yaml | $clin apply -f -
+
     if [ "$INSTALL_METHOD" == "helm" ]; then
         export OAUTH2_REDIRECT_URI="https://${RHDH_HELM_RELEASE_NAME}-developer-hub-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}/oauth2/callback"
     elif [ "$INSTALL_METHOD" == "olm" ]; then
