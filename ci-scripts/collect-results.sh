@@ -71,11 +71,8 @@ monitoring_collection_dir=$ARTIFACT_DIR/monitoring-collection-raw-data-dir
 mkdir -p "$monitoring_collection_dir"
 
 try_gather_file() {
-    if [ -f "$1" ]; then
-        cp -vf "$1" "${2:-$ARTIFACT_DIR}"
-    else
-        echo "WARNING: Tried to gather $1 but the file was not found!"
-    fi
+    echo "Trying to gather $1"
+    find . -path "$1" -type f -exec cp -vf {} "${2:-$ARTIFACT_DIR}" \;
 }
 
 try_gather_dir() {
@@ -104,8 +101,7 @@ try_gather_file "${TMP_DIR}/create_group.log"
 try_gather_file "${TMP_DIR}/create_user.log"
 try_gather_file "${TMP_DIR}/get_token.log"
 try_gather_file "${TMP_DIR}/get_rhdh_token.log"
-try_gather_file "${TMP_DIR}/get_api_count.log"
-try_gather_file "${TMP_DIR}/get_component_count.log"
+try_gather_file "${TMP_DIR}/get_*_count.log"
 try_gather_file "${TMP_DIR}/rbac-config.yaml"
 try_gather_file "${TMP_DIR}/locust-k8s-operator.values.yaml"
 try_gather_file load-test.log
