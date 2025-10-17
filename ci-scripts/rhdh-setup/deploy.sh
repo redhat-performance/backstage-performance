@@ -40,6 +40,10 @@ export RHDH_HELM_REPO=${RHDH_HELM_REPO:-oci://quay.io/rhdh/chart}
 export RHDH_HELM_CHART=${RHDH_HELM_CHART:-redhat-developer-hub}
 export RHDH_HELM_CHART_VERSION=${RHDH_HELM_CHART_VERSION:-$(skopeo list-tags docker://quay.io/rhdh/chart | jq -rc '.Tags[]' | grep "${RHDH_BASE_VERSION//./\\.}"'-.*' | sort -V | tail -n1)}
 
+export RHDH_HELM_ORCHESTRATOR_REPO=${RHDH_HELM_ORCHESTRATOR_REPO:-oci://quay.io/rhdh/orchestrator-infra-chart}
+export RHDH_HELM_ORCHESTRATOR_CHART=${RHDH_HELM_ORCHESTRATOR_CHART:-redhat-developer-hub-orchestrator-infra}
+export RHDH_HELM_ORCHESTRATOR_CHART_VERSION=${RHDH_HELM_ORCHESTRATOR_CHART_VERSION:-${RHDH_HELM_CHART_VERSION}}
+
 OCP_VER="$(oc version -o json | jq -r '.openshiftVersion' | sed -r -e "s#([0-9]+\.[0-9]+)\..+#\1#")"
 export RHDH_OLM_INDEX_IMAGE="${RHDH_OLM_INDEX_IMAGE:-quay.io/rhdh/iib:${RHDH_BASE_VERSION}-v${OCP_VER}-x86_64}"
 export RHDH_OLM_CHANNEL=${RHDH_OLM_CHANNEL:-fast}
@@ -59,6 +63,7 @@ export COMPONENT_COUNT="${COMPONENT_COUNT:-1}"
 export KEYCLOAK_USER_PASS=${KEYCLOAK_USER_PASS:-$(mktemp -u XXXXXXXXXX)}
 export AUTH_PROVIDER="${AUTH_PROVIDER:-''}"
 export ENABLE_RBAC="${ENABLE_RBAC:-false}"
+export ENABLE_ORCHESTRATOR="${ENABLE_ORCHESTRATOR:-false}"
 export ENABLE_PROFILING="${ENABLE_PROFILING:-false}"
 export RBAC_POLICY="${RBAC_POLICY:-all_groups_admin}"
 export RHDH_LOG_LEVEL="${RHDH_LOG_LEVEL:-warn}"
@@ -117,6 +122,47 @@ wait_for_crd() {
     done
 }
 
+wait_and_approve_install_plans() {
+    namespace=${1:-namespace}
+    initial_timeout=${2:-300}
+    description=${3:-"install plans in $namespace"}
+    timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$initial_timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
+    interval=10
+
+    log_info "Waiting for unapproved install plans in $namespace namespace..."
+
+    # Wait for install plans to appear with timeout
+    install_plans=""
+    for ((i = 0; i < initial_timeout; i += interval)); do
+        install_plans=$($cli get installplan -n "$namespace" --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[?(@.spec.approved==false)].metadata.name}' 2>/dev/null)
+
+        if [ -n "$install_plans" ]; then
+            break
+        fi
+
+        if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
+            log_error "Timeout waiting for $description"
+            exit 1
+        fi
+
+        log_info "Waiting ${interval}s for $description..."
+        sleep "$interval"
+    done
+
+    # Approve each install plan found
+    if [ -n "$install_plans" ]; then
+        log_info "Found unapproved install plans in $namespace namespace, approving all..."
+        for install_plan in $install_plans; do
+            log_info "Approving install plan '$install_plan'..."
+            $cli patch installplan "$install_plan" -n "$namespace" --type merge --patch '{"spec":{"approved":true}}'
+        done
+        return $?
+    else
+        log_error "No unapproved install plans found in $namespace namespace within timeout"
+        exit 1
+    fi
+}
+
 wait_to_start() {
     wait_to_start_in_namespace "$RHDH_NAMESPACE" "$@"
     return $?
@@ -154,6 +200,10 @@ mark_resource_for_rhdh() {
 }
 
 install() {
+    if [ "$INSTALL_METHOD" != "helm" ] && ${ENABLE_ORCHESTRATOR}; then
+        log_error "Orchestrator is only supported with Helm install method"
+        return 1
+    fi
     setup_monitoring
     appurl=$(oc whoami --show-console)
     export OPENSHIFT_APP_DOMAIN=${appurl#*.}
@@ -234,6 +284,22 @@ backstage_install() {
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '. |= . + {"signInPage":"oauth2Proxy"}' "$TMP_DIR/app-config.yaml"; fi
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '. |= . + {"auth":{"environment":"production","providers":{"oauth2Proxy":{}}}}' "$TMP_DIR/app-config.yaml"; else yq -i '. |= . + {"auth":{"providers":{"guest":{"dangerouslyAllowOutsideDevelopment":true}}}}' "$TMP_DIR/app-config.yaml"; fi
 
+    if ${ENABLE_ORCHESTRATOR}; then
+        orchestrator_version_arg=""
+        orchestrator_chart_origin="$RHDH_HELM_ORCHESTRATOR_REPO"
+        if [ -n "${RHDH_HELM_ORCHESTRATOR_CHART_VERSION}" ]; then
+            orchestrator_version_arg="--version $RHDH_HELM_ORCHESTRATOR_CHART_VERSION"
+            orchestrator_chart_origin="$orchestrator_chart_origin@$RHDH_HELM_ORCHESTRATOR_CHART_VERSION"
+        fi
+        log_info "Installing RHDH Orchestrator infra"
+        # shellcheck disable=SC2086
+        helm upgrade "${RHDH_HELM_RELEASE_NAME}-orchestrator-infra" -i "${RHDH_HELM_ORCHESTRATOR_REPO}" ${orchestrator_version_arg} -n "${RHDH_NAMESPACE}"
+        wait_and_approve_install_plans openshift-serverless
+        wait_and_approve_install_plans openshift-serverless-logic
+
+        yq -i '.orchestrator.dataIndexService.url="http://sonataflow-platform-data-index-service.'"$RHDH_NAMESPACE"'"' "$TMP_DIR/app-config.yaml"
+        yq -i '.orchestrator.enabled=true' "$TMP_DIR/app-config.yaml"
+    fi
     until envsubst <template/backstage/secret-rhdh-pull-secret.yaml | $clin apply -f -; do $clin delete secret rhdh-pull-secret --ignore-not-found=true; done
     if ${ENABLE_RBAC}; then yq -i '. |= . + load("template/backstage/'$INSTALL_METHOD'/app-rbac-patch.yaml")' "$TMP_DIR/app-config.yaml"; fi
     if ${PRE_LOAD_DB}; then
@@ -246,6 +312,9 @@ backstage_install() {
         cp template/backstage/rbac-config.yaml "${TMP_DIR}/rbac-config.yaml"
         create_rbac_policy "$RBAC_POLICY"
         cat "$TMP_DIR/group-rbac.yaml" >>"$TMP_DIR/rbac-config.yaml"
+        if [[ "$INSTALL_METHOD" == "helm" ]] && ${ENABLE_ORCHESTRATOR}; then
+            cat template/backstage/helm/orchestrator-rbac-patch.yaml >>"$TMP_DIR/rbac-config.yaml"
+        fi
         until $clin create -f "$TMP_DIR/rbac-config.yaml"; do $clin delete configmap rbac-policy --ignore-not-found=true; done
     fi
     envsubst <template/backstage/plugin-secrets.yaml | $clin apply -f -
@@ -330,6 +399,10 @@ install_rhdh_with_helm() {
     if ${ENABLE_RBAC}; then
         yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.x.yaml")' "$TMP_DIR/chart-values.temp.yaml"
         yq -i '.global.dynamic.plugins |= . + load("template/backstage/helm/rbac-plugin-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"
+    fi
+    if ${ENABLE_ORCHESTRATOR}; then
+        log_info "Enabling orchestrator plugins"
+        yq -i '.orchestrator.enabled = true' "$TMP_DIR/chart-values.temp.yaml"
     fi
     envsubst \
         '${OPENSHIFT_APP_DOMAIN} \
@@ -581,11 +654,15 @@ delete() {
         done
     fi
     if [ "$INSTALL_METHOD" == "helm" ]; then
+        log_info "Uninstalling RHDH Helm release"
         helm uninstall "${RHDH_HELM_RELEASE_NAME}" --namespace "${RHDH_NAMESPACE}"
         $clin delete pvc "data-${RHDH_HELM_RELEASE_NAME}-postgresql-0" --ignore-not-found=true
         $cli delete ns "${RHDH_NAMESPACE}" --ignore-not-found=true --wait
     elif [ "$INSTALL_METHOD" == "olm" ]; then
         delete_rhdh_with_olm
+    fi
+    if ${ENABLE_ORCHESTRATOR}; then
+        delete_orchestrator_infra
     fi
 }
 
@@ -593,11 +670,82 @@ delete_rhdh_with_olm() {
     $clin delete backstage developer-hub --ignore-not-found=true --wait
     $cli delete namespace "$RHDH_NAMESPACE" --ignore-not-found=true --wait
 
-    $cli -n "$RHDH_OPERATOR_NAMESPACE" delete sub rhdh --ignore-not-found=true --wait
+    $cli -n "$RHDH_OPERATOR_NAMESPACE" delete subscriptions.operators.coreos.com rhdh --ignore-not-found=true --wait
     for i in $($cli get catsrc -n openshift-marketplace -o json | jq -rc '.items[] | select(.metadata.name | startswith("rhdh")).metadata.name'); do
         $cli -n openshift-marketplace delete catsrc "$i" --ignore-not-found=true --wait
     done
     $cli delete namespace "$RHDH_OPERATOR_NAMESPACE" --ignore-not-found=true --wait
+    $cli delete crd backstages.rhdh.redhat.com --ignore-not-found=true --wait
+}
+
+delete_orchestrator_infra() {
+    log_info "Deleting RHDH Orchestrator infra"
+    helm uninstall "${RHDH_HELM_RELEASE_NAME}-orchestrator-infra" --namespace "${RHDH_NAMESPACE}" --ignore-not-found=true --wait
+
+    # Delete KnativeEventing custom resources first
+    log_info "Deleting KnativeEventing custom resources"
+    for ns in knative-eventing openshift-serverless; do
+        if $cli get ns "$ns" >/dev/null 2>&1; then
+            for res in $($cli get knativeeventings.operator.knative.dev -n "$ns" -o name 2>/dev/null); do
+                log_info "Removing finalizers from $res in namespace $ns"
+                $cli patch "$res" -n "$ns" -p '{"metadata":{"finalizers":[]}}' --type=merge
+                $cli delete "$res" -n "$ns" --ignore-not-found=true --wait
+            done
+        fi
+    done
+
+    # Delete KnativeServing custom resources
+    log_info "Deleting KnativeServing custom resources"
+    for ns in knative-serving openshift-serverless; do
+        if $cli get ns "$ns" >/dev/null 2>&1; then
+            for res in $($cli get knativeservings.operator.knative.dev -n "$ns" -o name 2>/dev/null); do
+                log_info "Removing finalizers from $res in namespace $ns"
+                $cli patch "$res" -n "$ns" -p '{"metadata":{"finalizers":[]}}' --type=merge
+                $cli delete "$res" -n "$ns" --ignore-not-found=true --wait
+            done
+        fi
+    done
+
+    # Delete subscriptions
+    $cli delete subscription.operators.coreos.com serverless-operator -n openshift-serverless --ignore-not-found=true --wait
+    $cli delete subscription.operators.coreos.com logic-operator-rhel8 -n openshift-serverless-logic --ignore-not-found=true --wait
+
+    # Delete CSVs (ClusterServiceVersions) to remove operators
+    log_info "Deleting ClusterServiceVersions for Knative operators"
+    for ns in openshift-serverless openshift-serverless-logic knative-eventing knative-serving; do
+        if $cli get ns "$ns" >/dev/null 2>&1; then
+            for csv in $($cli get csv -n "$ns" -o name 2>/dev/null | grep -E 'serverless|knative|logic-operator'); do
+                $cli delete "$csv" -n "$ns" --ignore-not-found=true --wait
+            done
+        fi
+    done
+
+    # Remove Knative webhook configurations to prevent validation errors during cleanup
+    log_info "Removing Knative webhook configurations"
+    $cli delete validatingwebhookconfiguration config.webhook.serving.knative.dev --ignore-not-found=true --wait
+    $cli delete validatingwebhookconfiguration validation.webhook.serving.knative.dev --ignore-not-found=true --wait
+    $cli delete validatingwebhookconfiguration validation.webhook.eventing.knative.dev --ignore-not-found=true --wait
+    $cli delete mutatingwebhookconfiguration webhook.serving.knative.dev --ignore-not-found=true --wait
+    $cli delete mutatingwebhookconfiguration webhook.eventing.knative.dev --ignore-not-found=true --wait
+
+    # Force delete any remaining pods in Knative namespaces
+    log_info "Force deleting remaining pods in Knative namespaces"
+    for ns in knative-eventing knative-eventing-ingress knative-serving knative-serving-ingress openshift-serverless openshift-serverless-logic; do
+        if $cli get ns "$ns" >/dev/null 2>&1; then
+            for pod in $($cli get pods -n "$ns" -o name 2>/dev/null); do
+                $cli delete "$pod" -n "$ns" --force --grace-period=0 --ignore-not-found=true --wait
+            done
+        fi
+    done
+
+    # Now delete the namespaces
+    log_info "Deleting Knative and Serverless namespaces"
+    $cli delete ns openshift-serverless --ignore-not-found=true --wait
+    $cli delete ns openshift-serverless-logic --ignore-not-found=true --wait
+    $cli delete ns knative-eventing --ignore-not-found=true --wait
+    $cli delete ns knative-eventing-ingress --ignore-not-found=true --wait
+    $cli delete ns knative-serving --ignore-not-found=true --wait
+    $cli delete ns knative-serving-ingress --ignore-not-found=true --wait
 }
 
 while getopts "oi:mrd" flag; do

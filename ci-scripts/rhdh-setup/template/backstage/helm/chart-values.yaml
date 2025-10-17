@@ -15,6 +15,13 @@ global:
         disabled: false
       - package: ./dynamic-plugins/dist/backstage-plugin-techdocs-backend-dynamic
         disabled: false
+orchestrator:
+  enabled: false
+  sonataflowPlatform:
+    externalDBsecretRef: "${RHDH_HELM_RELEASE_NAME}-postgresql-svcbind-postgres"
+    externalDBName: "sonataflow"
+    externalDBHost: "${RHDH_HELM_RELEASE_NAME}-postgresql-primary"
+    externalDBPort: "5432"
 upstream:
   backstage:
     appConfig:
