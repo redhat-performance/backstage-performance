@@ -27,6 +27,7 @@ ActiveUsers,\
 USERS,\
 SPAWN_RATE,\
 WORKERS,\
+CATALOG_SIZE,\
 API_COUNT,\
 COMPONENT_COUNT,\
 BACKSTAGE_USER_COUNT,\
@@ -98,6 +99,7 @@ find "${1:-.}" -name benchmark.json -print0 | while IFS= read -r -d '' filename;
         .metadata.env.USERS,
         .metadata.env.SPAWN_RATE,
         .metadata.env.WORKERS,
+        ((.metadata.env.API_COUNT | tonumber) + (.metadata.env.COMPONENT_COUNT | tonumber)),
         .metadata.env.API_COUNT,
         .metadata.env.COMPONENT_COUNT,
         .metadata.env.BACKSTAGE_USER_COUNT,
