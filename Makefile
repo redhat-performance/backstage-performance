@@ -32,7 +32,7 @@ export RHDH_IMAGE_REPO ?=
 export RHDH_IMAGE_TAG ?=
 
 # RHDH base version
-export RHDH_BASE_VERSION ?= 1.7
+export RHDH_BASE_VERSION ?= 1.8
 
 # RHDH Helm chart to deploy
 export RHDH_NAMESPACE ?= rhdh-performance
