@@ -89,12 +89,37 @@ metrics:
     label: "Components Owned By User Group Response Time (Maximum)"
     units: "ms"
   
+  RHDH_DB_Populate_Storage_Used:
+    title: "RHDH DB Storage Usage (Populate)"
+    label: "Storage Used"
+    units: "MiB"
+
+  RHDH_DB_Test_Storage_Used:
+    title: "RHDH DB Storage Usage (Test)"
+    label: "Storage Used"
+    units: "MiB"
+
+  DeployDuration:
+    title: "RHDH Deploy Duration"
+    label: "Duration"
+    units: "s"
+
+  PopulateDuration:
+    title: "Populate Duration"
+    label: "Duration"
+    units: "s"
+
   PopulateUsersGroupsDuration:
     title: "Populate Users and Groups Duration"
     label: "Duration"
     units: "s"
+
+  PopulateCatalogDuration:
+    title: "Populate Catalog Duration"
+    label: "Duration"
+    units: "s"
   
-  RHDH_DB_Test_Storage_Used:
-    title: "RHDH DB Storage Usage"
-    label: "Storage Used"
-    units: "MiB"
+  Duration:
+    title: "Test Duration"
+    label: "Duration"
+    units: "s"

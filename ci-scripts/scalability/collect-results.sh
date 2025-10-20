@@ -141,11 +141,16 @@ Components_Response_Time_Avg \
 Components_Response_Time_Max \
 ComponentsOwnedByUserGroup_Response_Time_Avg \
 ComponentsOwnedByUserGroup_Response_Time_Max \
+RHDH_DB_Populate_Storage_Used \
 RHDH_DB_Test_Storage_Used \
-PopulateUsersGroupsDuration"
+DeployDuration \
+PopulateDuration \
+PopulateUsersGroupsDuration \
+PopulateCatalogDuration \
+Duration"
 
 # Metrics
-for x_axis_scale_label in "ActiveUsers:linear:Active Users" "RBAC_POLICY_SIZE:log:RBAC Policy Size" "Iteration:linear:Iteration"; do
+for x_axis_scale_label in "ActiveUsers:linear:Active Users" "RBAC_POLICY_SIZE:log:RBAC Policy Size" "Iteration:linear:Iteration" "CATALOG_SIZE:linear:Catalog Size" "COMPONENT_COUNT:linear:Component Count" "API_COUNT:linear:API Count"; do
     IFS=":" read -ra tokens <<<"${x_axis_scale_label}"
     xa="${tokens[0]}"                                         # x_axis
     [[ "${#tokens[@]}" -lt 2 ]] && sc="" || sc="${tokens[1]}" # scale
