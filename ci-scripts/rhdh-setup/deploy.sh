@@ -162,7 +162,7 @@ install() {
 
     if $PRE_LOAD_DB; then
         log_info "Creating users and groups in Keycloak in background"
-        create_users_groups 2>&1 | tee -a "${TMP_DIR}/create-users-groups.log" &
+        create_users_groups 2>&1 | tee -a "${TMP_DIR}/create-users-groups.log"
     fi
 
     backstage_install 2>&1 | tee -a "${TMP_DIR}/backstage-install.log"
@@ -172,8 +172,6 @@ install() {
         return "$exit_code"
     fi
     psql_debug
-    log_info "Waiting for all the users and groups to be created in Keycloak"
-    wait
 }
 
 keycloak_install() {
@@ -222,6 +220,12 @@ create_objs() {
         log_warn "skipping component creating. GITHUB_REPO and GITHUB_USER not set"
         exit 1
     fi
+}
+
+get_catalog_entity_count() {
+    entity_type=$1
+    ACCESS_TOKEN=$(get_token "rhdh")
+    curl -s -k "$(backstage_url)/api/catalog/entity-facets?facet=kind" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$ACCESS_TOKEN" | tee -a "$TMP_DIR/get_$(echo "$entity_type" | tr '[:upper:]' '[:lower:]')_count.log" | jq -r '.facets.kind[] | select(.value == "'"$entity_type"'")| .count'
 }
 
 backstage_install() {
@@ -274,24 +278,22 @@ backstage_install() {
     timeout=600
     timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
     last_count=-1
-    for entity_type in Component Api; do
+    for entity_type in User Group Component API; do
         while true; do
             if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
                 log_error "Timeout waiting on '$entity_type' count"
                 exit 1
             else
-                ACCESS_TOKEN=$(get_token "rhdh")
-                if [[ 'Component' == "$entity_type" ]]; then
+                b_count=$(get_catalog_entity_count "$entity_type")
+                if [[ 'User' == "$entity_type" ]]; then
+                    # Add 1 to account for the "guru" user that's always present
+                    e_count=$((BACKSTAGE_USER_COUNT + 1))
+                elif [[ 'Group' == "$entity_type" ]]; then
+                    e_count=$GROUP_COUNT
+                elif [[ 'Component' == "$entity_type" ]]; then
                     e_count=$COMPONENT_COUNT
-                    b_count=$(curl -s -k "$(backstage_url)/api/catalog/entity-facets?facet=kind" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$ACCESS_TOKEN" | tee -a "$TMP_DIR/get_component_count.log" | jq -r '.facets.kind[] | select(.value == "Component")| .count')
-                fi
-                if [[ 'Api' == "$entity_type" ]]; then
+                elif [[ 'API' == "$entity_type" ]]; then
                     e_count=$API_COUNT
-                    b_count=$(curl -s -k "$(backstage_url)/api/catalog/entity-facets?facet=kind" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$ACCESS_TOKEN" | tee -a "$TMP_DIR/get_api_count.log" | jq -r '.facets.kind[] | select(.value == "API")| .count')
-                fi
-                if [[ -z "$b_count" ]]; then
-                    log_warn "Failed to get current '$entity_type' count, maybe RHDH is down?"
-                    b_count=0
                 fi
                 if [[ "$last_count" != "$b_count" ]]; then # reset the timeout if current count changes
                     log_info "The current '$entity_type' count changed, resetting waiting timeout to $timeout seconds"
