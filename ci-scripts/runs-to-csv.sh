@@ -71,7 +71,15 @@ Response_Size_Avg,\
 Components_Response_Time_Avg,\
 Components_Response_Time_Max,\
 ComponentsOwnedByUserGroup_Response_Time_Avg,\
-ComponentsOwnedByUserGroup_Response_Time_Max"
+ComponentsOwnedByUserGroup_Response_Time_Max,\
+Orchestrator_Workflow_Overview_Response_Time_Avg,\
+Orchestrator_Workflow_Overview_Response_Time_Max,\
+Orchestrator_Workflow_Execute_Response_Time_Avg,\
+Orchestrator_Workflow_Execute_Response_Time_Max,\
+Orchestrator_Workflow_Instance_by_Id_Response_Time_Avg,\
+Orchestrator_Workflow_Instance_by_Id_Response_Time_Max,\
+Orchestrator_Workflow_All_Instances_Response_Time_Avg,\
+Orchestrator_Workflow_All_Instances_Response_Time_Max"
 echo "$headers"
 
 find "${1:-.}" -name benchmark.json -print0 | while IFS= read -r -d '' filename; do
@@ -143,7 +151,15 @@ find "${1:-.}" -name benchmark.json -print0 | while IFS= read -r -d '' filename;
         .results."/api/catalog/entities/by-query\\\\?limit=20&orderField=metadata\\\\_name%2Casc&filter=kind%3Dcomponent".locust_requests_avg_response_time.mean,
         .results."/api/catalog/entities/by-query\\\\?limit=20&orderField=metadata\\\\_name%2Casc&filter=kind%3Dcomponent".locust_requests_avg_response_time.max,
         .results."/api/catalog/entities/by-query\\\\?limit=20&orderField=metadata\\\\_name%2Casc&filter=kind%3Dapi%2Crelations\\\\_ownedBy%3Duser%3A_+%2Crelations\\\\_ownedBy%3Dgroup%3A_+".locust_requests_avg_response_time.mean,
-        .results."/api/catalog/entities/by-query\\\\?limit=20&orderField=metadata\\\\_name%2Casc&filter=kind%3Dapi%2Crelations\\\\_ownedBy%3Duser%3A_+%2Crelations\\\\_ownedBy%3Dgroup%3A_+".locust_requests_avg_response_time.max
+        .results."/api/catalog/entities/by-query\\\\?limit=20&orderField=metadata\\\\_name%2Casc&filter=kind%3Dapi%2Crelations\\\\_ownedBy%3Duser%3A_+%2Crelations\\\\_ownedBy%3Dgroup%3A_+".locust_requests_avg_response_time.max,
+        .results."/api/orchestrator/v2/workflows/overview".locust_requests_avg_response_time.mean,
+        .results."/api/orchestrator/v2/workflows/overview".locust_requests_avg_response_time.max,
+        .results."/api/orchestrator/v2/workflows/_*/execute".locust_requests_avg_response_time.mean,
+        .results."/api/orchestrator/v2/workflows/_*/execute".locust_requests_avg_response_time.max,
+        .results."/api/orchestrator/v2/workflows/instances/_*".locust_requests_avg_response_time.mean,
+        .results."/api/orchestrator/v2/workflows/instances/_*".locust_requests_avg_response_time.max,
+        .results."/api/orchestrator/v2/workflows/instances".locust_requests_avg_response_time.mean,
+        .results."/api/orchestrator/v2/workflows/instances".locust_requests_avg_response_time.max
         ] | @csv' &&
         rc=0 || rc=1
     if [[ "$rc" -ne 0 ]]; then

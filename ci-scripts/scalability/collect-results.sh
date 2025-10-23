@@ -147,7 +147,15 @@ DeployDuration \
 PopulateDuration \
 PopulateUsersGroupsDuration \
 PopulateCatalogDuration \
-Duration"
+Duration \
+Orchestrator_Workflow_Overview_Response_Time_Avg \
+Orchestrator_Workflow_Overview_Response_Time_Max \
+Orchestrator_Workflow_Execute_Response_Time_Avg \
+Orchestrator_Workflow_Execute_Response_Time_Max \
+Orchestrator_Workflow_Instance_by_Id_Response_Time_Avg \
+Orchestrator_Workflow_Instance_by_Id_Response_Time_Max \
+Orchestrator_Workflow_All_Instances_Response_Time_Avg \
+Orchestrator_Workflow_All_Instances_Response_Time_Max"
 
 # Metrics
 for x_axis_scale_label in "ActiveUsers:linear:Active Users" "RBAC_POLICY_SIZE:log:RBAC Policy Size" "Iteration:linear:Iteration" "CATALOG_SIZE:linear:Catalog Size" "COMPONENT_COUNT:linear:Component Count" "API_COUNT:linear:API Count"; do
