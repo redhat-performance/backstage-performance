@@ -4,11 +4,11 @@ set -eu
 
 function configure_run() {
     if ! [ -f test.env ]; then
-        echo "$(date -Ins --utc) FATAL Can not reach 'test.env' file. Are you in backstage-performance directory?"
+        echo "$(date -u +'%Y-%m-%dT%H:%M:%S,%N+00:00') FATAL Can not reach 'test.env' file. Are you in backstage-performance directory?"
         exit 1
     fi
     if [ -z "$GITHUB_TOKEN" ]; then
-        echo "$(date -Ins --utc) FATAL Please export GITHUB_TOKEN. It is needed to create PRs."
+        echo "$(date -u +'%Y-%m-%dT%H:%M:%S,%N+00:00') FATAL Please export GITHUB_TOKEN. It is needed to create PRs."
         exit 1
     fi
 
@@ -41,7 +41,7 @@ export RHDH_HELM_CHART_VERSION='$RHDH_HELM_CHART_VERSION'
 
     git commit -am "chore($ticket): $testname on $branch"
     git push -u origin "$branch"
-    echo "$(date -Ins --utc) INFO Created and pushed branch ${branch}"
+    echo "$(date -u +'%Y-%m-%dT%H:%M:%S,%N+00:00') INFO Created and pushed branch ${branch}"
     git checkout "$SOURCE_BRANCH"
 
     curl_data='{
@@ -73,7 +73,7 @@ export RHDH_HELM_CHART_VERSION='$RHDH_HELM_CHART_VERSION'
         -d '{"body":"/test mvp-scalability"}'
     )"
     comment_url=$( echo "$curl_comment_out" | jq -rc '.html_url' )
-    echo "$(date -Ins --utc) INFO Triggered build by ${comment_url}"
+    echo "$(date -u +'%Y-%m-%dT%H:%M:%S,%N+00:00') INFO Triggered build by ${comment_url}"
 }
 
 function _test() {
