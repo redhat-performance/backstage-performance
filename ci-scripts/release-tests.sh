@@ -132,12 +132,12 @@ function storage_limit_test() {
 }
 
 # !!! Configure here !!!
-VERSION_OLD="1.6"
-VERSION_NEW="1.7"
-RHDH_HELM_CHART_VERSION_OLD=1.6.3
-RHDH_HELM_CHART_VERSION_NEW=1.7-122-CI
-SOURCE_BRANCH_OLD=rhdh-v1.6.x
+VERSION_OLD="1.7"
+VERSION_NEW="1.8"
+RHDH_HELM_CHART_VERSION_OLD=1.7.1
+RHDH_HELM_CHART_VERSION_NEW=1.8-145-CI
+SOURCE_BRANCH_OLD=rhdh-v1.7.x
 SOURCE_BRANCH_NEW=main
-compare_previous_test "RHIDP-7893"
-entity_burden_test "RHIDP-7898"
-storage_limit_test "RHIDP-7894"
+compare_previous_test "RHIDP-9162"
+entity_burden_test "RHIDP-9167"
+storage_limit_test "RHIDP-9163"
