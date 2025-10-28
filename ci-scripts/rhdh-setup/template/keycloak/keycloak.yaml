@@ -6,6 +6,17 @@ metadata:
     app: keycloak
 spec:
   instances: ${RHDH_KEYCLOAK_REPLICAS}
+  db:
+    vendor: postgres
+    host: keycloak-postgresql
+    port: 5432
+    database: keycloak
+    usernameSecret:
+      name: keycloak-db-user
+      key: keycloak-db-user
+    passwordSecret:
+      name: keycloak-postgresql
+      key: password
   hostname:
     strict: false
   http:
@@ -13,7 +24,9 @@ spec:
   ingress:
     enabled: true
   additionalOptions:
-    - name: hostname-strict
-      value: "false"
-    - name: http-enabled
-      value: "true"
+    - name: bootstrap-admin-username
+      value: admin
+    - name: bootstrap-admin-password
+      value: admin
+    - name: proxy-headers
+      value: forwarded

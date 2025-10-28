@@ -57,7 +57,7 @@ upstream:
             key: github.token
             name: "{{ .Release.Name }}-plugin-secrets"
       - name: KEYCLOAK_BASE_URL
-        value: "https://keycloak-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}/auth"
+        value: "https://keycloak-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}"
       - name: KEYCLOAK_LOGIN_REALM
         value: "backstage"
       - name: KEYCLOAK_REALM
