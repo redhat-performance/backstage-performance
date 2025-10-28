@@ -198,7 +198,7 @@ get_group_path_by_name() {
   local group_name="$input"
   token=$(get_token)
 
-  response=$(curl -s -k --location --request GET "$(keycloak_url)/auth/admin/realms/backstage/groups?search=${group_name}" \
+  response=$(curl -s -k --location --request GET "$(keycloak_url)/admin/realms/backstage/groups?search=${group_name}" \
     -H 'Content-Type: application/json' \
     -H "Authorization: Bearer $token" 2>&1)
 
@@ -224,7 +224,7 @@ get_group_id_by_name() {
   group_name="$1"
   token=$(get_token)
 
-  response=$(curl -s -k --location --request GET "$(keycloak_url)/auth/admin/realms/backstage/groups?search=${group_name}" \
+  response=$(curl -s -k --location --request GET "$(keycloak_url)/admin/realms/backstage/groups?search=${group_name}" \
     -H 'Content-Type: application/json' \
     -H "Authorization: Bearer $token" 2>&1)
 
@@ -272,7 +272,7 @@ assign_parent_group() {
   attempt=1
   while ((attempt <= max_attempts)); do
     token=$(get_token)
-    response="$(curl -s -k --location --request POST "$(keycloak_url)/auth/admin/realms/backstage/groups/${parent_id}/children" \
+    response="$(curl -s -k --location --request POST "$(keycloak_url)/admin/realms/backstage/groups/${parent_id}/children" \
       -H 'Content-Type: application/json' -H "Authorization: Bearer $token" \
       --data-raw '{"name":"'"${child_name}"'"}' 2>&1)"
     if [ "${PIPESTATUS[0]}" -eq 0 ] && ! echo "$response" | grep -q 'error' >&/dev/null; then
@@ -299,7 +299,7 @@ create_group() {
       groupname="g${idx}"
       while ((attempt <= max_attempts)); do
         token=$(get_token)
-        response="$(curl -s -k --location --request POST "$(keycloak_url)/auth/admin/realms/backstage/groups" \
+        response="$(curl -s -k --location --request POST "$(keycloak_url)/admin/realms/backstage/groups" \
           -H 'Content-Type: application/json' -H "Authorization: Bearer $token" \
           --data-raw '{"name":"'"${groupname}"'"}' 2>&1)"
         if [ "${PIPESTATUS[0]}" -eq 0 ] && ! echo "$response" | grep -q 'error' >&/dev/null; then
@@ -322,7 +322,7 @@ create_group() {
     groupname="g${idx}"
     while ((attempt <= max_attempts)); do
       token=$(get_token)
-      response="$(curl -s -k --location --request POST "$(keycloak_url)/auth/admin/realms/backstage/groups" \
+      response="$(curl -s -k --location --request POST "$(keycloak_url)/admin/realms/backstage/groups" \
         -H 'Content-Type: application/json' -H "Authorization: Bearer $token" \
         --data-raw '{"name":"'"${groupname}"'"}' 2>&1)"
       if [ "${PIPESTATUS[0]}" -eq 0 ] && ! echo "$response" | grep -q 'error' >&/dev/null; then
@@ -455,7 +455,7 @@ create_user() {
   while ((attempt <= max_attempts)); do
     token=$(get_token)
     username="t${0}"
-    response="$(curl -s -k --location --request POST "$(keycloak_url)/auth/admin/realms/backstage/users" \
+    response="$(curl -s -k --location --request POST "$(keycloak_url)/admin/realms/backstage/users" \
       -H 'Content-Type: application/json' \
       -H 'Authorization: Bearer '"$token" \
       --data-raw '{"firstName":"'"${username}"'","lastName":"tester", "email":"'"${username}"'@test.com","emailVerified":"true", "enabled":"true", "username":"'"${username}"'","groups":'"$groups"',"credentials":[{"type":"password","value":"'"${KEYCLOAK_USER_PASS}"'","temporary":false}]}' 2>&1)"
@@ -483,7 +483,7 @@ create_users() {
 token_lockfile="$TMP_DIR/token.lockfile"
 
 keycloak_token() {
-  curl -s -k "$(keycloak_url)/auth/realms/master/protocol/openid-connect/token" -d username=admin -d "password=$1" -d 'grant_type=password' -d 'client_id=admin-cli' | jq -r ".expires_in_timestamp = $(python3 -c 'from datetime import datetime, timedelta; t_add=int(30); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))')"
+  curl -s -k "$(keycloak_url)/realms/master/protocol/openid-connect/token" -d username=admin -d "password=$1" -d 'grant_type=password' -d 'client_id=admin-cli' | jq -r ".expires_in_timestamp = $(python3 -c 'from datetime import datetime, timedelta; t_add=int(30); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))')"
 }
 
 rhdh_token() {
@@ -510,7 +510,8 @@ rhdh_token() {
     --data-urlencode "redirect_uri=${REDIRECT_URL}" \
     --data-urlencode "scope=openid email profile" \
     --data-urlencode "response_type=code" \
-    "$(keycloak_url)/auth/realms/$REALM/protocol/openid-connect/auth" 2>&1 | tee "$TMP_DIR/auth_url.log" | grep -oE 'action="[^"]+"' | grep -oE '"[^"]+"' | tr -d '"')
+
+  "$(keycloak_url)/realms/$REALM/protocol/openid-connect/auth" 2>&1| tee "$TMP_DIR/auth_url.log" | grep -oE 'action="[^"]+"' | grep -oE '"[^"]+"' | tr -d '"')
 
   execution=$(echo "$AUTH_URL" | grep -oE 'execution=[^&]+' | grep -oE '[^=]+$')
   tab_id=$(echo "$AUTH_URL" | grep -oE 'tab_id=[^&]+' | grep -oE '[^=]+$')

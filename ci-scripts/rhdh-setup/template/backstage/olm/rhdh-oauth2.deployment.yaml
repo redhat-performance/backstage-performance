@@ -40,7 +40,7 @@ spec:
                   key: keycloak_cookie_secret
                   name: perf-test-secrets
             - name: OAUTH2_PROXY_OIDC_ISSUER_URL
-              value: https://keycloak-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}/auth/realms/backstage
+              value: https://keycloak-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}/realms/backstage
             - name: OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY
               value: "true"
           image: quay.io/oauth2-proxy/oauth2-proxy:v7.12.0

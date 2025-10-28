@@ -255,6 +255,10 @@ keycloak_install() {
     envsubst <template/keycloak/keycloak.yaml | $clin apply -f -
     wait_to_start statefulset rhdh-keycloak 450 600
 
+    $clin create secret generic credential-rhdh-keycloak \
+        --from-literal=ADMIN_PASSWORD=admin \
+        --dry-run=client -o yaml | $clin apply -f -
+
     $clin create route edge keycloak \
         --service=rhdh-keycloak-service \
         --port=8080 \
