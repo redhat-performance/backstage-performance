@@ -59,7 +59,7 @@ for url in "$@"; do
     bench_file="${files_dir}/${job_id}/benchmark.json"
     log "DEBUG Downloading URL ${bench_url} to ${bench_file}"
     mkdir -p "${files_dir}/${job_id}"
-    wget -O "${bench_file}" "$bench_url"
+    curl -sL "$bench_url" -o "${bench_file}"
     assert_json "${bench_file}"
     log "INFO Downloaded to ${bench_file}"
 done
