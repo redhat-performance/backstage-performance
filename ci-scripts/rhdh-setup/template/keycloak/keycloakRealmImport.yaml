@@ -31,6 +31,10 @@ spec:
             - query-groups
             - query-users
             - view-users
+            - view-clients
+            - view-realm
+            - manage-users
+            - manage-clients
     users:
       - username: guru
         firstName: Guru
@@ -42,3 +46,6 @@ spec:
           - type: password
             value: ${KEYCLOAK_USER_PASS}
             temporary: false
+        clientRoles:
+          realm-management:
+            - realm-admin

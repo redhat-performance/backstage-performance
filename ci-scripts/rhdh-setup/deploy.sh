@@ -64,6 +64,7 @@ export GROUP_COUNT="${GROUP_COUNT:-1}"
 export API_COUNT="${API_COUNT:-1}"
 export COMPONENT_COUNT="${COMPONENT_COUNT:-1}"
 export KEYCLOAK_USER_PASS=${KEYCLOAK_USER_PASS:-$(mktemp -u XXXXXXXXXX)}
+export KEYCLOAK_ADMIN_PASS=${KEYCLOAK_ADMIN_PASS:-admin}
 export AUTH_PROVIDER="${AUTH_PROVIDER:-''}"
 export ENABLE_RBAC="${ENABLE_RBAC:-false}"
 export ENABLE_ORCHESTRATOR="${ENABLE_ORCHESTRATOR:-false}"
@@ -256,7 +257,7 @@ keycloak_install() {
     wait_to_start statefulset rhdh-keycloak 450 600
 
     $clin create secret generic credential-rhdh-keycloak \
-        --from-literal=ADMIN_PASSWORD=admin \
+        --from-literal=ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASS" \
         --dry-run=client -o yaml | $clin apply -f -
 
     $clin create route edge keycloak \
@@ -274,7 +275,7 @@ keycloak_install() {
         fi
     fi
     # shellcheck disable=SC2016
-    envsubst '${KEYCLOAK_CLIENT_SECRET} ${OAUTH2_REDIRECT_URI} ${KEYCLOAK_USER_PASS}' <template/keycloak/keycloakRealmImport.yaml | $clin apply -f -
+    envsubst '${KEYCLOAK_CLIENT_SECRET} ${OAUTH2_REDIRECT_URI} ${KEYCLOAK_USER_PASS} ${KEYCLOAK_ADMIN_PASS}' <template/keycloak/keycloakRealmImport.yaml | $clin apply -f -
     $clin create secret generic keycloak-client-secret-backstage --from-literal=CLIENT_ID=backstage --from-literal=CLIENT_SECRET="$KEYCLOAK_CLIENT_SECRET" --dry-run=client -o yaml | oc apply -f -
 }
 
