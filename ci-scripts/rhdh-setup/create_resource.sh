@@ -454,7 +454,7 @@ create_user() {
   groups="$groups]"
   while ((attempt <= max_attempts)); do
     token=$(get_token)
-    username="t${0}"
+    username="t_${0}"
     response="$(curl -s -k --location --request POST "$(keycloak_url)/admin/realms/backstage/users" \
       -H 'Content-Type: application/json' \
       -H 'Authorization: Bearer '"$token" \
@@ -483,7 +483,13 @@ create_users() {
 token_lockfile="$TMP_DIR/token.lockfile"
 
 keycloak_token() {
-  curl -s -k "$(keycloak_url)/realms/master/protocol/openid-connect/token" -d username=admin -d "password=$1" -d 'grant_type=password' -d 'client_id=admin-cli' | jq -r ".expires_in_timestamp = $(python3 -c 'from datetime import datetime, timedelta; t_add=int(30); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))')"
+  client_secret=$(oc -n "${RHDH_NAMESPACE}" get secret keycloak-client-secret-backstage -o template --template='{{.data.CLIENT_SECRET}}' | base64 -d)
+  curl -s -k "$(keycloak_url)/realms/backstage/protocol/openid-connect/token" \
+    -d username=guru \
+    -d "password=$1" \
+    -d 'grant_type=password' \
+    -d 'client_id=backstage' \
+    -d "client_secret=$client_secret" | jq -r ".expires_in_timestamp = $(python3 -c 'from datetime import datetime, timedelta; t_add=int(30); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))')"
 }
 
 rhdh_token() {
@@ -573,7 +579,7 @@ get_token() {
         log_token_err "Unable to get $token_type token, re-attempting"
       fi
     else
-      keycloak_pass=$(oc -n "${RHDH_NAMESPACE}" get secret credential-rhdh-keycloak -o template --template='{{.data.ADMIN_PASSWORD}}' | base64 -d)
+      keycloak_pass=$(oc -n "${RHDH_NAMESPACE}" get secret perf-test-secrets -o template --template='{{.data.keycloak_user_pass}}' | base64 -d)
       if ! keycloak_token "$keycloak_pass" >"$token_file"; then
         log_token_err "Unable to get $token_type token, re-attempting"
       fi
