@@ -10,6 +10,8 @@ export RHDH_HELM_RELEASE_NAME=${RHDH_HELM_RELEASE_NAME:-rhdh}
 export RHDH_HELM_CHART=${RHDH_HELM_CHART:-developer-hub}
 export RHDH_NAMESPACE=${RHDH_NAMESPACE:-rhdh-performance}
 
+export ALWAYS_CLEANUP=${ALWAYS_CLEANUP:-false}
+
 export WAIT_FOR_SEARCH_INDEX=${WAIT_FOR_SEARCH_INDEX:-true}
 
 export GITHUB_TOKEN GITHUB_USER GITHUB_REPO QUAY_TOKEN
@@ -133,12 +135,22 @@ for w in "${workers[@]}"; do
                                 index="${r}r-${dbr}dbr-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c"
                                 set +x
                                 oc login "$OPENSHIFT_API" -u "$OPENSHIFT_USERNAME" -p "$OPENSHIFT_PASSWORD" --insecure-skip-tls-verify=true
-                                make clean-local undeploy-rhdh
-                                setup_artifacts="$SCALABILITY_ARTIFACTS/$index/setup/${counter}"
-                                mkdir -p "$setup_artifacts"
-                                ARTIFACT_DIR=$setup_artifacts ./ci-scripts/setup.sh 2>&1| tee "$setup_artifacts/setup.log"
-                                wait_for_indexing 2>&1| tee "$setup_artifacts/after-setup-search.log"
+                                if [ "$ALWAYS_CLEANUP" == "false" ]; then
+                                    make clean-local undeploy-rhdh
+                                    setup_artifacts="$SCALABILITY_ARTIFACTS/$index/setup/${counter}"
+                                    mkdir -p "$setup_artifacts"
+                                    ARTIFACT_DIR=$setup_artifacts ./ci-scripts/setup.sh 2>&1 | tee "$setup_artifacts/setup.log"
+                                    wait_for_indexing 2>&1 | tee "$setup_artifacts/after-setup-search.log"
+                                fi
                                 for au_sr in "${active_users_spawn_rate[@]}"; do
+                                    if [ "$ALWAYS_CLEANUP" != "false" ]; then
+                                        echo "Always cleanup is enabled, cleaning up and setting up again"
+                                        make clean-local undeploy-rhdh
+                                        setup_artifacts="$SCALABILITY_ARTIFACTS/$index/setup/${counter}"
+                                        mkdir -p "$setup_artifacts"
+                                        ARTIFACT_DIR=$setup_artifacts ./ci-scripts/setup.sh 2>&1 | tee "$setup_artifacts/setup.log"
+                                        wait_for_indexing 2>&1 | tee "$setup_artifacts/after-setup-search.log"
+                                    fi
                                     IFS=":" read -ra tokens <<<"${au_sr}"
                                     au=${tokens[0]}                                          # active users
                                     [[ "${#tokens[@]}" == 1 ]] && sr="" || sr="${tokens[1]}" # spawn rate
@@ -154,12 +166,12 @@ for w in "${workers[@]}"; do
                                     make clean
                                     test_artifacts="$SCALABILITY_ARTIFACTS/$index/test/${counter}/${au}u"
                                     mkdir -p "$test_artifacts"
-                                    wait_for_indexing 2>&1| tee "$test_artifacts/before-test-search.log"
-                                    ARTIFACT_DIR=$test_artifacts ./ci-scripts/test.sh 2>&1| tee "$test_artifacts/test.log"
-                                    ARTIFACT_DIR=$test_artifacts ./ci-scripts/collect-results.sh 2>&1| tee "$test_artifacts/collect-results.log"
-                                    jq ".metadata.scalability.iteration = ${counter}" "$test_artifacts/benchmark.json" > $$.json
+                                    wait_for_indexing 2>&1 | tee "$test_artifacts/before-test-search.log"
+                                    ARTIFACT_DIR=$test_artifacts ./ci-scripts/test.sh 2>&1 | tee "$test_artifacts/test.log"
+                                    ARTIFACT_DIR=$test_artifacts ./ci-scripts/collect-results.sh 2>&1 | tee "$test_artifacts/collect-results.log"
+                                    jq ".metadata.scalability.iteration = ${counter}" "$test_artifacts/benchmark.json" >$$.json
                                     mv -vf $$.json "$test_artifacts/benchmark.json"
-                                    (( counter += 1 ))
+                                    ((counter += 1))
                                 done
                             done
                         done
