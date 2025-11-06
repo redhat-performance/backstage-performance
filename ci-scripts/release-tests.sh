@@ -17,7 +17,16 @@ function configure_run() {
     testname="$3"
 
     git checkout "$SOURCE_BRANCH"
-    git checkout -b "$branch"
+    git pull origin "$SOURCE_BRANCH"
+
+    if git show-ref --verify --quiet refs/heads/"$branch"; then
+        echo "$(date -u +'%Y-%m-%dT%H:%M:%S,%N+00:00') INFO Branch $branch exists, updating it"
+        git checkout "$branch"
+        git pull origin "$branch"  # Pull existing branch changes
+    else
+        echo "$(date -u +'%Y-%m-%dT%H:%M:%S,%N+00:00') INFO Creating new branch $branch"
+        git checkout -b "$branch"
+    fi
 
     echo "
 export DURATION=$DURATION
