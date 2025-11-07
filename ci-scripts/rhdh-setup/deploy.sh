@@ -221,6 +221,10 @@ install() {
         log_error "Installation failed!!!"
         return "$exit_code"
     fi
+
+    if ${ENABLE_ORCHESTRATOR}; then
+        install_workflows
+    fi
     psql_debug
 }
 
@@ -377,6 +381,16 @@ backstage_install() {
             log_info "Waiting for the '$entity_type' count to be ${e_count} (current: ${b_count})"
             sleep 10s
         done
+    done
+}
+
+install_workflows() {
+    log_info "Installing Orchestrator workflows"
+    mkdir -p "$TMP_DIR/workflows"
+    find template/workflows/basic -type f -print0 | while IFS= read -r -d '' i; do
+        # shellcheck disable=SC2094
+        envsubst <"$i" >"$TMP_DIR/workflows/$(basename "$i")"
+        $clin apply -f "$TMP_DIR/workflows/$(basename "$i")"
     done
 }
 
@@ -617,28 +631,8 @@ setup_monitoring() {
         oc -n openshift-user-workload-monitoring rollout status statefulset/prometheus-user-workload -w
     fi
 
-    log_info "Setup monitoring"
-    cat <<EOF | kubectl -n locust-operator apply -f -
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  labels:
-    app: locust-operator
-  annotations:
-    networkoperator.openshift.io/ignore-errors: ""
-  name: locust-operator-monitor
-  namespace: locust-operator
-spec:
-  endpoints:
-    - interval: 10s
-      port: prometheus-metrics
-      honorLabels: true
-  jobLabel: app
-  namespaceSelector:
-    matchNames:
-      - locust-operator
-  selector: {}
-EOF
+    log_info "Setting up Locust monitoring"
+    envsubst <template/locust-metrics/locust-service-monitor.yaml | kubectl -n "${LOCUST_NAMESPACE}" apply -f -
 }
 
 delete() {
@@ -748,7 +742,7 @@ delete_orchestrator_infra() {
     $cli delete ns knative-serving-ingress --ignore-not-found=true --wait
 }
 
-while getopts "oi:mrd" flag; do
+while getopts "oi:mrdw" flag; do
     case "${flag}" in
     o)
         export INSTALL_METHOD=olm
@@ -763,6 +757,9 @@ while getopts "oi:mrd" flag; do
     i)
         AUTH_PROVIDER="$OPTARG"
         install
+        ;;
+    w)
+        install_workflows
         ;;
     m)
         setup_monitoring

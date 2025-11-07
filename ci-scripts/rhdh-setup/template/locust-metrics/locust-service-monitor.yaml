@@ -1,0 +1,19 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  annotations:
+    networkoperator.openshift.io/ignore-errors: ''
+  labels:
+    app: locust-operator
+  name: ${LOCUST_NAMESPACE}-monitor
+  namespace: ${LOCUST_NAMESPACE}
+spec:
+  endpoints:
+    - honorLabels: true
+      interval: 10s
+      port: prometheus-metrics
+  jobLabel: app
+  namespaceSelector:
+    matchNames:
+      - ${LOCUST_NAMESPACE}
+  selector: {}

@@ -25,16 +25,16 @@ orchestrator:
 upstream:
   backstage:
     appConfig:
-        database:
-          connection:
-            password: "${POSTGRESQL_ADMIN_PASSWORD}"
-            user: postgres
-        auth:
-          externalAccess:
-            - type: legacy
-              options:
-                secret: ${BACKEND_SECRET}
-                subject: legacy-catalog
+      database:
+        connection:
+          password: "${POSTGRESQL_ADMIN_PASSWORD}"
+          user: postgres
+      auth:
+        externalAccess:
+          - type: legacy
+            options:
+              secret: ${BACKEND_SECRET}
+              subject: legacy-catalog
     containerPorts:
       backend: 7007
     extraAppConfig:

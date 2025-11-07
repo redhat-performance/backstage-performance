@@ -22,6 +22,8 @@ RHDH_NAMESPACE=${RHDH_NAMESPACE:-rhdh-performance}
 ENABLE_PROFILING="${ENABLE_PROFILING:-false}"
 RHDH_INSTALL_METHOD="${RHDH_INSTALL_METHOD:-helm}"
 LOCUST_NAMESPACE="${LOCUST_NAMESPACE:-locust-operator}"
+RHDH_METRIC="${RHDH_METRIC:-true}"
+PSQL_EXPORT="${PSQL_EXPORT:-false}"
 
 cli="oc"
 clin="$cli -n $RHDH_NAMESPACE"
@@ -36,7 +38,7 @@ gather_pod_logs() {
     for pod in $pods; do
         echo "$pod"
         containers=$($cli -n "$namespace" get pod "$pod" -o json | jq -r '.spec.containers[].name')
-        if $cli -n "$namespace" get pod "$pod" -o json | jq -e '.spec.initContainers? // empty' > /dev/null; then
+        if $cli -n "$namespace" get pod "$pod" -o json | jq -e '.spec.initContainers? // empty' >/dev/null; then
             init_containers=$($cli -n "$namespace" get pod "$pod" -o json | jq -r '.spec.initContainers[].name // empty')
         else
             init_containers=""
@@ -64,6 +66,11 @@ for label in app.kubernetes.io/name=developer-hub app.kubernetes.io/name=postgre
     done
 done
 gather_pod_logs "${ARTIFACT_DIR}/rhdh-logs" "$pods" "$RHDH_NAMESPACE"
+
+if [ "$ENABLE_ORCHESTRATOR" == "true" ]; then
+    pods=$($clin get pods -l app.kubernetes.io/component=serverless-workflow -o jsonpath='{.items[*].metadata.name}')
+    gather_pod_logs "${ARTIFACT_DIR}/workflow-logs" "$pods" "$RHDH_NAMESPACE"
+fi
 
 monitoring_collection_data=$ARTIFACT_DIR/benchmark.json
 monitoring_collection_log=$ARTIFACT_DIR/monitoring-collection.log
@@ -112,6 +119,7 @@ try_gather_file "${TMP_DIR}/rbac-config.yaml"
 try_gather_file "${TMP_DIR}/locust-k8s-operator.values.yaml"
 try_gather_file load-test.log
 try_gather_file postgresql.log
+try_gather_dir "${TMP_DIR}/workflows"
 
 # Metrics
 PYTHON_VENV_DIR=.venv
@@ -140,6 +148,23 @@ timestamp_diff() {
     python3 -c "from datetime import datetime; st = datetime.strptime('$started', '%Y-%m-%d %H:%M:%S.%f%z'); et = datetime.strptime('$ended', '%Y-%m-%d %H:%M:%S.%f%z'); diff = et - st; print(f'{diff.total_seconds():.9f}')"
 }
 
+metrics_config_dir="${ARTIFACT_DIR}/metrics-config"
+mkdir -p "$metrics_config_dir"
+
+collect_additional_metrics() {
+    echo "$(date -u -Ins) Collecting metrics from $1"
+    status_data.py \
+        --status-data-file "$monitoring_collection_data" \
+        --additional "$1" \
+        --monitoring-start "$mstart" \
+        --monitoring-end "$mend" \
+        --monitoring-raw-data-dir "$monitoring_collection_dir" \
+        --prometheus-host "https://$mhost" \
+        --prometheus-port 443 \
+        --prometheus-token "$($cli whoami -t)" \
+        -d >>"$monitoring_collection_log" 2>&1
+}
+
 # populate phase
 if [ "$PRE_LOAD_DB" == "true" ]; then
     start_ts="$(cat "${ARTIFACT_DIR}/populate-before")"
@@ -163,7 +188,7 @@ if [ "$PRE_LOAD_DB" == "true" ]; then
     populate_catalog_started=$(cat "${ARTIFACT_DIR}/populate-catalog-before")
     populate_catalog_ended=$(cat "${ARTIFACT_DIR}/populate-catalog-after")
     populate_catalog_duration="$(timestamp_diff "$populate_catalog_started" "$populate_catalog_ended")"
-
+    echo "$(date -u -Ins) Collecting Populate phase metrics"
     status_data.py \
         --status-data-file "$monitoring_collection_data" \
         --set \
@@ -180,16 +205,20 @@ if [ "$PRE_LOAD_DB" == "true" ]; then
         measurements.timings.populate_catalog.ended="$populate_catalog_ended" \
         measurements.timings.populate_catalog.duration="$populate_catalog_duration" \
         -d >"$monitoring_collection_log" 2>&1
-    status_data.py \
-        --status-data-file "$monitoring_collection_data" \
-        --additional config/cluster_read_config.populate.yaml \
-        --monitoring-start "$mstart" \
-        --monitoring-end "$mend" \
-        --monitoring-raw-data-dir "$monitoring_collection_dir" \
-        --prometheus-host "https://$mhost" \
-        --prometheus-port 443 \
-        --prometheus-token "$($cli whoami -t)" \
-        -d >>"$monitoring_collection_log" 2>&1
+    envsubst <config/cluster_read_config.populate.yaml >"${metrics_config_dir}/cluster_read_config.populate.yaml"
+    collect_additional_metrics "${metrics_config_dir}/cluster_read_config.populate.yaml"
+    if [ "$PSQL_EXPORT" == "true" ]; then
+        echo "$(date -u -Ins) Collecting Postgresql specific metrics (populate)"
+        envsubst <config/cluster_read_config.populate.postgresql.yaml >"${metrics_config_dir}/cluster_read_config.populate.postgresql.yaml"
+        collect_additional_metrics "${metrics_config_dir}/cluster_read_config.populate.postgresql.yaml" "$monitoring_collection_data"
+    fi
+    #NodeJS specific metrics
+    if [ "$RHDH_METRIC" == "true" ]; then
+        echo "$(date -u -Ins) Collecting NodeJS specific metrics (populate)"
+        envsubst <config/cluster_read_config.populate.nodejs.yaml >"${metrics_config_dir}/cluster_read_config.populate.nodejs.yaml"
+        collect_additional_metrics "${metrics_config_dir}/cluster_read_config.populate.nodejs.yaml"
+    fi
+
 fi
 # test phase
 start_ts="$(cat "${ARTIFACT_DIR}/benchmark-before")"
@@ -201,6 +230,7 @@ mhost=$(kubectl -n openshift-monitoring get route -l app.kubernetes.io/name=than
 mversion=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' "scenarios/$(cat "${ARTIFACT_DIR}/benchmark-scenario").py")
 benchmark_started=$(cat "${ARTIFACT_DIR}/benchmark-before")
 benchmark_ended=$(cat "${ARTIFACT_DIR}/benchmark-after")
+echo "$(date -u -Ins) Collecting Test phase metrics"
 status_data.py \
     --status-data-file "$monitoring_collection_data" \
     --set \
@@ -211,28 +241,26 @@ status_data.py \
     metadata.scenario.name="$(cat "${ARTIFACT_DIR}/benchmark-scenario")" \
     metadata.scenario.version="$mversion" \
     -d >"$monitoring_collection_log" 2>&1
-status_data.py \
-    --status-data-file "$monitoring_collection_data" \
-    --additional config/cluster_read_config.test.yaml \
-    --monitoring-start "$mstart" \
-    --monitoring-end "$mend" \
-    --monitoring-raw-data-dir "$monitoring_collection_dir" \
-    --prometheus-host "https://$mhost" \
-    --prometheus-port 443 \
-    --prometheus-token "$($cli whoami -t)" \
-    -d >>"$monitoring_collection_log" 2>&1
+envsubst <config/cluster_read_config.test.yaml >"${metrics_config_dir}/cluster_read_config.test.yaml"
+collect_additional_metrics "${metrics_config_dir}/cluster_read_config.test.yaml"
 #Scenario specific metrics
-if [ -f "scenarios/$(cat "${ARTIFACT_DIR}/benchmark-scenario").metrics.yaml" ]; then
-    status_data.py \
-        --status-data-file "$monitoring_collection_data" \
-        --additional "scenarios/$(cat "${ARTIFACT_DIR}/benchmark-scenario").metrics.yaml" \
-        --monitoring-start "$mstart" \
-        --monitoring-end "$mend" \
-        --monitoring-raw-data-dir "$monitoring_collection_dir" \
-        --prometheus-host "https://$mhost" \
-        --prometheus-port 443 \
-        --prometheus-token "$($cli whoami -t)" \
-        -d >>"$monitoring_collection_log" 2>&1
+echo "$(date -u -Ins) Collecting Scenario specific metrics"
+benchmark_scenario=$(cat "${ARTIFACT_DIR}/benchmark-scenario")
+if [ -f "scenarios/$benchmark_scenario.metrics.yaml" ]; then
+    envsubst <"scenarios/$benchmark_scenario.metrics.yaml" >"${metrics_config_dir}/$benchmark_scenario.metrics.yaml"
+    collect_additional_metrics "${metrics_config_dir}/$benchmark_scenario.metrics.yaml"
+fi
+#Postgresql specific metrics
+if [ "$PSQL_EXPORT" == "true" ]; then
+    echo "$(date -u -Ins) Collecting Postgresql specific metrics (test)"
+    envsubst <config/cluster_read_config.test.postgresql.yaml >"${metrics_config_dir}/cluster_read_config.test.postgresql.yaml"
+    collect_additional_metrics "${metrics_config_dir}/cluster_read_config.test.postgresql.yaml"
+fi
+#NodeJS specific metrics
+if [ "$RHDH_METRIC" == "true" ]; then
+    echo "$(date -u -Ins) Collecting NodeJS specific metrics (test)"
+    envsubst <config/cluster_read_config.test.nodejs.yaml >"${metrics_config_dir}/cluster_read_config.test.nodejs.yaml"
+    collect_additional_metrics "${metrics_config_dir}/cluster_read_config.test.nodejs.yaml"
 fi
 set +u
 deactivate
@@ -254,8 +282,10 @@ if [ "$RHDH_INSTALL_METHOD" == "helm" ] && ${ENABLE_PROFILING}; then
     $clin exec "$pod" -c backstage-backend -- /bin/bash -c 'find /opt/app-root/src -name "*.heapsnapshot" -exec base64 -w0 {} \;' | base64 -d >"$memory_profile_file"
 fi
 
+echo "$(date -u -Ins) Generating summary CSV"
 ./ci-scripts/runs-to-csv.sh "$ARTIFACT_DIR" >"$ARTIFACT_DIR/summary.csv"
 
+echo "$(date -u -Ins) Collecting error reports"
 # Error report
 find "$ARTIFACT_DIR" -name load-test.log -print0 | sort -V | while IFS= read -r file; do
     if grep "Error report" "$file" >/dev/null; then

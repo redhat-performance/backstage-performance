@@ -150,7 +150,7 @@ deploy-locust: namespace
 	else \
 		echo "Helm release \"$(LOCUST_OPERATOR)\" already exists"; \
 	fi
-	kubectl wait --timeout=180s --namespace $(LOCUST_NAMESPACE) --for=condition=ready $$(kubectl get --namespace $(LOCUST_NAMESPACE) pod -o name)
+	kubectl wait --timeout=180s --namespace $(LOCUST_NAMESPACE) --for=condition=ready $$(kubectl get --namespace $(LOCUST_NAMESPACE) pod -l app.kubernetes.io/name=locust-k8s-operator -o name)
 
 ## Uninstall locust operator helm chart
 .PHONY: undeploy-locust
