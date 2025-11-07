@@ -1,0 +1,76 @@
+{% macro rhdh_nodejs_rate( query ) -%}
+# Gather nodejs monitoring data about the {{ query }}
+- name: measurements.nodejs.populate.{{ query }}
+  monitoring_query: sum(rate({{ query }}{ job="rhdh-metrics", namespace="${RHDH_NAMESPACE}" }[5m]))
+  monitoring_step: 15
+{%- endmacro %}
+
+{% for query in [
+'process_cpu_user_seconds_total',
+'process_cpu_system_seconds_total',
+'process_cpu_seconds_total',
+'catalog_stitched_entities_count_total'
+] %}
+{{ rhdh_nodejs_rate(query) }}
+{% endfor %}
+
+
+{% macro rhdh_nodejs( query ) -%}
+# Gather nodejs monitoring data about the {{ query }}
+- name: measurements.nodejs.populate.{{ query }}
+  monitoring_query: sum({{ query }}{ job="rhdh-metrics", namespace="${RHDH_NAMESPACE}" })
+  monitoring_step: 15
+{%- endmacro %}
+
+{% for query in [
+'process_resident_memory_bytes',
+'process_virtual_memory_bytes',
+'process_heap_bytes',
+'process_open_fds',
+'nodejs_eventloop_lag_seconds',
+'nodejs_eventloop_lag_mean_seconds',
+'nodejs_eventloop_lag_stddev_seconds',
+'nodejs_eventloop_lag_p90_seconds',
+'nodejs_active_resources_total',
+'nodejs_active_handles_total',
+'nodejs_active_requests_total',
+'nodejs_heap_size_total_bytes',
+'nodejs_heap_size_used_bytes',
+'nodejs_external_memory_bytes',
+'catalog_registered_locations_count',
+'catalog_relations_count',
+'catalog_processing_queue_delay_seconds_sum',
+'catalog_processing_queue_delay_seconds_count'
+] %}
+{{ rhdh_nodejs(query) }}
+{% endfor %}
+
+{% macro rhdh_nodejs_lst( query, label, valuelst) -%}
+{% for value  in valuelst %}
+# Gather nodejs monitoring data about the {{ query }}
+- name: measurements.nodejs.populate.{{ query }}.{{ label }}.{{ 
+value }}
+  monitoring_query: sum({{ query }}{ {{ label }}="{{ value }}", job="rhdh-metrics", namespace="${RHDH_NAMESPACE}" })
+  monitoring_step: 15
+{% endfor %}
+{%- endmacro %}
+
+{{ rhdh_nodejs_lst('catalog_processors_duration_seconds_sum', 'result', ['ok','failed']) }}
+{{ rhdh_nodejs_lst('catalog_processors_duration_seconds_count', 'result', ['ok','failed']) }}
+{{ rhdh_nodejs_lst('catalog_processing_duration_seconds_sum', 'result', ['unchanged']) }}
+{{ rhdh_nodejs_lst('catalog_processing_duration_seconds_count', 'result', ['unchanged']) }}
+{{ rhdh_nodejs_lst('nodejs_gc_duration_seconds_sum', 'kind', ['minor','major','incremental']) }}
+{{ rhdh_nodejs_lst('nodejs_gc_duration_seconds_count', 'kind', ['minor','major','incremental']) }}
+{{ rhdh_nodejs_lst('catalog_entities_count', 'kind', ['location','user','group']) }}
+
+- name: measurements.nodejs.populate.catalog_processing_queue_delay_seconds_average
+  monitoring_query: sum(rate(catalog_processing_queue_delay_seconds_sum{job="rhdh-metrics", namespace="${RHDH_NAMESPACE}"}[5m]))/sum(rate(catalog_processing_queue_delay_seconds_count{job="rhdh-metrics", namespace="${RHDH_NAMESPACE}"}[5m]))
+  monitoring_step: 15
+
+- name: measurements.nodejs.populate.catalog_processors_duration_seconds_failed_average
+  monitoring_query: sum(rate(catalog_processors_duration_seconds_sum{result="failed",job="rhdh-metrics", namespace="${RHDH_NAMESPACE}"}[5m]))/sum(rate(catalog_processors_duration_seconds_count{result="failed",job="rhdh-metrics", namespace="${RHDH_NAMESPACE}"}[5m]))
+  monitoring_step: 15
+
+- name: measurements.nodejs.populate.nodejs_gc_duration_seconds_major_average
+  monitoring_query: sum(rate(nodejs_gc_duration_seconds_sum{kind="major",job="rhdh-metrics", namespace="${RHDH_NAMESPACE}"}[5m]))/sum(rate(nodejs_gc_duration_seconds_count{kind="major",job="rhdh-metrics", namespace="${RHDH_NAMESPACE}"}[5m]))
+  monitoring_step: 15

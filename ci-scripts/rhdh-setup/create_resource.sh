@@ -395,12 +395,12 @@ create_groups() {
   if [[ "$RBAC_POLICY" == "$RBAC_POLICY_NESTED_GROUPS" ]]; then
     N="${RBAC_POLICY_SIZE:-$GROUP_COUNT}"
     [ "$N" -gt "$GROUP_COUNT" ] && N="$GROUP_COUNT"
-    seq 1 "$N" | xargs -n1 -P1 -I{} bash -lc "create_group \"\$1\"" _ {}
+    seq 1 "$N" | xargs -P1 -I{} bash -lc "create_group \"\$1\"" _ {}
     if [ "$GROUP_COUNT" -gt "$N" ]; then
-      seq $((N+1)) "$GROUP_COUNT" | xargs -n1 -P"${POPULATION_CONCURRENCY}" -I{} bash -lc "create_group \"\$1\"" _ {}
+      seq $((N+1)) "$GROUP_COUNT" | xargs -P"${POPULATION_CONCURRENCY}" -I{} bash -lc "create_group \"\$1\"" _ {}
     fi
   else
-    seq 1 "$GROUP_COUNT" | xargs -n1 -P"${POPULATION_CONCURRENCY}" -I{} bash -lc "create_group \"\$1\"" _ {}
+    seq 1 "$GROUP_COUNT" | xargs -P"${POPULATION_CONCURRENCY}" -I{} bash -lc "create_group \"\$1\"" _ {}
   fi
 }
 

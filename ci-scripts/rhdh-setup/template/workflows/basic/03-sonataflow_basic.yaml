@@ -1,0 +1,81 @@
+apiVersion: sonataflow.org/v1alpha08
+kind: SonataFlow
+metadata:
+  annotations:
+    sonataflow.org/description: Print input value
+    sonataflow.org/expressionLang: jq
+    sonataflow.org/profile: gitops
+    sonataflow.org/version: "1.0"
+  creationTimestamp: null
+  labels:
+    app: basic
+    app.kubernetes.io/component: serverless-workflow
+    app.kubernetes.io/managed-by: sonataflow-operator
+    app.kubernetes.io/name: basic
+    sonataflow.org/workflow-app: basic
+    sonataflow.org/workflow-namespace: ""
+  name: basic
+spec:
+  flow:
+    dataInputSchema:
+      failOnValidationErrors: true
+      schema: schemas/basic__main-schema.json
+    functions:
+      - name: print
+        operation: sysout
+        type: custom
+      - name: customBasic
+        operation: service:java:basic.Basic::BasicMethod
+        type: custom
+      - name: successResult
+        operation: '{ "result": { "message": "Project " + .projectName + " active", "outputs":[] } }'
+        type: expression
+    start:
+      stateName: Print inputs
+    states:
+      - actionMode: sequential
+        actions:
+          - actionDataFilter:
+              useResults: true
+            functionRef:
+              arguments:
+                message: '"Project " + .projectName'
+              invoke: sync
+              refName: print
+          - actionDataFilter:
+              useResults: true
+            functionRef:
+              arguments:
+                project: .projectName
+              invoke: sync
+              refName: customBasic
+          - actionDataFilter:
+              useResults: true
+            functionRef:
+              invoke: sync
+              refName: successResult
+            name: setOutput
+        end:
+          terminate: true
+        name: Print inputs
+        type: operation
+  podTemplate:
+    container:
+      image: quay.io/backstage-performance/orchestrator-demo-basic:latest
+      resources: {}
+  resources:
+    configMaps:
+      - configMap:
+          name: basic-resources-schemas
+        workflowPath: schemas
+  persistence:
+    postgresql:
+      secretRef:
+        name: ${RHDH_HELM_RELEASE_NAME}-postgresql-svcbind-postgres
+        userKey: username
+        passwordKey: password
+      serviceRef:
+        name: ${RHDH_HELM_RELEASE_NAME}-postgresql-primary
+        port: 5432
+        databaseName: sonataflow
+        databaseSchema: basic
