@@ -27,7 +27,7 @@ catalog:
           timeout: 
             minutes: 1
           initialDelay: 
-            seconds: 15
+            minutes: 1
 techdocs:
   builder: local
   generator:
