@@ -50,6 +50,7 @@ export USE_PR_BRANCH=true
 export WAIT_FOR_SEARCH_INDEX=false
 export RHDH_HELM_CHART=redhat-developer-hub
 export AUTH_PROVIDER=keycloak
+export ENABLE_ORCHESTRATOR=true
 export RHDH_HELM_CHART_VERSION='$RHDH_HELM_CHART_VERSION'
 " >>test.env
 
