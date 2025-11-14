@@ -45,6 +45,7 @@ YAML metadata format:
   metrics:
     RHDH_Memory_Avg:
       title: "RHDH Memory Consumption"
+      subtitle: "Optional subtitle text"
       label: "Memory Usage"
       units: "MiB"
     RHDH_CPU_Avg:
@@ -245,7 +246,7 @@ def generate_chart(metric, csv_files, labels, x_axis, x_scale, metadata=None):
                 mode='lines+markers',
                 name=labels[i],
                 line=dict(color=color, width=2),
-                marker=dict(size=8, color=color),
+                marker=dict(size=6, color=color),
                 hovertemplate='%{text}<extra></extra>',
                 text=hover_text,
                 showlegend=True
@@ -270,7 +271,10 @@ def generate_chart(metric, csv_files, labels, x_axis, x_scale, metadata=None):
                             font=dict(size=10, color=color)
                         )
                     )
-                fig.update_layout(annotations=annotations)
+                # Store annotations to merge with subtitle annotation later
+                if not hasattr(fig, '_value_annotations'):
+                    fig._value_annotations = []
+                fig._value_annotations.extend(annotations)
 
     # Use x-label from command line arguments or default to x_axis column name
     x_label = args.x_label if args.x_label else x_axis
@@ -286,20 +290,41 @@ def generate_chart(metric, csv_files, labels, x_axis, x_scale, metadata=None):
 
     # Get chart title from metadata or use default
     chart_title = f'RHDH {metric} vs {x_axis}'
+    chart_subtitle = None
     if metadata and 'metrics' in metadata and metric in metadata['metrics']:
         metric_info = metadata['metrics'][metric]
         if 'title' in metric_info:
             chart_title = metric_info['title']
+        if 'subtitle' in metric_info:
+            chart_subtitle = metric_info['subtitle']
+
+    # Combine title and subtitle into HTML string if subtitle exists
+    if chart_subtitle:
+        # Use HTML to format title and subtitle with different font sizes
+        title_html = f'{chart_title}<br><span style="font-size: 14px; color: gray;">{chart_subtitle}</span>'
+    else:
+        title_html = chart_title
 
     # Update layout
-    fig.update_layout(
-        title=dict(
-            text=chart_title,
-            font=dict(size=26),
-            x=0.5,
-            y=0.94,
-            xanchor='center'
-        ),
+    title_dict = dict(
+        text=title_html,
+        font=dict(size=20),
+        x=0.5,
+        xanchor='center'
+    )
+
+    # Increase top margin when subtitle is present to ensure it's visible
+    top_margin = 80 if chart_subtitle else 60
+
+    # Collect value annotations if they exist
+    all_annotations = []
+    if hasattr(fig, '_value_annotations'):
+        all_annotations.extend(fig._value_annotations)
+        delattr(fig, '_value_annotations')
+
+    # Build layout update dict
+    layout_update = dict(
+        title=title_dict,
         xaxis=dict(
             title=x_label,
             type='log' if x_scale == 'log' else 'linear',
@@ -326,9 +351,15 @@ def generate_chart(metric, csv_files, labels, x_axis, x_scale, metadata=None):
         hovermode='closest',
         autosize=True,
         width=None,  # Let CSS control the width
-        height=500,  # Fixed height
-        margin=dict(l=60, r=100, t=60, b=60)
+        height=400,  # Fixed height
+        margin=dict(l=60, r=100, t=top_margin, b=60)
     )
+
+    # Add annotations only if there are any
+    if all_annotations:
+        layout_update['annotations'] = all_annotations
+
+    fig.update_layout(**layout_update)
 
     # Set axis ranges
     if all_x and all_metric_values:
@@ -372,8 +403,8 @@ def generate_chart(metric, csv_files, labels, x_axis, x_scale, metadata=None):
         'toImageButtonOptions': {
             'format': 'png',
             'filename': filename,
-            'height': 500,
-            'width': 800,
+            'height': 300,
+            'width': 500,
             'scale': 1
         }
     }
@@ -430,7 +461,7 @@ def generate_html_summary(chart_data, labels, output_dir, metadata=None):
         }}
         .chart-item .plotly {{
             width: 100% !important;
-            height: 500px !important;
+            height: 400px !important;
             border: 1px solid #ddd;
             border-radius: 4px;
             min-width: 0;
@@ -439,7 +470,7 @@ def generate_html_summary(chart_data, labels, output_dir, metadata=None):
         }}
         .plotly-graph-div {{
             width: 100% !important;
-            height: 500px !important;
+            height: 400px !important;
             min-width: 0;
             max-width: 100%;
         }}
@@ -504,7 +535,7 @@ def generate_html_summary(chart_data, labels, output_dir, metadata=None):
                 padding: 10px;
             }}
             .chart-item .plotly {{
-                height: 350px;
+                height: 400px;
             }}
         }}
     </style>
@@ -591,16 +622,34 @@ def generate_html_summary(chart_data, labels, output_dir, metadata=None):
             var zip = new JSZip();
             var downloadPromises = [];
             
+            // Count valid charts to determine padding width
+            var validChartCount = 0;
+            charts.forEach(function(chart) {
+                if (chart.data) {
+                    validChartCount++;
+                }
+            });
+            
+            // Calculate padding width (e.g., 2 digits for 1-99 charts, 3 for 100-999, etc.)
+            var paddingWidth = validChartCount.toString().length;
+            
+            // Track current chart index for ordering
+            var chartIndex = 0;
+            
             charts.forEach(function(chart, index) {
                 if (chart.data) {
+                    // Capture the current index for this chart
+                    var currentIndex = chartIndex;
+                    chartIndex++;
+                    
                     var promise = Plotly.toImage(chart, {
                         format: 'png',
-                        width: 800,
-                        height: 500,
+                        width: 500,
+                        height: 300,
                         scale: 2
                     }).then(function(dataUrl) {
                         // Get the download filename that matches individual chart downloads
-                        var chartTitle = 'Chart_' + (index + 1);
+                        var chartTitle = 'Chart_' + (currentIndex + 1);
                         
                         // First try to get the pre-calculated download filename (matches individual downloads)
                         // Need to find the chart-item element that contains the data attributes
@@ -620,13 +669,17 @@ def generate_html_summary(chart_data, labels, output_dir, metadata=None):
                             }
                         }
                         // Try to get title from chart's layout title
-                        if (chartTitle === 'Chart_' + (index + 1) && chart.layout && chart.layout.title && chart.layout.title.text) {
+                        if (chartTitle === 'Chart_' + (currentIndex + 1) && chart.layout && chart.layout.title && chart.layout.title.text) {
                             chartTitle = chart.layout.title.text.replace(/[^a-zA-Z0-9]/g, '_');
                         }
                         // Try to get title from chart's data trace name
-                        if (chartTitle === 'Chart_' + (index + 1) && chart.data && chart.data[0] && chart.data[0].name) {
+                        if (chartTitle === 'Chart_' + (currentIndex + 1) && chart.data && chart.data[0] && chart.data[0].name) {
                             chartTitle = chart.data[0].name.replace(/[^a-zA-Z0-9]/g, '_');
                         }
+                        
+                        // Add zero-padded prefix to maintain order (e.g., "01-", "02-", "10-", "100-")
+                        var prefix = String(currentIndex + 1).padStart(paddingWidth, '0') + '-';
+                        var zipFilename = prefix + chartTitle + '.png';
                         
                         // Convert data URL to binary data
                         var base64Data = dataUrl.split(',')[1];
@@ -636,8 +689,8 @@ def generate_html_summary(chart_data, labels, output_dir, metadata=None):
                             bytes[i] = binaryData.charCodeAt(i);
                         }
                         
-                        // Add to ZIP file
-                        zip.file(chartTitle + '.png', bytes);
+                        // Add to ZIP file with prefixed filename
+                        zip.file(zipFilename, bytes);
                     });
                     downloadPromises.push(promise);
                 }
