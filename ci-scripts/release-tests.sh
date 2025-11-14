@@ -17,7 +17,21 @@ function configure_run() {
     testname="$3"
 
     git checkout "$SOURCE_BRANCH"
-    git checkout -b "$branch"
+    git pull origin "$SOURCE_BRANCH"
+
+    if git show-ref --verify --quiet refs/heads/"$branch" || git show-ref --verify --quiet refs/remotes/origin/"$branch"; then
+        echo "$(date -u +'%Y-%m-%dT%H:%M:%S,%N+00:00') INFO Branch $branch exists, updating it"
+        git checkout "$branch" 2>/dev/null || git checkout -b "$branch" origin/"$branch"
+        git pull origin "$branch"
+    else
+        echo "$(date -u +'%Y-%m-%dT%H:%M:%S,%N+00:00') INFO Creating new branch $branch"
+        git checkout -b "$branch"
+    fi
+
+    if [ -f test.env ]; then
+        sed -i.bak '/^export DURATION=/,/^export RHDH_HELM_CHART_VERSION=/d' test.env
+        rm -f test.env.bak
+    fi
 
     echo "
 export DURATION=$DURATION
@@ -36,32 +50,45 @@ export USE_PR_BRANCH=true
 export WAIT_FOR_SEARCH_INDEX=false
 export RHDH_HELM_CHART=redhat-developer-hub
 export AUTH_PROVIDER=keycloak
+export ENABLE_ORCHESTRATOR=true
 export RHDH_HELM_CHART_VERSION='$RHDH_HELM_CHART_VERSION'
 " >>test.env
 
     git commit -am "chore($ticket): $testname on $branch"
     git push -u origin "$branch"
-    echo "$(date -u +'%Y-%m-%dT%H:%M:%S,%N+00:00') INFO Created and pushed branch ${branch}"
+    echo "$(date -u +'%Y-%m-%dT%H:%M:%S,%N+00:00') INFO Pushed branch ${branch}"
     git checkout "$SOURCE_BRANCH"
 
-    curl_data='{
-        "title": "chore('"$ticket"'): '"$branch"'",
-        "body": "**'"$testname"'**: '"$VERSION_OLD"' vs. '"$VERSION_NEW"' testing. This is to get perf&scale data for `'"$branch"'`",
-        "head": "'"$branch"'",
-        "base": "'"$SOURCE_BRANCH"'",
-        "draft": true
-    }'
-    curl_out="$( curl \
-        -L \
-        --silent \
-        -X POST \
+
+    pr_number=$( curl -L --silent \
         -H "Accept: application/vnd.github+json" \
         -H "Authorization: Bearer $GITHUB_TOKEN" \
         -H "X-GitHub-Api-Version: 2022-11-28" \
-        "https://api.github.com/repos/redhat-performance/backstage-performance/pulls" \
-        -d "$curl_data"
-    )"
-    pr_number=$( echo "$curl_out" | jq -rc '.number' )
+        "https://api.github.com/repos/redhat-performance/backstage-performance/pulls?head=redhat-performance:$branch&state=open" \
+        | jq -rc '.[0].number // empty'
+    )
+
+    if [ -z "$pr_number" ] ; then
+        curl_data='{
+            "title": "chore('"$ticket"'): '"$branch"'",
+            "body": "**'"$testname"'**: '"$VERSION_OLD"' vs. '"$VERSION_NEW"' testing. This is to get perf&scale data for `'"$branch"'`",
+            "head": "'"$branch"'",
+            "base": "'"$SOURCE_BRANCH"'",
+            "draft": true
+        }'
+        curl_out="$( curl \
+            -L \
+            --silent \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/redhat-performance/backstage-performance/pulls" \
+            -d "$curl_data"
+        )"
+        pr_number=$( echo "$curl_out" | jq -rc '.number' )
+    fi
+
     curl_comment_out="$( curl \
         -L \
         --silent \
@@ -134,8 +161,8 @@ function storage_limit_test() {
 # !!! Configure here !!!
 VERSION_OLD="1.7"
 VERSION_NEW="1.8"
-RHDH_HELM_CHART_VERSION_OLD=1.7.1
-RHDH_HELM_CHART_VERSION_NEW=1.8-145-CI
+RHDH_HELM_CHART_VERSION_OLD=1.7.2
+RHDH_HELM_CHART_VERSION_NEW=1.8-164-CI
 SOURCE_BRANCH_OLD=rhdh-v1.7.x
 SOURCE_BRANCH_NEW=main
 compare_previous_test "RHIDP-9162"
