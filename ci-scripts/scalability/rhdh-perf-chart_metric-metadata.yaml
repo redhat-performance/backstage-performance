@@ -1,11 +1,13 @@
 metrics:
   RPS_Avg:
     title: "Average RHDH Throughput"
+    subtitle: "KPI"
     label: "Requests Per Second"
     units: "req/s"
 
   RPS_Max:
     title: "Maximal RHDH Throughput"
+    subtitle: "KPI"
     label: "Requests Per Second"
     units: "req/s"
 
@@ -51,51 +53,61 @@ metrics:
 
   Failures:
     title: "Total Failures"
+    subtitle: "KPI"
     label: "Failures"
     units: "#"
 
   Fail_Ratio_Avg:
     title: "Failure Rate"
+    subtitle: "KPI"
     label: "Failure Rate"
     units: "%"
 
   Response_Time_Avg:
     title: "Average RHDH Response Time"
+    subtitle: "KPI"
     label: "Response Time"
     units: "ms"
 
   Response_Time_Max:
     title: "Maximal RHDH Response Time"
+    subtitle: "KPI"
     label: "Response Time"
     units: "ms"
 
   Components_Response_Time_Avg:
-    title: "Average Response Time (Get All Components)"
+    title: "Average Response Time"
+    subtitle: "Get All Components"
     label: "Response Time"
     units: "ms"
 
   Components_Response_Time_Max:
-    title: "Maximal Response Time (Get All Components)"
+    title: "Maximal Response Time"
+    subtitle: "Get All Components"
     label: "Response Time"
     units: "ms"
 
   ComponentsOwnedByUserGroup_Response_Time_Avg:
-    title: "Average Response Time (Get Components Owned By Group)"
+    title: "Average Response Time"
+    subtitle: "Get Components Owned By Group"
     label: "Response Time"
     units: "ms"
 
   ComponentsOwnedByUserGroup_Response_Time_Max:
-    title: "Maximal Response Time (Get Components Owned By Group)"
-    label: "Components Owned By User Group Response Time (Maximum)"
+    title: "Maximal Response Time"
+    subtitle: "Get Components Owned By Group"
+    label: "Response Time"
     units: "ms"
 
   RHDH_DB_Populate_Storage_Used:
-    title: "RHDH DB Storage Usage (Populate)"
+    title: "RHDH DB Storage Usage"
+    subtitle: "Populate"
     label: "Storage Used"
     units: "MiB"
 
   RHDH_DB_Test_Storage_Used:
-    title: "RHDH DB Storage Usage (Test)"
+    title: "RHDH DB Storage Usage"
+    subtitle: "Test"
     label: "Storage Used"
     units: "MiB"
 
@@ -125,41 +137,49 @@ metrics:
     units: "s"
 
   Orchestrator_Workflow_Overview_Response_Time_Avg:
-    title: "Average Response Time (Orchestrator Workflow Overview)"
+    title: "Average Response Time"
+    subtitle: "Orchestrator Workflow Overview"
     label: "Response Time"
     units: "ms"
 
   Orchestrator_Workflow_Overview_Response_Time_Max:
-    title: "Maximal Response Time (Orchestrator Workflow Overview)"
+    title: "Maximal Response Time"
+    subtitle: "Orchestrator Workflow Overview"
     label: "Response Time"
     units: "ms"
 
   Orchestrator_Workflow_Execute_Response_Time_Avg:
-    title: "Average Response Time (Orchestrator Workflow Execute)"
+    title: "Average Response Time"
+    subtitle: "Orchestrator Workflow Execute"
     label: "Response Time"
     units: "ms"
 
   Orchestrator_Workflow_Execute_Response_Time_Max:
-    title: "Maximal Response Time (Orchestrator Workflow Execute)"
+    title: "Maximal Response Time"
+    subtitle: "Orchestrator Workflow Execute"
     label: "Response Time"
     units: "ms"
 
   Orchestrator_Workflow_Instance_by_Id_Response_Time_Avg:
-    title: "Average Response Time (Orchestrator Workflow Instance by Id)"
+    title: "Average Response Time"
+    subtitle: "Orchestrator Workflow Instance by Id"
     label: "Response Time"
     units: "ms"
 
   Orchestrator_Workflow_Instance_by_Id_Response_Time_Max:
-    title: "Maximal Response Time (Orchestrator Workflow Instance by Id)"
+    title: "Maximal Response Time"
+    subtitle: "Orchestrator Workflow Instance by Id"
     label: "Response Time"
     units: "ms"
 
   Orchestrator_Workflow_All_Instances_Response_Time_Avg:
-    title: "Average Response Time (Orchestrator Workflow All Instances)"
+    title: "Average Response Time"
+    subtitle: "Orchestrator Workflow All Instances"
     label: "Response Time"
     units: "ms"
 
   Orchestrator_Workflow_All_Instances_Response_Time_Max:
-    title: "Maximal Response Time (Orchestrator Workflow All Instances)"
+    title: "Maximal Response Time"
+    subtitle: "Orchestrator Workflow All Instances"
     label: "Response Time"
     units: "ms"
