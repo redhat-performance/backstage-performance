@@ -134,6 +134,16 @@ deploy-rhdh-olm: $(TMP_DIR)
 undeploy-rhdh-olm:
 	cd ./ci-scripts/rhdh-setup; ./deploy.sh -o -d
 
+## Install workflows
+.PHONY: install-workflows
+install-workflows:
+	cd ./ci-scripts/rhdh-setup; ./deploy.sh -w
+
+## Uninstall workflows
+.PHONY: uninstall-workflows
+uninstall-workflows:
+	-cd ./ci-scripts/rhdh-setup; ./deploy.sh -W
+
 ##	=== Locust Operator ===
 
 ## Deploy and install locust operator helm chart
@@ -155,9 +165,9 @@ deploy-locust: namespace
 ## Uninstall locust operator helm chart
 .PHONY: undeploy-locust
 undeploy-locust: clean
-	@kubectl delete namespace $(LOCUST_NAMESPACE) --wait
-	@kubectl delete clusterrolebinding $(LOCUST_NAMESPACE)-locust-k8s-operator --wait
-	@kubectl delete clusterrole $(LOCUST_NAMESPACE)-locust-k8s-operator --wait
+	@kubectl delete namespace $(LOCUST_NAMESPACE) --wait --ignore-not-found=true
+	@kubectl delete clusterrolebinding $(LOCUST_NAMESPACE)-locust-k8s-operator --wait --ignore-not-found=true
+	@kubectl delete clusterrole $(LOCUST_NAMESPACE)-locust-k8s-operator --wait --ignore-not-found=true
 	@helm repo remove $(LOCUST_OPERATOR_REPO)
 
 ##	=== Testing ===
@@ -293,7 +303,7 @@ clean-artifacts:
 
 ## Clean all
 .PHONY: clean-all
-clean-all: namespace clean clean-local clean-artifacts undeploy-rhdh
+clean-all: namespace clean clean-local clean-artifacts uninstall-workflows undeploy-rhdh
 
 ## Deploy pgAdmin
 .PHONY: deploy-pgadmin
