@@ -64,6 +64,7 @@ export KEYCLOAK_USER_PASS=${KEYCLOAK_USER_PASS:-$(mktemp -u XXXXXXXXXX)}
 export AUTH_PROVIDER="${AUTH_PROVIDER:-''}"
 export ENABLE_RBAC="${ENABLE_RBAC:-false}"
 export ENABLE_ORCHESTRATOR="${ENABLE_ORCHESTRATOR:-false}"
+export FORCE_ORCHESTRATOR_INFRA_UNINSTALL="${FORCE_ORCHESTRATOR_INFRA_UNINSTALL:-false}"
 export ENABLE_PROFILING="${ENABLE_PROFILING:-false}"
 export RBAC_POLICY="${RBAC_POLICY:-all_groups_admin}"
 export RHDH_LOG_LEVEL="${RHDH_LOG_LEVEL:-warn}"
@@ -161,6 +162,43 @@ wait_and_approve_install_plans() {
         log_error "No unapproved install plans found in $namespace namespace within timeout"
         exit 1
     fi
+}
+
+is_orchestrator_infra_installed() {
+    helm list -n "${RHDH_NAMESPACE}" -q | grep -q "^${RHDH_HELM_RELEASE_NAME}-orchestrator-infra$"
+    return $?
+}
+
+is_serverless_operator_installed() {
+    namespace=$1
+    # Check if namespace exists first
+    if ! $cli get namespace "$namespace" >/dev/null 2>&1; then
+        return 1
+    fi
+    # Check for subscriptions or CSVs
+    $cli get subscription -n "$namespace" -o name 2>/dev/null | grep -qE "serverless-operator|logic-operator" ||
+        $cli get csv -n "$namespace" -o name 2>/dev/null | grep -qE "serverless|logic-operator"
+    return $?
+}
+
+install_orchestrator_infra() {
+    if is_orchestrator_infra_installed || is_serverless_operator_installed openshift-serverless || is_serverless_operator_installed openshift-serverless-logic; then
+        log_info "Orchestrator infra is already installed, skipping installation"
+        return 0
+    fi
+
+    orchestrator_version_arg=""
+    orchestrator_chart_origin="$RHDH_HELM_ORCHESTRATOR_REPO"
+    if [ -n "${RHDH_HELM_ORCHESTRATOR_CHART_VERSION}" ]; then
+        orchestrator_version_arg="--version $RHDH_HELM_ORCHESTRATOR_CHART_VERSION"
+        orchestrator_chart_origin="$orchestrator_chart_origin@$RHDH_HELM_ORCHESTRATOR_CHART_VERSION"
+    fi
+    log_info "Installing RHDH Orchestrator infra from $orchestrator_chart_origin"
+    # shellcheck disable=SC2086
+    helm upgrade "${RHDH_HELM_RELEASE_NAME}-orchestrator-infra" -i "${RHDH_HELM_ORCHESTRATOR_REPO}" ${orchestrator_version_arg} -n "${RHDH_NAMESPACE}"
+
+    wait_and_approve_install_plans openshift-serverless
+    wait_and_approve_install_plans openshift-serverless-logic
 }
 
 wait_to_start() {
@@ -289,17 +327,7 @@ backstage_install() {
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '. |= . + {"auth":{"environment":"production","providers":{"oauth2Proxy":{}}}}' "$TMP_DIR/app-config.yaml"; else yq -i '. |= . + {"auth":{"providers":{"guest":{"dangerouslyAllowOutsideDevelopment":true}}}}' "$TMP_DIR/app-config.yaml"; fi
 
     if ${ENABLE_ORCHESTRATOR}; then
-        orchestrator_version_arg=""
-        orchestrator_chart_origin="$RHDH_HELM_ORCHESTRATOR_REPO"
-        if [ -n "${RHDH_HELM_ORCHESTRATOR_CHART_VERSION}" ]; then
-            orchestrator_version_arg="--version $RHDH_HELM_ORCHESTRATOR_CHART_VERSION"
-            orchestrator_chart_origin="$orchestrator_chart_origin@$RHDH_HELM_ORCHESTRATOR_CHART_VERSION"
-        fi
-        log_info "Installing RHDH Orchestrator infra"
-        # shellcheck disable=SC2086
-        helm upgrade "${RHDH_HELM_RELEASE_NAME}-orchestrator-infra" -i "${RHDH_HELM_ORCHESTRATOR_REPO}" ${orchestrator_version_arg} -n "${RHDH_NAMESPACE}"
-        wait_and_approve_install_plans openshift-serverless
-        wait_and_approve_install_plans openshift-serverless-logic
+        install_orchestrator_infra
 
         yq -i '.orchestrator.dataIndexService.url="http://sonataflow-platform-data-index-service.'"$RHDH_NAMESPACE"'"' "$TMP_DIR/app-config.yaml"
         yq -i '.orchestrator.enabled=true' "$TMP_DIR/app-config.yaml"
@@ -392,6 +420,11 @@ install_workflows() {
         envsubst <"$i" >"$TMP_DIR/workflows/$(basename "$i")"
         $clin apply -f "$TMP_DIR/workflows/$(basename "$i")"
     done
+}
+
+uninstall_workflows() {
+    log_info "Uninstalling Orchestrator workflows"
+    $clin delete -f template/workflows/basic --ignore-not-found=true || true
 }
 
 # shellcheck disable=SC2016,SC1004
@@ -656,7 +689,10 @@ delete() {
         delete_rhdh_with_olm
     fi
     if ${ENABLE_ORCHESTRATOR}; then
-        delete_orchestrator_infra
+        if ${FORCE_ORCHESTRATOR_INFRA_UNINSTALL}; then
+            log_info "FORCE_ORCHESTRATOR_INFRA_UNINSTALL=true, uninstalling existing orchestrator infra if present"
+            delete_orchestrator_infra
+        fi
     fi
 }
 
@@ -742,7 +778,7 @@ delete_orchestrator_infra() {
     $cli delete ns knative-serving-ingress --ignore-not-found=true --wait
 }
 
-while getopts "oi:mrdw" flag; do
+while getopts "oi:mrdwW" flag; do
     case "${flag}" in
     o)
         export INSTALL_METHOD=olm
@@ -759,7 +795,18 @@ while getopts "oi:mrdw" flag; do
         install
         ;;
     w)
-        install_workflows
+        if [ "$INSTALL_METHOD" == "helm" ]; then
+            install_workflows
+        elif [ "$INSTALL_METHOD" == "olm" ]; then
+            log_info "Orchestrator workflows are not supported with OLM"
+        fi
+        ;;
+    W)
+        if [ "$INSTALL_METHOD" == "helm" ]; then
+            uninstall_workflows
+        elif [ "$INSTALL_METHOD" == "olm" ]; then
+            log_info "Orchestrator workflows are not supported with OLM"
+        fi
         ;;
     m)
         setup_monitoring
