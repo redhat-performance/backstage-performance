@@ -197,30 +197,30 @@
 # Results
 {%macro results_scenario(name) -%}
 - name: results.{{name}}.locust_requests_avg_response_time
-  monitoring_query: sum(locust_requests_avg_response_time{name="{{name}}", namespace="${LOCUST_NAMESPACE}"})
+  monitoring_query: sum(locust_requests_avg_response_time{name="{{name}}", namespace="${LOCUST_NAMESPACE}", job="${SCENARIO}-test-master"})
   monitoring_step: 15
 - name: results.{{name}}.locust_requests_avg_content_length
-  monitoring_query: sum(locust_requests_avg_content_length{name="{{name}}", namespace="${LOCUST_NAMESPACE}"})
+  monitoring_query: sum(locust_requests_avg_content_length{name="{{name}}", namespace="${LOCUST_NAMESPACE}", job="${SCENARIO}-test-master"})
   monitoring_step: 15
 - name: results.{{name}}.locust_requests_current_rps
-  monitoring_query: sum(locust_requests_current_rps{name="{{name}}", namespace="${LOCUST_NAMESPACE}"})
+  monitoring_query: sum(locust_requests_current_rps{name="{{name}}", namespace="${LOCUST_NAMESPACE}", job="${SCENARIO}-test-master"})
   monitoring_step: 15
 - name: results.{{name}}.locust_requests_current_fail_per_sec
-  monitoring_query: sum(locust_requests_current_fail_per_sec{name="{{name}}", namespace="${LOCUST_NAMESPACE}"})
+  monitoring_query: sum(locust_requests_current_fail_per_sec{name="{{name}}", namespace="${LOCUST_NAMESPACE}", job="${SCENARIO}-test-master"})
   monitoring_step: 15
 - name: results.{{name}}.locust_requests_num_failures
-  monitoring_query: sum(locust_requests_num_failures{name="{{name}}", namespace="${LOCUST_NAMESPACE}"})
+  monitoring_query: sum(locust_requests_num_failures{name="{{name}}", namespace="${LOCUST_NAMESPACE}", job="${SCENARIO}-test-master"})
   monitoring_step: 15
 - name: results.{{name}}.locust_errors
-  monitoring_query: sum(locust_errors{name="{{name}}", namespace="${LOCUST_NAMESPACE}"})
+  monitoring_query: sum(locust_errors{name="{{name}}", namespace="${LOCUST_NAMESPACE}", job="${SCENARIO}-test-master"})
   monitoring_step: 15
 {%- endmacro %}
 
 - name: results.locust_requests_fail_ratio
-  monitoring_query: locust_requests_fail_ratio{namespace="${LOCUST_NAMESPACE}"}
+  monitoring_query: locust_requests_fail_ratio{namespace="${LOCUST_NAMESPACE}", job="${SCENARIO}-test-master"}
   monitoring_step: 15
 - name: results.locust_users
-  monitoring_query: locust_users{namespace="${LOCUST_NAMESPACE}"}
+  monitoring_query: locust_users{namespace="${LOCUST_NAMESPACE}", job="${SCENARIO}-test-master"}
   monitoring_step: 15
 
 {{ results_scenario('Aggregated') }}
