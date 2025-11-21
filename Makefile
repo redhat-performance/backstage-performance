@@ -4,7 +4,7 @@ ifneq (,$(wildcard test.env))
 endif
 
 # Scenario to run. It correlates with the locust file at scenarios/<SCENARIO>.py
-export SCENARIO ?= baseline-test
+export SCENARIO ?= mvp
 
 # Used to set --host option of locust CLI (base URL to load test). See https://docs.locust.io/en/stable/configuration.html#command-line-options for details
 # If unsed or empty, the value is determined automatically from RHDH route
