@@ -211,6 +211,11 @@ def generate_chart(metric, csv_files, labels, x_axis, x_scale, metadata=None):
                     # Convert memory from bytes to MB if metric is memory
                     if 'memory' in metric.lower():
                         value = value / (1024 * 1024)
+                    # Multiply by 100 if unit is percentage
+                    if metadata and 'metrics' in metadata and metric in metadata['metrics']:
+                        metric_info = metadata['metrics'][metric]
+                        if 'units' in metric_info and metric_info['units'] == '%':
+                            value = value * 100
                     x_vals.append(x_val)
                     metric_values.append(value)
                 except (KeyError, ValueError):
