@@ -386,7 +386,7 @@ create_rbac_policy() {
   "$RBAC_POLICY_REALISTIC")
     ROLES=("platform_admin" "engineering_lead" "senior_engineer" "backend_engineer" "frontend_engineer" "product_manager" "QA_engineer" "external_contractor" "compliance_security" "on_call_team")
     ROLES_LEN=${#ROLES[@]}
-    for i in $(seq 1 "${RBAC_POLICY_SIZE:-$GROUP_COUNT}"); do
+    for i in $(seq 1 "$GROUP_COUNT"); do
       echo "    g, group:default/g${i}, role:default/${ROLES[$(((i - 1) % ROLES_LEN))]}" >>"$TMP_DIR/group-rbac.yaml"
     done
     ;;

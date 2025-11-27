@@ -2,10 +2,3 @@
     p, role:default/a, orchestrator.workflow.use, update, allow
     p, role:default/a, orchestrator.workflowAdminView, read, allow
     p, role:default/a, orchestrator.instanceAdminView, read, allow
-    p, role:default/platform_admin, orchestrator.workflow, read, allow
-    p, role:default/platform_admin, orchestrator.workflow.use, update, allow
-    p, role:default/platform_admin, orchestrator.workflowAdminView, read, allow
-    p, role:default/engineering_lead, orchestrator.workflow, read, allow
-    p, role:default/engineering_lead, orchestrator.workflow.use, update, allow
-    p, role:default/senior_engineer, orchestrator.workflow, read, allow
-    p, role:default/senior_engineer, orchestrator.workflow.use, update, allow
