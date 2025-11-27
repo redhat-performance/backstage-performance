@@ -144,7 +144,7 @@ function _test() {
 function compare_previous_test() {
     name="Compare to previous release"
     nick="compare"
-    ticket="$1" # Jira task for comparison tests
+    ticket="$1" # Jira story
 
     export DURATION="15m"
     export SCALE_BS_USERS_GROUPS="1000:250 1000:250 1000:250 1000:250 1000:250"
@@ -157,7 +157,7 @@ function compare_previous_test() {
 function entity_burden_test() {
     name="Entity burden test"
     nick="entity"
-    ticket="$1" # Jira task for entity burden tests
+    ticket="$1" # Jira story
 
     export DURATION="15m"
     export SCALE_BS_USERS_GROUPS="100:20"
@@ -170,7 +170,7 @@ function entity_burden_test() {
 function storage_limit_test() {
     name="Storage limit test"
     nick="storage"
-    ticket="$1" # Jira task for storage tests
+    ticket="$1" # Jira story
 
     export DURATION="15m"
     export SCALE_BS_USERS_GROUPS="100:20"
@@ -183,7 +183,7 @@ function storage_limit_test() {
 function max_concurrency_test() {
     name="Max Concurrency test"
     nick="max_concurrency"
-    ticket="$1" # Jira task for storage tests
+    ticket="$1" # Jira story
 
     export DURATION="10m"
     export RHDH_LOG_LEVEL=debug
@@ -203,10 +203,56 @@ function max_concurrency_test() {
     _test "$name" "$nick" "$ticket"
 }
 
+function max_concurrency_ha_2_test() {
+    name="Max Concurrency test HA (2 nodes)"
+    nick="max_concurrency_ha_2"
+    ticket="$1" # Jira story
+
+    export DURATION="10m"
+    export RHDH_LOG_LEVEL=debug
+    export SCALE_WORKERS=100
+    export RBAC_POLICY=all_groups_admin
+    export ENABLE_ORCHESTRATOR=false
+
+    export SCALE_ACTIVE_USERS_SPAWN_RATES="1:1 10:2 25:5 50:10 100:20 150:30 200:40 250:50 300:60 350:70 400:80 500:100"
+    export SCALE_BS_USERS_GROUPS="1000:250"
+    export SCALE_RBAC_POLICY_SIZE="1000"
+    export SCALE_CATALOG_SIZES="2500:2500"
+    export SCALE_REPLICAS="2:2"
+    export SCALE_DB_STORAGES="2Gi"
+    export SCALE_CPU_REQUESTS_LIMITS=":"
+    export SCALE_MEMORY_REQUESTS_LIMITS=":"
+
+    _test "$name" "$nick" "$ticket"
+}
+
+function max_concurrency_ha_3_test() {
+    name="Max Concurrency test HA (3 nodes)"
+    nick="max_concurrency_ha_3"
+    ticket="$1" # Jira story
+
+    export DURATION="10m"
+    export RHDH_LOG_LEVEL=debug
+    export SCALE_WORKERS=100
+    export RBAC_POLICY=all_groups_admin
+    export ENABLE_ORCHESTRATOR=false
+
+    export SCALE_ACTIVE_USERS_SPAWN_RATES="1:1 10:2 25:5 50:10 100:20 150:30 200:40 250:50 300:60 350:70 400:80 500:100"
+    export SCALE_BS_USERS_GROUPS="1000:250"
+    export SCALE_RBAC_POLICY_SIZE="1000"
+    export SCALE_CATALOG_SIZES="2500:2500"
+    export SCALE_REPLICAS="3:3"
+    export SCALE_DB_STORAGES="2Gi"
+    export SCALE_CPU_REQUESTS_LIMITS=":"
+    export SCALE_MEMORY_REQUESTS_LIMITS=":"
+
+    _test "$name" "$nick" "$ticket"
+}
+
 function max_concurrency_with_orchestrator_test() {
     name="Max Concurrency with Orchestrator test"
     nick="max_concurrency_with_orchestrator"
-    ticket="$1" # Jira task for storage tests
+    ticket="$1" # Jira story
 
     export DURATION="10m"
     export RHDH_LOG_LEVEL=debug
@@ -229,7 +275,7 @@ function max_concurrency_with_orchestrator_test() {
 function orchestrator_test() {
     name="Orchestrator test"
     nick="orchestrator"
-    ticket="$1" # Jira task for storage tests
+    ticket="$1" # Jira story
 
     export DURATION="10m"
     export RHDH_LOG_LEVEL=debug
@@ -251,10 +297,35 @@ function orchestrator_test() {
     _test "$name" "$nick" "$ticket"
 }
 
+function orchestrator_ha_2_test() {
+    name="Orchestrator test HA (2 nodes)"
+    nick="orchestrator_ha_2"
+    ticket="$1" # Jira story
+
+    export DURATION="10m"
+    export RHDH_LOG_LEVEL=debug
+    export SCALE_WORKERS=100
+    export RBAC_POLICY=all_groups_admin
+    export ENABLE_ORCHESTRATOR=true
+    export SCENARIO=orchestrator
+    export ALWAYS_CLEANUP=true
+
+    export SCALE_ACTIVE_USERS_SPAWN_RATES="1:1 10:2 25:5 50:10 100:20 150:30 200:40 250:50 300:60 400:80 500:100"
+    export SCALE_BS_USERS_GROUPS="1000:250"
+    export SCALE_RBAC_POLICY_SIZE="1000"
+    export SCALE_CATALOG_SIZES="2500:2500"
+    export SCALE_REPLICAS="2:2"
+    export SCALE_DB_STORAGES="2Gi"
+    export SCALE_CPU_REQUESTS_LIMITS=":"
+    export SCALE_MEMORY_REQUESTS_LIMITS=":"
+
+    _test "$name" "$nick" "$ticket"
+}
+
 function rbac_test() {
     name="RBAC test"
     nick="rbac"
-    ticket="$1" # Jira task for storage tests
+    ticket="$1" # Jira story
 
     export DURATION="10m"
     export RBAC_POLICY=all_groups_admin
@@ -275,7 +346,7 @@ function rbac_test() {
 function rbac_groups_test() {
     name="RBAC Groups test"
     nick="rbac_groups"
-    ticket="$1" # Jira task for storage tests
+    ticket="$1" # Jira story
 
     export DURATION="10m"
     export RBAC_POLICY=user_in_multiple_groups
@@ -296,7 +367,7 @@ function rbac_groups_test() {
 function rbac_nested_test() {
     name="RBAC Nested test"
     nick="rbac_nested"
-    ticket="$1" # Jira task for storage tests
+    ticket="$1" # Jira story
 
     export DURATION="10m"
     export RBAC_POLICY=nested_groups
@@ -334,11 +405,20 @@ run_storage_limit_test() {
 run_max_concurrency_test() {
     max_concurrency_test "RHIDP-9158"
 }
+run_max_concurrency_ha_2_test() {
+    max_concurrency_ha_2_test "RHIDP-9159"
+}
+run_max_concurrency_ha_3_test() {
+    max_concurrency_ha_3_test "RHIDP-9159"
+}
 run_max_concurrency_with_orchestrator_test() {
     max_concurrency_with_orchestrator_test "RHIDP-9159"
 }
 run_orchestrator_test() {
     orchestrator_test "RHIDP-9708"
+}
+run_orchestrator_ha_2_test() {
+    orchestrator_ha_2_test "RHIDP-9708"
 }
 run_rbac_test() {
     rbac_test "RHIDP-9165"
@@ -365,11 +445,20 @@ for test_id in "${test_ids[@]}"; do
     "max_concurrency")
         run_max_concurrency_test
         ;;
+    "max_concurrency_ha_2")
+        run_max_concurrency_ha_2_test
+        ;;
+    "max_concurrency_ha_3")
+        run_max_concurrency_ha_3_test
+        ;;
     "max_concurrency_with_orchestrator")
         run_max_concurrency_with_orchestrator_test
         ;;
     "orchestrator")
         run_orchestrator_test
+        ;;
+    "orchestrator_ha_2")
+        run_orchestrator_ha_2_test
         ;;
     "rbac")
         run_rbac_test
@@ -385,8 +474,11 @@ for test_id in "${test_ids[@]}"; do
         run_entity_burden_test
         run_storage_limit_test
         # run_max_concurrency_test
+        # run_max_concurrency_ha_2_test
+        # run_max_concurrency_ha_3_test
         # run_max_concurrency_with_orchestrator_test
         # run_orchestrator_test
+        # run_orchestrator_ha_2_test
         # run_rbac_test
         # run_rbac_groups_test
         # run_rbac_nested_test
