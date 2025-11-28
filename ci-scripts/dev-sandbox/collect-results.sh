@@ -85,7 +85,7 @@ mkdir -p "$monitoring_collection_dir"
 start_ts="$(cat "${ARTIFACT_DIR}/benchmark-before")"
 mstart=$(python3 -c "from datetime import datetime, timezone;ts ='$start_ts';dt_object = datetime.fromisoformat(ts.replace(',', '.'));formatted_ts = dt_object.strftime('%Y-%m-%dT%H:%M:%S%z');print(formatted_ts);")
 end_ts="$(cat "${ARTIFACT_DIR}/benchmark-after")"
-mend=$(python3 -c "from datetime import datetime, timezone;ts ='$end_ts';dt_object = datetime.fromisoformat(ts.replace(',', '.')));formatted_ts = dt_object.strftime('%Y-%m-%dT%H:%M:%S%z');print(formatted_ts);")
+mend=$(python3 -c "from datetime import datetime, timezone;ts ='$end_ts';dt_object = datetime.fromisoformat(ts.replace(',', '.'));formatted_ts = dt_object.strftime('%Y-%m-%dT%H:%M:%S%z');print(formatted_ts);")
 
 mhost=$(kubectl -n openshift-monitoring get route -l app.kubernetes.io/name=thanos-query -o json | jq --raw-output '.items[0].spec.host')
 status_data.py \
@@ -116,7 +116,7 @@ while read -r metric_csv; do
             if [[ $line =~ ^timestamp ]]; then
                 echo "$timestamp;$value"
             else
-                python3 -c "from datetime import datetime, timezone; dt = datetime.fromtimestamp(int('$timestamp'), tz=timezone.utc); print(dt.strftime('%Y-%m-%d %H:%M:%S') + ';' + '$value')"
+                python3 -c "import sys; from datetime import datetime, timezone; dt = datetime.fromtimestamp(int(sys.argv[1]), tz=timezone.utc); print(dt.strftime('%Y-%m-%d %H:%M:%S') + ';' + sys.argv[2])" "$timestamp" "$value"
             fi
         done <"$tmp_csv" >>"$metric_csv"
         rm -f "$tmp_csv"
