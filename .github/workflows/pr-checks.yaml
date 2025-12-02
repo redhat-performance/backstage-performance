@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main
+      - 'rhdh-v1.*'
 
 env: {}
 
