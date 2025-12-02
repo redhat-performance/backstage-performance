@@ -1,0 +1,11 @@
+affinity:
+  podAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+            - key: app.kubernetes.io/name
+              operator: In
+              values:
+                - developer-hub
+        topologyKey: kubernetes.io/hostname
+
