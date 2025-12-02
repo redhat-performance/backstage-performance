@@ -458,6 +458,10 @@ install_rhdh_with_helm() {
         log_info "Enabling orchestrator plugins"
         yq -i '.orchestrator.enabled = true' "$TMP_DIR/chart-values.temp.yaml"
     fi
+    if [ "${RHDH_DEPLOYMENT_REPLICAS}" -gt 1 ]; then
+        log_info "Applying pod affinity for multiple replicas to schedule on same node"
+        yq -i '.upstream.backstage |= . + load("template/backstage/helm/pod-affinity-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"
+    fi
     envsubst \
         '${OPENSHIFT_APP_DOMAIN} \
             ${RHDH_HELM_RELEASE_NAME} \
