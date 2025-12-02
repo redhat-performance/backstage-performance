@@ -338,6 +338,7 @@ export RBAC_POLICY_ALL_GROUPS_ADMIN="all_groups_admin" #default
 export RBAC_POLICY_STATIC="static"
 export RBAC_POLICY_USER_IN_MULTIPLE_GROUPS="user_in_multiple_groups"
 export RBAC_POLICY_NESTED_GROUPS="nested_groups"
+export RBAC_POLICY_REALISTIC="realistic"
 
 create_rbac_policy() {
   policy="${1:-$RBAC_POLICY_ALL_GROUPS_ADMIN}"
@@ -382,6 +383,13 @@ create_rbac_policy() {
       fi
     done
     ;;
+  "$RBAC_POLICY_REALISTIC")
+    ROLES=("platform_admin" "engineering_lead" "senior_engineer" "backend_engineer" "frontend_engineer" "product_manager" "QA_engineer" "external_contractor" "compliance_security" "on_call_team")
+    ROLES_LEN=${#ROLES[@]}
+    for i in $(seq 1 "$GROUP_COUNT"); do
+      echo "    g, group:default/g${i}, role:default/${ROLES[$(((i - 1) % ROLES_LEN))]}" >>"$TMP_DIR/group-rbac.yaml"
+    done
+    ;;
   \?)
     log_error "Invalid RBAC policy: ${policy}"
     exit 1
@@ -412,7 +420,7 @@ create_user() {
   [[ $grp -eq 0 ]] && grp=${GROUP_COUNT}
   groups="["
   case $RBAC_POLICY in
-  "$RBAC_POLICY_ALL_GROUPS_ADMIN" | "$RBAC_POLICY_STATIC")
+  "$RBAC_POLICY_ALL_GROUPS_ADMIN" | "$RBAC_POLICY_STATIC" | "$RBAC_POLICY_REALISTIC")
     groups="$groups\"g${grp}\""
     ;;
   "$RBAC_POLICY_NESTED_GROUPS")
