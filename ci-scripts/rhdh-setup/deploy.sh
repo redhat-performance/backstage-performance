@@ -6,7 +6,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$SCRIPT_DIR"/../../test.env)"
 
 # shellcheck disable=SC1091
-source ./create_resource.sh
+source "${SCRIPT_DIR}/create_resource.sh"
 
 [ -n "${QUAY_TOKEN}" ]
 [ -n "${GITHUB_TOKEN}" ]
@@ -317,7 +317,7 @@ create_objs() {
 get_catalog_entity_count() {
     entity_type=$1
     ACCESS_TOKEN=$(get_token "rhdh")
-    curl -s -k "$(backstage_url)/api/catalog/entity-facets?facet=kind" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$ACCESS_TOKEN" | tee -a "$TMP_DIR/get_$(echo "$entity_type" | tr '[:upper:]' '[:lower:]')_count.log" | jq -r '.facets.kind[] | select(.value == "'"$entity_type"'")| .count'
+    curl -s -k "$(backstage_url)/api/catalog/entities/by-query?limit=0&filter=kind%3D${entity_type}" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$ACCESS_TOKEN" | tee -a "$TMP_DIR/get_$(echo "$entity_type" | tr '[:upper:]' '[:lower:]')_count.log" | jq -r '.totalItems'
 }
 
 backstage_install() {
