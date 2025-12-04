@@ -4,6 +4,9 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1090,SC1091
 source "$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$SCRIPT_DIR"/../../test.env)"
 
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/common.sh"
+
 export TMP_DIR WORKDIR
 
 POPULATION_CONCURRENCY=${POPULATION_CONCURRENCY:-10}
@@ -19,7 +22,7 @@ COOKIE="$TMP_DIR/cookie.jar"
 
 keycloak_url() {
   f="$TMP_DIR/keycloak.url"
-  if command -v  flock >/dev/null 2>&1; then
+  if command -v flock >/dev/null 2>&1; then
     exec 4>"$kc_lockfile"
     flock 4 || {
       echo "Failed to acquire lock"
@@ -30,7 +33,7 @@ keycloak_url() {
       echo -n "https://$(oc get routes keycloak -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')" >"$f"
     fi
     flock -u 4
-  elif command -v  shlock >/dev/null 2>&1; then
+  elif command -v shlock >/dev/null 2>&1; then
     LOCKFILE="$TMP_DIR/kc_lockfile"
     trap 'rm -f "$LOCKFILE"' EXIT
 
@@ -148,8 +151,8 @@ clone_and_upload() {
 
   files=()
   while IFS= read -r line; do
-      files+=("$line")
-  done <<< "$out"
+    files+=("$line")
+  done <<<"$out"
 
   for filename in "${files[@]}"; do
     cp -vf "$filename" "$(basename "$filename")"
@@ -224,7 +227,7 @@ get_group_id_by_name() {
   response=$(curl -s -k --location --request GET "$(keycloak_url)/auth/admin/realms/backstage/groups?search=${group_name}" \
     -H 'Content-Type: application/json' \
     -H "Authorization: Bearer $token" 2>&1)
-  
+
   if [[ "$response" == "["* ]] && [[ "$response" == *"]" ]] && [[ "$response" != "[]" ]]; then
     group_id=$(echo "$response" | jq -r --stream --arg name "$group_name" '
       [., inputs] |
@@ -255,11 +258,11 @@ assign_parent_group() {
   max_attempts=5
   attempt=1
   parent_id=""
-  while (( attempt <= max_attempts )); do
+  while ((attempt <= max_attempts)); do
     parent_id="$(get_group_id_by_name "$parent_group_name")"
     [ -n "$parent_id" ] && [ "$parent_id" != "null" ] && break
     log_warn "Parent $parent_group_name not found (attempt $attempt). Waiting..." >>"$TMP_DIR/create_group.log"
-    ((attempt++));
+    ((attempt++))
   done
   if [ -z "$parent_id" ] || [ "$parent_id" = "null" ]; then
     log_error "Parent $parent_group_name missing after $max_attempts attempts; cannot create $child_name" 2>&1 | tee -a "$TMP_DIR/create_group.log"
@@ -267,7 +270,7 @@ assign_parent_group() {
   fi
 
   attempt=1
-  while (( attempt <= max_attempts )); do
+  while ((attempt <= max_attempts)); do
     token=$(get_token)
     response="$(curl -s -k --location --request POST "$(keycloak_url)/auth/admin/realms/backstage/groups/${parent_id}/children" \
       -H 'Content-Type: application/json' -H "Authorization: Bearer $token" \
@@ -277,7 +280,7 @@ assign_parent_group() {
       return 0
     fi
     log_warn "Unable to create child $child_name under $parent_group_name at attempt $attempt. [$response]" >>"$TMP_DIR/create_group.log"
-    ((attempt++));
+    ((attempt++))
   done
   log_error "Unable to create child $child_name under $parent_group_name in $max_attempts attempts" 2>&1 | tee -a "$TMP_DIR/create_group.log"
   return 1
@@ -304,7 +307,7 @@ create_group() {
           return
         fi
         log_warn "Unable to create $groupname at attempt $attempt. [$response]" >>"$TMP_DIR/create_group.log"
-        ((attempt++));
+        ((attempt++))
       done
       log_error "Unable to create the $groupname group in $max_attempts attempts, giving up!" 2>&1 | tee -a "$TMP_DIR/create_group.log"
       return 1
@@ -327,7 +330,7 @@ create_group() {
         return
       fi
       log_warn "Unable to create $groupname at attempt $attempt. [$response]" >>"$TMP_DIR/create_group.log"
-      ((attempt++));
+      ((attempt++))
     done
     log_error "Unable to create the $groupname group in $max_attempts attempts, giving up!" 2>&1 | tee -a "$TMP_DIR/create_group.log"
     return 1
@@ -405,7 +408,7 @@ create_groups() {
     [ "$N" -gt "$GROUP_COUNT" ] && N="$GROUP_COUNT"
     seq 1 "$N" | xargs -P1 -I{} bash -lc "create_group \"\$1\"" _ {}
     if [ "$GROUP_COUNT" -gt "$N" ]; then
-      seq $((N+1)) "$GROUP_COUNT" | xargs -P"${POPULATION_CONCURRENCY}" -I{} bash -lc "create_group \"\$1\"" _ {}
+      seq $((N + 1)) "$GROUP_COUNT" | xargs -P"${POPULATION_CONCURRENCY}" -I{} bash -lc "create_group \"\$1\"" _ {}
     fi
   else
     seq 1 "$GROUP_COUNT" | xargs -P"${POPULATION_CONCURRENCY}" -I{} bash -lc "create_group \"\$1\"" _ {}
@@ -466,7 +469,7 @@ create_user() {
   done
 
   if [[ $attempt -gt $max_attempts ]]; then
-    log_error "Unable to create the $username user in $max_attempts attempts, giving up!" 2>&1| tee -a "$TMP_DIR/create_user.log"
+    log_error "Unable to create the $username user in $max_attempts attempts, giving up!" 2>&1 | tee -a "$TMP_DIR/create_user.log"
   fi
 }
 
@@ -478,33 +481,6 @@ create_users() {
 }
 
 token_lockfile="$TMP_DIR/token.lockfile"
-log() {
-  echo "{\"level\":\"${2:-info}\",\"ts\":\"$(date -u -Ins)\",\"message\":\"$1\"}"
-}
-
-log_info() {
-  log "$1" "info"
-}
-
-log_warn() {
-  log "$1" "warn"
-}
-
-log_error() {
-  log "$1" "error"
-}
-
-log_token() {
-  log "$1" "$2" >>"$TMP_DIR/get_token.log"
-}
-
-log_token_info() {
-  log_token "$1" "info"
-}
-
-log_token_err() {
-  log_token "$1" "error"
-}
 
 keycloak_token() {
   curl -s -k "$(keycloak_url)/auth/realms/master/protocol/openid-connect/token" -d username=admin -d "password=$1" -d 'grant_type=password' -d 'client_id=admin-cli' | jq -r ".expires_in_timestamp = $(python3 -c 'from datetime import datetime, timedelta; t_add=int(30); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))')"
@@ -534,7 +510,7 @@ rhdh_token() {
     --data-urlencode "redirect_uri=${REDIRECT_URL}" \
     --data-urlencode "scope=openid email profile" \
     --data-urlencode "response_type=code" \
-    "$(keycloak_url)/auth/realms/$REALM/protocol/openid-connect/auth" 2>&1| tee "$TMP_DIR/auth_url.log" | grep -oE 'action="[^"]+"' | grep -oE '"[^"]+"' | tr -d '"')
+    "$(keycloak_url)/auth/realms/$REALM/protocol/openid-connect/auth" 2>&1 | tee "$TMP_DIR/auth_url.log" | grep -oE 'action="[^"]+"' | grep -oE '"[^"]+"' | tr -d '"')
 
   execution=$(echo "$AUTH_URL" | grep -oE 'execution=[^&]+' | grep -oE '[^=]+$')
   tab_id=$(echo "$AUTH_URL" | grep -oE 'tab_id=[^&]+' | grep -oE '[^=]+$')
@@ -547,7 +523,7 @@ rhdh_token() {
     --data-urlencode "tab_id=${tab_id}" \
     --data-urlencode "execution=${execution}" \
     --write-out "%{redirect_url}" \
-    "$AUTHENTICATE_URL" 2>&1| tee "$TMP_DIR/code_url.log")
+    "$AUTHENTICATE_URL" 2>&1 | tee "$TMP_DIR/code_url.log")
 
   code=$(echo "$CODE_URL" | grep -oE 'code=[^&]+' | grep -oE '[^=]+$')
   session_state=$(echo "$CODE_URL" | grep -oE 'session_state=[^&]+' | grep -oE '[^=]+$')
