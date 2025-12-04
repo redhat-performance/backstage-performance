@@ -21,6 +21,9 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1090,SC1091
 source "$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$SCRIPT_DIR"/../../test.env)"
 
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/common.sh"
+
 set -e
 
 RED='\033[0;31m'
@@ -279,5 +282,13 @@ if [ -n "${RHDH_OLM_OPERATOR_RESOURCES_CPU_LIMITS}" ]; then yq -i '.spec.config.
 if [ -n "${RHDH_OLM_OPERATOR_RESOURCES_MEMORY_REQUESTS}" ]; then yq -i '.spec.config.resources.requests.memory = "'"${RHDH_OLM_OPERATOR_RESOURCES_MEMORY_REQUESTS}"'"' "$subscription"; fi
 if [ -n "${RHDH_OLM_OPERATOR_RESOURCES_MEMORY_LIMITS}" ]; then yq -i '.spec.config.resources.limits.memory = "'"${RHDH_OLM_OPERATOR_RESOURCES_MEMORY_LIMITS}"'"' "$subscription"; fi
 if [ -n "${RHDH_OLM_OPERATOR_RESOURCES_EPHEMERAL_STORAGE_REQUESTS}" ]; then yq -i '.spec.config.resources.requests.ephemeral-storage = "'"${RHDH_OLM_OPERATOR_RESOURCES_EPHEMERAL_STORAGE_REQUESTS}"'"' "$subscription"; fi
+if [ -n "${RHDH_OLM_OPERATOR_VERSION:-}" ]; then
+  yq -i '.spec.startingCSV = "rhdh-operator.v'"${RHDH_OLM_OPERATOR_VERSION}"'"' "$subscription"
+  yq -i '.spec.installPlanApproval = "Manual"' "$subscription"
+fi
 
 oc apply -f "$subscription"
+
+if [ -n "${RHDH_OLM_OPERATOR_VERSION:-}" ]; then
+  wait_and_approve_install_plans "$NAMESPACE_SUBSCRIPTION" 300 "rhdh-operator.v${RHDH_OLM_OPERATOR_VERSION}" "install plan for $TO_INSTALL"
+fi
