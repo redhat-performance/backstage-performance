@@ -6,6 +6,9 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$SCRIPT_DIR"/../../test.env)"
 
 # shellcheck disable=SC1091
+source "${SCRIPT_DIR}/common.sh"
+
+# shellcheck disable=SC1091
 source "${SCRIPT_DIR}/create_resource.sh"
 
 [ -n "${QUAY_TOKEN}" ]
@@ -121,47 +124,6 @@ wait_for_crd() {
             sleep "$interval"
         fi
     done
-}
-
-wait_and_approve_install_plans() {
-    namespace=${1:-namespace}
-    initial_timeout=${2:-300}
-    description=${3:-"install plans in $namespace"}
-    timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$initial_timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
-    interval=10
-
-    log_info "Waiting for unapproved install plans in $namespace namespace..."
-
-    # Wait for install plans to appear with timeout
-    install_plans=""
-    for ((i = 0; i < initial_timeout; i += interval)); do
-        install_plans=$($cli get installplan -n "$namespace" --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[?(@.spec.approved==false)].metadata.name}' 2>/dev/null)
-
-        if [ -n "$install_plans" ]; then
-            break
-        fi
-
-        if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
-            log_error "Timeout waiting for $description"
-            exit 1
-        fi
-
-        log_info "Waiting ${interval}s for $description..."
-        sleep "$interval"
-    done
-
-    # Approve each install plan found
-    if [ -n "$install_plans" ]; then
-        log_info "Found unapproved install plans in $namespace namespace, approving all..."
-        for install_plan in $install_plans; do
-            log_info "Approving install plan '$install_plan'..."
-            $cli patch installplan "$install_plan" -n "$namespace" --type merge --patch '{"spec":{"approved":true}}'
-        done
-        return $?
-    else
-        log_error "No unapproved install plans found in $namespace namespace within timeout"
-        exit 1
-    fi
 }
 
 is_orchestrator_infra_installed() {
@@ -343,14 +305,14 @@ backstage_install() {
     if ${ENABLE_RBAC}; then
         cp template/backstage/rbac-config.yaml "${TMP_DIR}/rbac-config.yaml"
         if [[ $RBAC_POLICY == "$RBAC_POLICY_REALISTIC" ]]; then
-            cat template/backstage/realistic-rbac-config.yaml >> "${TMP_DIR}/rbac-config.yaml"
+            cat template/backstage/realistic-rbac-config.yaml >>"${TMP_DIR}/rbac-config.yaml"
         fi
         create_rbac_policy "$RBAC_POLICY"
         cat "$TMP_DIR/group-rbac.yaml" >>"$TMP_DIR/rbac-config.yaml"
         if [[ "$INSTALL_METHOD" == "helm" ]] && ${ENABLE_ORCHESTRATOR}; then
             cat template/backstage/helm/orchestrator-rbac-patch.yaml >>"$TMP_DIR/rbac-config.yaml"
             if [[ $RBAC_POLICY == "$RBAC_POLICY_REALISTIC" ]]; then
-                cat template/backstage/helm/realistic-orchestrator-rbac-patch.yaml>>"${TMP_DIR}/rbac-config.yaml"
+                cat template/backstage/helm/realistic-orchestrator-rbac-patch.yaml >>"${TMP_DIR}/rbac-config.yaml"
             fi
         fi
         until $clin create -f "$TMP_DIR/rbac-config.yaml"; do $clin delete configmap rbac-policy --ignore-not-found=true; done
