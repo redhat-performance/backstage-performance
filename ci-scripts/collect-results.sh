@@ -169,7 +169,7 @@ collect_additional_metrics() {
 }
 
 # populate phase
-if [ "$PRE_LOAD_DB" == "true" ]; then
+if [[ "${PRE_LOAD_DB:-}" == "true" ]]; then
     start_ts="$(cat "${ARTIFACT_DIR}/populate-before")"
     mstart=$(python3 -c "from datetime import datetime, timezone;ts ='$start_ts';dt_object = datetime.fromisoformat(ts.replace(',', '.'));formatted_ts = dt_object.strftime('%Y-%m-%dT%H:%M:%S%z');print(formatted_ts);")
     end_ts="$(cat "${ARTIFACT_DIR}/populate-after")"

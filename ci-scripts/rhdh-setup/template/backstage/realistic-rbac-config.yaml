@@ -12,10 +12,10 @@
     p, role:default/platform_admin, kubernetes.proxy, use, allow
     p, role:default/platform_admin, techdocs.entity.read, read, allow
     p, role:default/platform_admin, techdocs.entity.create, create, allow
-    p, role:default/platform_admin, rbac.policy.entity.read, read, allow
-    p, role:default/platform_admin, rbac.policy.entity.create, create, allow
-    p, role:default/platform_admin, rbac.policy.entity.update, update, allow
-    p, role:default/platform_admin, rbac.policy.entity.delete, delete, allow
+    p, role:default/platform_admin, policy.entity.read, read, allow
+    p, role:default/platform_admin, policy.entity.create, create, allow
+    p, role:default/platform_admin, policy.entity.update, update, allow
+    p, role:default/platform_admin, policy.entity.delete, delete, allow
     p, role:default/engineering_lead, catalog-entity, read, allow
     p, role:default/engineering_lead, catalog.entity.create, create, allow
     p, role:default/engineering_lead, catalog.entity.update, update, allow
@@ -30,6 +30,7 @@
     p, role:default/engineering_lead, kubernetes.proxy, use, allow
     p, role:default/engineering_lead, techdocs.entity.read, read, allow
     p, role:default/engineering_lead, techdocs.entity.create, create, allow
+    p, role:default/platform_admin, policy.entity.read, read, allow
     p, role:default/senior_engineer, catalog-entity, read, allow
     p, role:default/senior_engineer, catalog.entity.create, create, allow
     p, role:default/senior_engineer, catalog.entity.update, update, allow
@@ -72,7 +73,7 @@
     p, role:default/external_contractor, techdocs.entity.read, read, allow
     p, role:default/compliance_security, catalog-entity, read, allow
     p, role:default/compliance_security, catalog.location.read, read, allow
-    p, role:default/compliance_security, rbac.policy.entity.read, read, allow
+    p, role:default/compliance_security, policy.entity.read, read, allow
     p, role:default/on_call_team, catalog-entity, read, allow
     p, role:default/on_call_team, catalog.entity.update, update, allow
     p, role:default/on_call_team, catalog.location.read, read, allow
