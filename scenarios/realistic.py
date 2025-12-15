@@ -180,7 +180,7 @@ def _(parser):
     parser.add_argument("--keycloak-host", type=str, default="")
     parser.add_argument("--keycloak-password", is_secret=True, default="")
     parser.add_argument("--debug", type=bool, default=True)
-    parser.add_argument("--skip-orchestrator", type=bool, default=True)
+    parser.add_argument("--enable-orchestrator", type=bool, default=False)
 
 
 class RealisticTest(HttpUser):
@@ -235,6 +235,9 @@ class RealisticTest(HttpUser):
 
             self.HEADER = {'Authorization': 'Bearer ' + TOKEN}
 
+        if self.environment.parsed_options.enable_orchestrator:
+            self.enable_plugin("orchestrator")
+
     def __init__(self, parent):
         super().__init__(parent)
         self.HEADER = ''
@@ -252,6 +255,11 @@ class RealisticTest(HttpUser):
             self.PASSWORD = self.environment.parsed_options.keycloak_password
             self.REALM = "backstage"
             self.CLIENTID = "backstage"
+
+    def enable_plugin(self, plugin):
+        for perm_name, perm_config in PERMISSIONS.items():
+            if perm_config.plugin == plugin:
+                perm_config.enabled = True
 
     def authorize_policy(self, policy, config) -> str:
         r = self.client.post(base_policy_auth,
@@ -324,8 +332,6 @@ class RealisticTest(HttpUser):
         """Test all enabled permissions sequentially"""
         for perm_name, perm in PERMISSIONS.items():
             if not perm.enabled:
-                continue
-            if perm.plugin == "orchestrator" and self.environment.parsed_options.skip_orchestrator:
                 continue
 
             result = self.authorize_policy(perm_name, perm)
