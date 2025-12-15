@@ -18,6 +18,8 @@ export TMP_DIR
 TMP_DIR=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "${TMP_DIR:-.tmp}")
 mkdir -p "${TMP_DIR}"
 
+export RHDH_NAMESPACE LOCUST_NAMESPACE
+
 RHDH_NAMESPACE=${RHDH_NAMESPACE:-rhdh-performance}
 ENABLE_PROFILING="${ENABLE_PROFILING:-false}"
 RHDH_INSTALL_METHOD="${RHDH_INSTALL_METHOD:-helm}"
