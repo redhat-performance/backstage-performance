@@ -304,7 +304,7 @@ class RealisticTest(HttpUser):
                 endpoint,
                 headers=self.HEADER,
                 verify=False,
-                name=f"{endpoint}|{permit}"
+                name=f"[{policy.plugin}] {endpoint}|{permit}"
             )
         elif method == "POST":
             body = action.body
@@ -313,7 +313,7 @@ class RealisticTest(HttpUser):
                 verify=False,
                 headers=self.HEADER,
                 json=body,
-                name=f"{endpoint}|{permit}"
+                name=f"[{policy.plugin}] {endpoint}|{permit}"
             )
         else:
             r = {}

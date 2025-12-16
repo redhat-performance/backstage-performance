@@ -79,7 +79,17 @@ Orchestrator_Workflow_Execute_Response_Time_Max,\
 Orchestrator_Workflow_Instance_by_Id_Response_Time_Avg,\
 Orchestrator_Workflow_Instance_by_Id_Response_Time_Max,\
 Orchestrator_Workflow_All_Instances_Response_Time_Avg,\
-Orchestrator_Workflow_All_Instances_Response_Time_Max"
+Orchestrator_Workflow_All_Instances_Response_Time_Max,\
+Catalog_Allow_Response_Time_Avg,\
+Catalog_Deny_Response_Time_Avg,\
+RBAC_Allow_Response_Time_Avg,\
+RBAC_Deny_Response_Time_Avg,\
+Scaffolder_Allow_Response_Time_Avg,\
+Scaffolder_Deny_Response_Time_Avg,\
+Orchestrator_Allow_Response_Time_Avg,\
+Orchestrator_Deny_Response_Time_Avg,\
+Auth_Policy_Response_Time_Avg"
+
 echo "$headers"
 
 find "${1:-.}" -name benchmark.json -print0 | while IFS= read -r -d '' filename; do
@@ -159,7 +169,16 @@ find "${1:-.}" -name benchmark.json -print0 | while IFS= read -r -d '' filename;
         .results."/api/orchestrator/v2/workflows/instances/_*".locust_requests_avg_response_time.mean,
         .results."/api/orchestrator/v2/workflows/instances/_*".locust_requests_avg_response_time.max,
         .results."/api/orchestrator/v2/workflows/instances".locust_requests_avg_response_time.mean,
-        .results."/api/orchestrator/v2/workflows/instances".locust_requests_avg_response_time.max
+        .results."/api/orchestrator/v2/workflows/instances".locust_requests_avg_response_time.max,
+        .results.rbac.catalog.allow_avg.mean,
+        .results.rbac.catalog.deny_avg.mean,
+        .results.rbac.rbac.allow_avg.mean,
+        .results.rbac.rbac.deny_avg.mean,
+        .results.rbac.scaffolder.allow_avg.mean,
+        .results.rbac.scaffolder.deny_avg.mean,
+        .results.rbac.orchestrator.allow_avg.mean,
+        .results.rbac.orchestrator.deny_avg.mean,
+        .results.rbac.auth.policy_check_avg.mean
         ] | @csv' &&
         rc=0 || rc=1
     if [[ "$rc" -ne 0 ]]; then
