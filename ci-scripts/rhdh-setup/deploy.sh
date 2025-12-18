@@ -76,6 +76,8 @@ export KEYCLOAK_LOG_LEVEL="${KEYCLOAK_LOG_LEVEL:-WARN}"
 export PSQL_LOG="${PSQL_LOG:-true}"
 export RHDH_METRIC="${RHDH_METRIC:-true}"
 export PSQL_EXPORT="${PSQL_EXPORT:-false}"
+export ENABLE_PGBOUNCER="${ENABLE_PGBOUNCER:-true}"
+export PGBOUNCER_REPLICAS="${PGBOUNCER_REPLICAS:-2}"
 export LOG_MIN_DURATION_STATEMENT="${LOG_MIN_DURATION_STATEMENT:-65}"
 export LOG_MIN_DURATION_SAMPLE="${LOG_MIN_DURATION_SAMPLE:-50}"
 export LOG_STATEMENT_SAMPLE_RATE="${LOG_STATEMENT_SAMPLE_RATE:-0.7}"
@@ -85,6 +87,27 @@ export INSTALL_METHOD=helm
 TMP_DIR=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "${TMP_DIR:-.tmp}")
 mkdir -p "${TMP_DIR}"
 
+wait_to_exist() {
+    namespace=${1:-${RHDH_NAMESPACE}}
+    resource=${2:-deployment}
+    name=${3:-name}
+    initial_timeout=${4:-300}
+    rn=$resource/$name
+    description=${5:-$rn}
+    timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$initial_timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
+
+    interval=10s
+    while ! /bin/bash -c "$cli -n $namespace get $rn -o name"; do
+        if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
+            log_error "Timeout waiting for $description to exist"
+            exit 1
+        else
+            log_info "Waiting $interval for $description to exist..."
+            sleep "$interval"
+        fi
+    done
+}
+
 wait_to_start_in_namespace() {
     namespace=${1:-${RHDH_NAMESPACE}}
     resource=${2:-deployment}
@@ -93,18 +116,7 @@ wait_to_start_in_namespace() {
     wait_timeout=${5:-300}
     rn=$resource/$name
     description=${6:-$rn}
-    timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$initial_timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
-
-    interval=10s
-    while ! /bin/bash -c "$cli -n $namespace get $rn -o name"; do
-        if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
-            log_error "Timeout waiting for $description to start"
-            exit 1
-        else
-            log_info "Waiting $interval for $description to start..."
-            sleep "$interval"
-        fi
-    done
+    wait_to_exist "$namespace" "$resource" "$name" "$initial_timeout" "$description"
     $cli -n "$namespace" rollout status "$rn" --timeout="${wait_timeout}s"
     return $?
 }
@@ -169,6 +181,21 @@ wait_to_start() {
     return $?
 }
 
+restart_rhdh_deployment() {
+    replica_count=${1:-1}
+    if [ "$INSTALL_METHOD" == "helm" ]; then
+        rhdh_deployment="${RHDH_HELM_RELEASE_NAME}-developer-hub"
+    elif [ "$INSTALL_METHOD" == "olm" ]; then
+        rhdh_deployment="backstage-developer-hub"
+    fi
+    $clin scale deployment "$rhdh_deployment" --replicas=0
+    for ((replicas = 1; replicas <= replica_count; replicas++)); do
+        log_info "Scaling developer-hub deployment to $replicas/$replica_count replicas"
+        $clin scale deployment "$rhdh_deployment" --replicas=$replicas
+        wait_to_start deployment "$rhdh_deployment" 300 300
+    done
+}
+
 label() {
     namespace=$1
     resource=$2
@@ -227,6 +254,9 @@ install() {
         install_workflows
     fi
     psql_debug
+
+    log_info "Scaling RHDH deployment to $RHDH_DEPLOYMENT_REPLICAS replicas"
+    restart_rhdh_deployment "$RHDH_DEPLOYMENT_REPLICAS"
 }
 
 keycloak_install() {
@@ -466,12 +496,21 @@ install_rhdh_with_helm() {
         log_info "Applying pod affinity for multiple replicas to schedule on same node"
         yq -i '.upstream.backstage |= . + load("template/backstage/helm/pod-affinity-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"
     fi
+    # Connection sizing parameters
+    CLIENT_CONNECTIONS_PER_RHDH_INSTANCE=50  # Expected DB connections per RHDH replica
+    DB_CONNECTIONS_HEADROOM_PER_RHDH_INSTANCE=5  # Extra headroom per RHDH replica
+    DB_CONNECTIONS_ADMIN_HEADROOM=20  # Reserved for admin/monitoring connections
+    RHDH_DATABASE_COUNT=20  # Approximate number of RHDH plugin databases
+
+    export RHDH_DB_MAX_CONNECTIONS
+    RHDH_DB_MAX_CONNECTIONS=$(bc <<<"$RHDH_DEPLOYMENT_REPLICAS * ($CLIENT_CONNECTIONS_PER_RHDH_INSTANCE + $DB_CONNECTIONS_HEADROOM_PER_RHDH_INSTANCE)")
     envsubst \
         '${OPENSHIFT_APP_DOMAIN} \
             ${RHDH_HELM_RELEASE_NAME} \
             ${RHDH_HELM_CHART} \
             ${RHDH_DEPLOYMENT_REPLICAS} \
             ${RHDH_DB_REPLICAS} \
+            ${RHDH_DB_MAX_CONNECTIONS} \
             ${RHDH_DB_STORAGE} \
             ${RHDH_IMAGE_REGISTRY} \
             ${RHDH_IMAGE_REPO} \
@@ -496,10 +535,45 @@ install_rhdh_with_helm() {
         yq -i '.upstream.backstage.readinessProbe |= {"httpGet":{"path":"/healthcheck","port":7007,"scheme":"HTTP"},"initialDelaySeconds":30,"timeoutSeconds":2,"periodSeconds":300,"successThreshold":1,"failureThreshold":3}' "$TMP_DIR/chart-values.yaml"
         yq -i '.upstream.backstage.livenessProbe |= {"httpGet":{"path":"/healthcheck","port":7007,"scheme":"HTTP"},"initialDelaySeconds":30,"timeoutSeconds":2,"periodSeconds":300,"successThreshold":1,"failureThreshold":3}' "$TMP_DIR/chart-values.yaml"
     fi
+
+    # Configure database host (PgBouncer or direct PostgreSQL)
+    if ${ENABLE_PGBOUNCER}; then
+        log_info "PgBouncer enabled - configuring Backstage to connect via PgBouncer"
+        yq -i '.upstream.backstage.appConfig.database.connection.host = "'"${RHDH_HELM_RELEASE_NAME}"'-pgbouncer"' "$TMP_DIR/chart-values.yaml"
+    fi
+
     #shellcheck disable=SC2086
-    helm upgrade "${RHDH_HELM_RELEASE_NAME}" -i ${RHDH_HELM_REPO} ${version_arg} -n "${RHDH_NAMESPACE}" --values "$TMP_DIR/chart-values.yaml"
-    wait_to_start statefulset "${RHDH_HELM_RELEASE_NAME}-postgresql-read" 300 300
-    wait_to_start deployment "${RHDH_HELM_RELEASE_NAME}-developer-hub" 300 300
+    helm upgrade "${RHDH_HELM_RELEASE_NAME}" -i "${RHDH_HELM_REPO}" ${version_arg} -n "${RHDH_NAMESPACE}" --values "$TMP_DIR/chart-values.yaml"
+
+    # Patch deployment strategy to start replicas one by one
+    log_info "Patching RHDH deployment strategy for sequential replica startup"
+    wait_to_exist "${RHDH_NAMESPACE}" deployment "${RHDH_HELM_RELEASE_NAME}-developer-hub" 300 "RHDH deployment"
+    $clin patch deployment "${RHDH_HELM_RELEASE_NAME}-developer-hub" --type='merge' -p '{"spec":{"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxUnavailable":0,"maxSurge":1}}}}'
+
+    wait_to_start statefulset "${RHDH_HELM_RELEASE_NAME}-postgresql-primary" 300 300
+
+    # Deploy PgBouncer if enabled
+    if ${ENABLE_PGBOUNCER}; then
+        log_info "Deploying PgBouncer connection pooler"
+        POSTGRESQL_ADMIN_PASSWORD=$($clin get secret "${RHDH_HELM_RELEASE_NAME}-postgresql" -o jsonpath='{.data.postgres-password}' | base64 -d)
+        export POSTGRESQL_ADMIN_PASSWORD PGBOUNCER_MAX_CLIENT_CONNECTIONS PGBOUNCER_DEFAULT_POOL_SIZE PGBOUNCER_MAX_DB_CONNECTIONS PGBOUNCER_MAX_USER_CONNECTIONS
+
+        # Each PgBouncer instance is sized to handle ALL client connections (for HA/failover)
+        PGBOUNCER_MAX_CLIENT_CONNECTIONS=$(bc <<<"scale=0; $RHDH_DEPLOYMENT_REPLICAS * $CLIENT_CONNECTIONS_PER_RHDH_INSTANCE" | sed 's,\..*,,')
+        # Backend connections per instance - divided by PGBOUNCER_REPLICAS to ensure total doesn't exceed PostgreSQL max_connections
+        PGBOUNCER_MAX_DB_CONNECTIONS=$(bc <<<"scale=0; ($RHDH_DB_MAX_CONNECTIONS - $DB_CONNECTIONS_ADMIN_HEADROOM) / $PGBOUNCER_REPLICAS" | sed 's,\..*,,')
+        # Pool size per database - ensures all databases can use their share without exceeding max_db_connections
+        # Minimum pool size of 5 to ensure basic functionality
+        PGBOUNCER_DEFAULT_POOL_SIZE=$(bc <<<"scale=0; x=$PGBOUNCER_MAX_DB_CONNECTIONS / $RHDH_DATABASE_COUNT; if (x < 5) 5 else x" | sed 's,\..*,,')
+        PGBOUNCER_MAX_USER_CONNECTIONS=$(bc <<<"scale=0; $PGBOUNCER_MAX_DB_CONNECTIONS * 1.2" | sed 's,\..*,,')
+
+        envsubst '${RHDH_HELM_RELEASE_NAME} ${RHDH_NAMESPACE} ${POSTGRESQL_ADMIN_PASSWORD} ${PGBOUNCER_REPLICAS} ${PGBOUNCER_MAX_CLIENT_CONNECTIONS} ${PGBOUNCER_DEFAULT_POOL_SIZE} ${PGBOUNCER_MAX_DB_CONNECTIONS} ${PGBOUNCER_MAX_USER_CONNECTIONS}' \
+            <template/backstage/helm/pgbouncer.yaml >"$TMP_DIR/pgbouncer.yaml"
+        $clin apply -f "$TMP_DIR/pgbouncer.yaml"
+        wait_to_start deployment "${RHDH_HELM_RELEASE_NAME}-pgbouncer" 300 300
+    fi
+
+    restart_rhdh_deployment 1
     return $?
 }
 
@@ -545,11 +619,9 @@ psql_debug() {
     if [ "$INSTALL_METHOD" == "helm" ]; then
         psql_db_ss="${RHDH_HELM_RELEASE_NAME}-postgresql-primary"
         psql_db="${psql_db_ss}-0"
-        rhdh_deployment="${RHDH_HELM_RELEASE_NAME}-developer-hub"
     elif [ "$INSTALL_METHOD" == "olm" ]; then
         psql_db_ss=backstage-psql-developer-hub
         psql_db="${psql_db_ss}-0"
-        rhdh_deployment=backstage-developer-hub
     fi
     if ${PSQL_LOG}; then
         log_info "Setting up PostgreSQL logging"
@@ -595,8 +667,7 @@ psql_debug() {
 
     if ${PSQL_LOG} || ${PSQL_EXPORT}; then
         log_info "Restarting RHDH..."
-        $clin rollout restart deployment/"$rhdh_deployment"
-        wait_to_start deployment "$rhdh_deployment" 300 300
+        restart_rhdh_deployment 1
     fi
 
     if ${PSQL_EXPORT}; then
@@ -629,7 +700,7 @@ setup_monitoring() {
     fi
 
     if [ "$(yq '.prometheusK8s.volumeClaimTemplate' "$config")" == "null" ]; then
-        yq -i '.prometheusK8s = {"volumeClaimTemplate":{"spec":{"storageClassName":"gp3-csi","volumeMode":"Filesystem","resources":{"requests":{"storage":"30Gi"}}}}}' "$config"
+        yq -i '.prometheusK8s = {"volumeClaimTemplate":{"spec":{"storageClassName":"gp3-csi","volumeMode":"Filesystem","resources":{"requests":{"storage":"60Gi"}}}}}' "$config"
         update_config=1
     fi
 

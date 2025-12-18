@@ -25,16 +25,16 @@ orchestrator:
 upstream:
   backstage:
     appConfig:
-        database:
-          connection:
-            password: "${POSTGRESQL_ADMIN_PASSWORD}"
-            user: postgres
-        auth:
-          externalAccess:
-            - type: legacy
-              options:
-                secret: ${BACKEND_SECRET}
-                subject: legacy-catalog
+      database:
+        connection:
+          password: "${POSTGRESQL_ADMIN_PASSWORD}"
+          user: postgres
+      auth:
+        externalAccess:
+          - type: legacy
+            options:
+              secret: ${BACKEND_SECRET}
+              subject: legacy-catalog
     containerPorts:
       backend: 7007
     extraAppConfig:
@@ -101,12 +101,23 @@ upstream:
     primary:
       containerSecurityContext:
         enabled: false
+      resources:
+        requests:
+          cpu: 1
+          memory: 1Gi
+        limits:
+          cpu: 2
+          memory: 5Gi
+      extendedConfiguration: |
+        max_connections = ${RHDH_DB_MAX_CONNECTIONS}
       extraEnvVars:
         - name: POSTGRESQL_ADMIN_PASSWORD
           valueFrom:
             secretKeyRef:
               key: postgres-password
               name: "{{ .Release.Name }}-postgresql"
+        - name: POSTGRESQL_MAX_CONNECTIONS
+          value: "${RHDH_DB_MAX_CONNECTIONS}"
       persistence:
         enabled: true
         mountPath: /var/lib/pgsql/data
@@ -120,12 +131,16 @@ upstream:
     readReplicas:
       containerSecurityContext:
         enabled: false
+      extendedConfiguration: |
+        max_connections = 500
       extraEnvVars:
         - name: POSTGRESQL_ADMIN_PASSWORD
           valueFrom:
             secretKeyRef:
               key: replication-password
               name: "{{ .Release.Name }}-postgresql"
+        - name: POSTGRESQL_MAX_CONNECTIONS
+          value: "500"
       podSecurityContext:
         enabled: false
       replicaCount: ${RHDH_DB_REPLICAS}
