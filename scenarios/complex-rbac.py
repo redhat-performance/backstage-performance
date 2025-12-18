@@ -9,7 +9,6 @@ import time
 import urllib3
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any
-from enum import Enum
 from collections import defaultdict
 
 urllib3.disable_warnings(InsecureRequestWarning)
@@ -18,7 +17,7 @@ __version__ = "1.0"
 
 usernames = []
 
-class PermitResult(Enum):
+class PermitResult():
     ALLOW = "ALLOW"
     DENY = "DENY"
     ERROR = "ERROR"
@@ -99,15 +98,6 @@ PERMISSIONS["scaffolder.task.read"] = Permission(
     ]
 )
 
-PERMISSIONS["scaffolder.action.read"] = Permission(
-    name="scaffolder.action.read",
-    action="read",
-    plugin="scaffolder",
-    workflow=[
-        APIAction("GET", "/api/scaffolder/v2/actions", description="List available actions"),
-    ]
-)
-
 PERMISSIONS["scaffolder.template.management"] = Permission(
     name="scaffolder.template.management",
     action="read",
@@ -117,24 +107,23 @@ PERMISSIONS["scaffolder.template.management"] = Permission(
     ]
 )
 
-PERMISSIONS["orchestrator.workflow.use"] = Permission(
-    name="orchestrator.workflow.use",
-    action="update",
+PERMISSIONS["orchestrator.workflow"] = Permission(
+    name="orchestrator.workflow",
+    action="read",
     plugin="orchestrator",
     enabled=False,  # Disabled by default, enabled if plugin detected
     workflow=[
         APIAction("POST", "/api/orchestrator/v2/workflows/overview", {}, "Get workflows overview"),
-        APIAction("POST", "/api/orchestrator/v2/workflows/instances", {}, "List workflow instances"),
     ]
 )
 
-PERMISSIONS["orchestrator.workflow.read"] = Permission(
-    name="orchestrator.workflow.read",
+PERMISSIONS["orchestrator.instanceAdminView"] = Permission(
+    name="orchestrator.instanceAdminView",
     action="read",
     plugin="orchestrator",
-    enabled=False,
+    enabled=False,  # Disabled by default, enabled if plugin detected
     workflow=[
-        APIAction("POST", "/api/orchestrator/v2/workflows/overview", {}, "Read workflows overview"),
+        APIAction("POST", "/api/orchestrator/v2/workflows/instances", {}, "List workflow instances"),
     ]
 )
 
@@ -183,11 +172,11 @@ def _(parser):
     parser.add_argument("--enable-orchestrator", type=bool, default=False)
 
 
-class RealisticTest(HttpUser):
+class ComplexRbacTest(HttpUser):
     def on_start(self):
         self.client.verify = False
         if self.environment.parsed_options.keycloak_host:
-            r = self.client.get('/api/auth/oauth2Proxy/refresh', verify=False)
+            r = self.client.get('/api/auth/oauth2Proxy/refresh', verify=False, name="[AUTH_SETUP] OAuth2 Refresh")
             qs_str = urllib.parse.parse_qs(r.url)
             STATE = qs_str['state']
             login_cookies = r.cookies
@@ -203,9 +192,9 @@ class RealisticTest(HttpUser):
             form = {'username': self.USERNAME,
                     'password': self.PASSWORD, 'credentialId': ''}
             r = self.client.post(LOGIN_URL, verify=False,
-                                 data=form, params=param)
+                                 data=form, params=param, name="[AUTH_SETUP] Keycloak Login")
 
-            r = self.client.get(self.REFRESH_URL, verify=False)
+            r = self.client.get(self.REFRESH_URL, verify=False, name= "[AUTH_SETUP] Keycloak refresh")
             json_dict = json.loads(r.content)
             TOKEN = json_dict['backstageIdentity']['token']
             idetity_refs = json_dict['backstageIdentity']['identity']['ownershipEntityRefs']
@@ -218,7 +207,7 @@ class RealisticTest(HttpUser):
 
             self.HEADER = {'Authorization': 'Bearer ' + TOKEN}
         else:
-            r = self.client.get('/api/auth/guest/refresh', verify=False)
+            r = self.client.get('/api/auth/guest/refresh', verify=False, name="[AUTH_SETUP] Guest Refresh")
             json_dict = json.loads(r.content)
             TOKEN = json_dict['backstageIdentity']['token']
 
@@ -290,6 +279,7 @@ class RealisticTest(HttpUser):
             debug_output += f", name={policy}"
             debug_output += f", action={config.action}"
             debug_output += f", response_size={size}"
+            debug_output += f", permit={result}"
             debug_output += f", response={r.content}\n"
             print(debug_output)
 
