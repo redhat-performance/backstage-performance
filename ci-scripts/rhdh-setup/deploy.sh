@@ -75,6 +75,8 @@ export RHDH_LOG_LEVEL="${RHDH_LOG_LEVEL:-warn}"
 export PSQL_LOG="${PSQL_LOG:-true}"
 export RHDH_METRIC="${RHDH_METRIC:-true}"
 export PSQL_EXPORT="${PSQL_EXPORT:-false}"
+export ENABLE_PGBOUNCER="${ENABLE_PGBOUNCER:-false}"
+export PGBOUNCER_REPLICAS="${PGBOUNCER_REPLICAS:-2}"
 export LOG_MIN_DURATION_STATEMENT="${LOG_MIN_DURATION_STATEMENT:-65}"
 export LOG_MIN_DURATION_SAMPLE="${LOG_MIN_DURATION_SAMPLE:-50}"
 export LOG_STATEMENT_SAMPLE_RATE="${LOG_STATEMENT_SAMPLE_RATE:-0.7}"
@@ -84,6 +86,27 @@ export INSTALL_METHOD=helm
 TMP_DIR=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "${TMP_DIR:-.tmp}")
 mkdir -p "${TMP_DIR}"
 
+wait_to_exist() {
+    namespace=${1:-${RHDH_NAMESPACE}}
+    resource=${2:-deployment}
+    name=${3:-name}
+    initial_timeout=${4:-300}
+    rn=$resource/$name
+    description=${5:-$rn}
+    timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$initial_timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
+
+    interval=10s
+    while ! /bin/bash -c "$cli -n $namespace get $rn -o name"; do
+        if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
+            log_error "Timeout waiting for $description to exist"
+            exit 1
+        else
+            log_info "Waiting $interval for $description to exist..."
+            sleep "$interval"
+        fi
+    done
+}
+
 wait_to_start_in_namespace() {
     namespace=${1:-${RHDH_NAMESPACE}}
     resource=${2:-deployment}
@@ -92,18 +115,7 @@ wait_to_start_in_namespace() {
     wait_timeout=${5:-300}
     rn=$resource/$name
     description=${6:-$rn}
-    timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$initial_timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
-
-    interval=10s
-    while ! /bin/bash -c "$cli -n $namespace get $rn -o name"; do
-        if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
-            log_error "Timeout waiting for $description to start"
-            exit 1
-        else
-            log_info "Waiting $interval for $description to start..."
-            sleep "$interval"
-        fi
-    done
+    wait_to_exist "$namespace" "$resource" "$name" "$initial_timeout" "$description"
     $cli -n "$namespace" rollout status "$rn" --timeout="${wait_timeout}s"
     return $?
 }
@@ -454,10 +466,46 @@ install_rhdh_with_helm() {
         yq -i '.upstream.backstage.readinessProbe |= {"httpGet":{"path":"/healthcheck","port":7007,"scheme":"HTTP"},"initialDelaySeconds":30,"timeoutSeconds":2,"periodSeconds":300,"successThreshold":1,"failureThreshold":3}' "$TMP_DIR/chart-values.yaml"
         yq -i '.upstream.backstage.livenessProbe |= {"httpGet":{"path":"/healthcheck","port":7007,"scheme":"HTTP"},"initialDelaySeconds":30,"timeoutSeconds":2,"periodSeconds":300,"successThreshold":1,"failureThreshold":3}' "$TMP_DIR/chart-values.yaml"
     fi
+
+    # Configure database host (PgBouncer or direct PostgreSQL)
+    if ${ENABLE_PGBOUNCER}; then
+        log_info "PgBouncer enabled - configuring Backstage to connect via PgBouncer"
+        yq -i '.upstream.backstage.appConfig.database.connection.host = "'"${RHDH_HELM_RELEASE_NAME}"'-pgbouncer"' "$TMP_DIR/chart-values.yaml"
+    fi
+    # PG_MAX_CONNECTIONS=$(bc <<<"($RHDH_DEPLOYMENT_REPLICAS * 50)")
+    # PGBOUNCER_MAX_CLIENT_CONNECTIONS=$(bc <<<"($RHDH_DEPLOYMENT_REPLICAS * 50)/$PGBOUNCER_REPLICAS * 0.8")
+    # PGBOUNCER_MAX_DB_CONNECTIONS=$(bc <<<"($PG_MAX_CONNECTIONS / $PGBOUNCER_REPLICAS) * 0.8")
+    # PGBOUNCER_DEFAULT_POOL_SIZE=$(bc <<<"$PGBOUNCER_MAX_DB_CONNECTIONS / 5")
+    # PGBOUNCER_MAX_USER_CONNECTIONS=$(bc <<<"$PGBOUNCER_MAX_CLIENT_CONNECTIONS * 1.2")
+
     #shellcheck disable=SC2086
-    helm upgrade "${RHDH_HELM_RELEASE_NAME}" -i ${RHDH_HELM_REPO} ${version_arg} -n "${RHDH_NAMESPACE}" --values "$TMP_DIR/chart-values.yaml"
-    wait_to_start statefulset "${RHDH_HELM_RELEASE_NAME}-postgresql-read" 300 300
+    helm upgrade "${RHDH_HELM_RELEASE_NAME}" -i "${RHDH_HELM_REPO}" ${version_arg} -n "${RHDH_NAMESPACE}" --values "$TMP_DIR/chart-values.yaml"
+
+    # Patch deployment strategy to start replicas one by one
+    log_info "Patching RHDH deployment strategy for sequential replica startup"
+    wait_to_exist "${RHDH_NAMESPACE}" deployment "${RHDH_HELM_RELEASE_NAME}-developer-hub" 300 "RHDH deployment"
+    $clin patch deployment "${RHDH_HELM_RELEASE_NAME}-developer-hub" --type='merge' -p '{"spec":{"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxUnavailable":0,"maxSurge":1}}}}'
+
+    wait_to_start statefulset "${RHDH_HELM_RELEASE_NAME}-postgresql-primary" 300 300
+
+    # Deploy PgBouncer if enabled
+    if ${ENABLE_PGBOUNCER}; then
+        log_info "Deploying PgBouncer connection pooler"
+        POSTGRESQL_ADMIN_PASSWORD=$($clin get secret "${RHDH_HELM_RELEASE_NAME}-postgresql" -o jsonpath='{.data.postgres-password}' | base64 -d)
+        export POSTGRESQL_ADMIN_PASSWORD
+
+        envsubst '${RHDH_HELM_RELEASE_NAME} ${RHDH_NAMESPACE} ${POSTGRESQL_ADMIN_PASSWORD} ${PGBOUNCER_REPLICAS}' \
+            <template/backstage/helm/pgbouncer.yaml >"$TMP_DIR/pgbouncer.yaml"
+        $clin apply -f "$TMP_DIR/pgbouncer.yaml"
+        wait_to_start deployment "${RHDH_HELM_RELEASE_NAME}-pgbouncer" 300 300
+    fi
+
     wait_to_start deployment "${RHDH_HELM_RELEASE_NAME}-developer-hub" 300 300
+    for ((replicas = 2; replicas <= RHDH_DEPLOYMENT_REPLICAS; replicas++)); do
+        log_info "Scaling developer-hub deployment to $replicas replicas"
+        $clin scale deployment "${RHDH_HELM_RELEASE_NAME}-developer-hub" --replicas=$replicas
+        wait_to_start deployment "${RHDH_HELM_RELEASE_NAME}-developer-hub" 300 300
+    done
     return $?
 }
 
@@ -587,7 +635,7 @@ setup_monitoring() {
     fi
 
     if [ "$(yq '.prometheusK8s.volumeClaimTemplate' "$config")" == "null" ]; then
-        yq -i '.prometheusK8s = {"volumeClaimTemplate":{"spec":{"storageClassName":"gp3-csi","volumeMode":"Filesystem","resources":{"requests":{"storage":"30Gi"}}}}}' "$config"
+        yq -i '.prometheusK8s = {"volumeClaimTemplate":{"spec":{"storageClassName":"gp3-csi","volumeMode":"Filesystem","resources":{"requests":{"storage":"60Gi"}}}}}' "$config"
         update_config=1
     fi
 
