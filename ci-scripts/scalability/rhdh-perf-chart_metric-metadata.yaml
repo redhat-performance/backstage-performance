@@ -232,7 +232,7 @@ metrics:
     label: "Response Time"
     units: "ms"
 
-  Auth_Catalog_Entity_Avg:
+  Auth_Policy_Response_Time_Avg:
     title: "Authorization Check Time"
     subtitle: "Policy permission"
     label: "Response Time"

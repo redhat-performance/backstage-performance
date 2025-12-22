@@ -155,7 +155,16 @@ Orchestrator_Workflow_Execute_Response_Time_Max \
 Orchestrator_Workflow_Instance_by_Id_Response_Time_Avg \
 Orchestrator_Workflow_Instance_by_Id_Response_Time_Max \
 Orchestrator_Workflow_All_Instances_Response_Time_Avg \
-Orchestrator_Workflow_All_Instances_Response_Time_Max"
+Orchestrator_Workflow_All_Instances_Response_Time_Max \
+Catalog_Allow_Response_Time_Avg \
+Catalog_Deny_Response_Time_Avg \
+RBAC_Allow_Response_Time_Avg \
+RBAC_Deny_Response_Time_Avg \
+Scaffolder_Allow_Response_Time_Avg \
+Scaffolder_Deny_Response_Time_Avg \
+Orchestrator_Allow_Response_Time_Avg \
+Orchestrator_Deny_Response_Time_Avg \
+Auth_Policy_Response_Time_Avg"
 
 # Metrics
 for x_axis_scale_label in "ActiveUsers:linear:Active Users" "RBAC_POLICY_SIZE:log:RBAC Policy Size" "Iteration:linear:Iteration" "CATALOG_SIZE:linear:Catalog Size" "COMPONENT_COUNT:linear:Component Count" "API_COUNT:linear:API Count"; do
