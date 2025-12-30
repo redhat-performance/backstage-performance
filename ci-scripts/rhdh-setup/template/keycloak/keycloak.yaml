@@ -27,4 +27,4 @@ spec:
     - name: proxy-headers
       value: forwarded
     - name: log-level
-      value: ${RHDH_LOG_LEVEL}
+      value: ${KEYCLOAK_LOG_LEVEL}

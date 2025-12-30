@@ -1,4 +1,4 @@
-app:
+\app:
   title: Red Hat Developer Hub
   analytics:
     adoptionInsights: {}
@@ -23,7 +23,7 @@ catalog:
         groupQuerySize: 1000
         schedule:
           frequency: 
-            seconds: 60
+            hours: 2
           timeout: 
             minutes: 1
           initialDelay: 

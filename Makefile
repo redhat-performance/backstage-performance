@@ -25,6 +25,7 @@ export SPAWN_RATE ?= 20
 
 # Used to set logging level of RHDH
 export RHDH_LOG_LEVEL ?= warn
+export KEYCLOAK_LOG_LEVEL ?= WARN
 
 # RHDH image to deploy. Uncomment and set to override RHDH image to deploy and test.
 export RHDH_IMAGE_REGISTRY ?=

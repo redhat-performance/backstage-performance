@@ -71,6 +71,7 @@ export FORCE_ORCHESTRATOR_INFRA_UNINSTALL="${FORCE_ORCHESTRATOR_INFRA_UNINSTALL:
 export ENABLE_PROFILING="${ENABLE_PROFILING:-false}"
 export RBAC_POLICY="${RBAC_POLICY:-all_groups_admin}"
 export RHDH_LOG_LEVEL="${RHDH_LOG_LEVEL:-warn}"
+export KEYCLOAK_LOG_LEVEL="${KEYCLOAK_LOG_LEVEL:-WARN}"
 
 export PSQL_LOG="${PSQL_LOG:-true}"
 export RHDH_METRIC="${RHDH_METRIC:-true}"
@@ -273,21 +274,16 @@ keycloak_install() {
     envsubst '${KEYCLOAK_CLIENT_SECRET} ${OAUTH2_REDIRECT_URI} ${KEYCLOAK_USER_PASS}' <template/keycloak/keycloakRealmImport.yaml | $clin apply -f -
     $clin create secret generic keycloak-client-secret-backstage --from-literal=CLIENT_ID=backstage --from-literal=CLIENT_SECRET="$KEYCLOAK_CLIENT_SECRET" --dry-run=client -o yaml | oc apply -f -
     # Wait up to 1 minute for completion realm generation
-    oc wait --for=condition=Done keycloakrealmimport/backstage-realm-import -n $RHDH_NAMESPACE --timeout=60s
+    $clin wait --for=condition=Done keycloakrealmimport/backstage-realm-import --timeout=60s
     assign_roles_to_client
 }
 
 assign_roles_to_client() {
     ADMIN_TOKEN=$(get_token "keycloak")
-    echo "Admin token is " $ADMIN_TOKEN
     SA_USER_ID=$(curl -s -k "$(keycloak_url)/admin/realms/backstage/users?username=service-account-backstage" -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r '.[0].id')
-    echo "SA_USER_ID is " $SA_USER_ID
     REALM_MGMT_ID=$(curl -s -k "$(keycloak_url)/admin/realms/backstage/clients?clientId=realm-management" -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r '.[0].id')
-    echo "REALM_MGMT_ID is " $REALM_MGMT_ID
 
     ROLE_NAMES=$(curl -s -k "$(keycloak_url)/admin/realms/backstage/clients/$REALM_MGMT_ID/roles" -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r '.[].name')
-    echo "Available roles:"
-    echo "$ROLE_NAMES"
 
     while IFS= read -r role_name; do
         [ -z "$role_name" ] && continue
@@ -300,7 +296,6 @@ assign_roles_to_client() {
             -H "Authorization: Bearer $ADMIN_TOKEN" \
             -H "Content-Type: application/json" \
             -d "[$ROLE_JSON]"
-        echo "  Done"
     done <<< "$ROLE_NAMES"
 }
 
