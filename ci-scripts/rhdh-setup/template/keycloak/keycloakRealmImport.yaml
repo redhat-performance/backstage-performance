@@ -15,26 +15,12 @@ spec:
       - clientId: backstage
         secret: ${KEYCLOAK_CLIENT_SECRET}
         clientAuthenticatorType: client-secret
-        defaultClientScopes:
-          - profile
-          - email
-          - roles
-        directAccessGrantsEnabled: true
-        implicitFlowEnabled: false
         publicClient: false
         redirectUris:
           - ${OAUTH2_REDIRECT_URI}
         serviceAccountsEnabled: true
         standardFlowEnabled: true
-        serviceAccountClientRoles:
-          realm-management:
-            - query-groups
-            - query-users
-            - view-users
-            - view-clients
-            - view-realm
-            - manage-users
-            - manage-clients
+        directAccessGrantsEnabled: true
     users:
       - username: guru
         firstName: Guru

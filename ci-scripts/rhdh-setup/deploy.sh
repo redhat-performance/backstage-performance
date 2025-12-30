@@ -64,7 +64,6 @@ export GROUP_COUNT="${GROUP_COUNT:-1}"
 export API_COUNT="${API_COUNT:-1}"
 export COMPONENT_COUNT="${COMPONENT_COUNT:-1}"
 export KEYCLOAK_USER_PASS=${KEYCLOAK_USER_PASS:-$(mktemp -u XXXXXXXXXX)}
-export KEYCLOAK_ADMIN_PASS=${KEYCLOAK_ADMIN_PASS:-admin}
 export AUTH_PROVIDER="${AUTH_PROVIDER:-''}"
 export ENABLE_RBAC="${ENABLE_RBAC:-false}"
 export ENABLE_ORCHESTRATOR="${ENABLE_ORCHESTRATOR:-false}"
@@ -256,10 +255,6 @@ keycloak_install() {
     envsubst <template/keycloak/keycloak.yaml | $clin apply -f -
     wait_to_start statefulset rhdh-keycloak 450 600
 
-    $clin create secret generic credential-rhdh-keycloak \
-        --from-literal=ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASS" \
-        --dry-run=client -o yaml | $clin apply -f -
-
     $clin create route edge keycloak \
         --service=rhdh-keycloak-service \
         --port=8080 \
@@ -275,8 +270,38 @@ keycloak_install() {
         fi
     fi
     # shellcheck disable=SC2016
-    envsubst '${KEYCLOAK_CLIENT_SECRET} ${OAUTH2_REDIRECT_URI} ${KEYCLOAK_USER_PASS} ${KEYCLOAK_ADMIN_PASS}' <template/keycloak/keycloakRealmImport.yaml | $clin apply -f -
+    envsubst '${KEYCLOAK_CLIENT_SECRET} ${OAUTH2_REDIRECT_URI} ${KEYCLOAK_USER_PASS}' <template/keycloak/keycloakRealmImport.yaml | $clin apply -f -
     $clin create secret generic keycloak-client-secret-backstage --from-literal=CLIENT_ID=backstage --from-literal=CLIENT_SECRET="$KEYCLOAK_CLIENT_SECRET" --dry-run=client -o yaml | oc apply -f -
+    # Wait up to 1 minute for completion realm generation
+    oc wait --for=condition=Done keycloakrealmimport/backstage-realm-import -n $RHDH_NAMESPACE --timeout=60s
+    assign_roles_to_client
+}
+
+assign_roles_to_client() {
+    ADMIN_TOKEN=$(get_token "keycloak")
+    echo "Admin token is " $ADMIN_TOKEN
+    SA_USER_ID=$(curl -s -k "$(keycloak_url)/admin/realms/backstage/users?username=service-account-backstage" -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r '.[0].id')
+    echo "SA_USER_ID is " $SA_USER_ID
+    REALM_MGMT_ID=$(curl -s -k "$(keycloak_url)/admin/realms/backstage/clients?clientId=realm-management" -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r '.[0].id')
+    echo "REALM_MGMT_ID is " $REALM_MGMT_ID
+
+    ROLE_NAMES=$(curl -s -k "$(keycloak_url)/admin/realms/backstage/clients/$REALM_MGMT_ID/roles" -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r '.[].name')
+    echo "Available roles:"
+    echo "$ROLE_NAMES"
+
+    while IFS= read -r role_name; do
+        [ -z "$role_name" ] && continue
+
+        ROLE_JSON=$(curl -s -k "$(keycloak_url)/admin/realms/backstage/clients/$REALM_MGMT_ID/roles/$role_name" \
+            -H "Authorization: Bearer $ADMIN_TOKEN")
+
+        curl -s -k -X POST \
+            "$(keycloak_url)/admin/realms/backstage/users/$SA_USER_ID/role-mappings/clients/$REALM_MGMT_ID" \
+            -H "Authorization: Bearer $ADMIN_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "[$ROLE_JSON]"
+        echo "  Done"
+    done <<< "$ROLE_NAMES"
 }
 
 create_users_groups() {

@@ -22,11 +22,9 @@ global:
                   groupQuerySize: 1000
                   schedule:
                     frequency:
-                      minutes: 30
+                      seconds: 60
                     timeout:
                       minutes: 1
-                    initialDelay:
-                      seconds: 15
       - package: ./dynamic-plugins/dist/backstage-community-plugin-analytics-provider-segment
         disabled: true
       # TechDocs

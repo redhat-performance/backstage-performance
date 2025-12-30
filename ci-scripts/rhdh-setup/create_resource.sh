@@ -460,7 +460,7 @@ create_user() {
       -H 'Authorization: Bearer '"$token" \
       --data-raw '{"firstName":"'"${username}"'","lastName":"tester", "email":"'"${username}"'@test.com","emailVerified":"true", "enabled":"true", "username":"'"${username}"'","groups":'"$groups"',"credentials":[{"type":"password","value":"'"${KEYCLOAK_USER_PASS}"'","temporary":false}]}' 2>&1)"
     if [ "${PIPESTATUS[0]}" -eq 0 ] && ! echo "$response" | grep -q 'error' >&/dev/null; then
-      log_info "User $username ($groups) created" >>"$TMP_DIR/create_user.log"
+      log_info "User $username ($groups) created. [$response]" >>"$TMP_DIR/create_user.log"
       return
     else
       log_warn "Unable to create the $username user at $attempt. attempt. [$response].  Trying again up to $max_attempts times." >>"$TMP_DIR/create_user.log"
@@ -482,14 +482,13 @@ create_users() {
 
 token_lockfile="$TMP_DIR/token.lockfile"
 
+
 keycloak_token() {
-  client_secret=$(oc -n "${RHDH_NAMESPACE}" get secret keycloak-client-secret-backstage -o template --template='{{.data.CLIENT_SECRET}}' | base64 -d)
-  curl -s -k "$(keycloak_url)/realms/backstage/protocol/openid-connect/token" \
-    -d username=guru \
+  curl -s -k "$(keycloak_url)/realms/master/protocol/openid-connect/token" \
+    -d username=temp-admin \
     -d "password=$1" \
     -d 'grant_type=password' \
-    -d 'client_id=backstage' \
-    -d "client_secret=$client_secret" | jq -r ".expires_in_timestamp = $(python3 -c 'from datetime import datetime, timedelta; t_add=int(30); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))')"
+    -d 'client_id=admin-cli' | jq -r ".expires_in_timestamp = $(python3 -c 'from datetime import datetime, timedelta; t_add=int(30); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))')"
 }
 
 rhdh_token() {
@@ -516,7 +515,6 @@ rhdh_token() {
     --data-urlencode "redirect_uri=${REDIRECT_URL}" \
     --data-urlencode "scope=openid email profile" \
     --data-urlencode "response_type=code" \
-
   "$(keycloak_url)/realms/$REALM/protocol/openid-connect/auth" 2>&1| tee "$TMP_DIR/auth_url.log" | grep -oE 'action="[^"]+"' | grep -oE '"[^"]+"' | tr -d '"')
 
   execution=$(echo "$AUTH_URL" | grep -oE 'execution=[^&]+' | grep -oE '[^=]+$')
@@ -579,8 +577,8 @@ get_token() {
         log_token_err "Unable to get $token_type token, re-attempting"
       fi
     else
-      keycloak_pass=$(oc -n "${RHDH_NAMESPACE}" get secret perf-test-secrets -o template --template='{{.data.keycloak_user_pass}}' | base64 -d)
-      if ! keycloak_token "$keycloak_pass" >"$token_file"; then
+      keycloak_pass=$(oc -n "${RHDH_NAMESPACE}" get secret rhdh-keycloak-initial-admin -o template --template='{{.data.password}}'| base64 -d)
+      if ! keycloak_token $keycloak_pass >"$token_file"; then
         log_token_err "Unable to get $token_type token, re-attempting"
       fi
     fi

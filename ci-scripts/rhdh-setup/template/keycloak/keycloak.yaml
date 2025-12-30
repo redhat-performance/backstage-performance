@@ -24,9 +24,7 @@ spec:
   ingress:
     enabled: true
   additionalOptions:
-    - name: bootstrap-admin-username
-      value: admin
-    - name: bootstrap-admin-password
-      value: admin
     - name: proxy-headers
       value: forwarded
+    - name: log-level
+      value: ${RHDH_LOG_LEVEL}

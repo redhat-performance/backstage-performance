@@ -23,7 +23,7 @@ catalog:
         groupQuerySize: 1000
         schedule:
           frequency: 
-            hours: 2
+            seconds: 60
           timeout: 
             minutes: 1
           initialDelay: 
