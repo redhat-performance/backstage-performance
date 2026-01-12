@@ -71,6 +71,7 @@ export FORCE_ORCHESTRATOR_INFRA_UNINSTALL="${FORCE_ORCHESTRATOR_INFRA_UNINSTALL:
 export ENABLE_PROFILING="${ENABLE_PROFILING:-false}"
 export RBAC_POLICY="${RBAC_POLICY:-all_groups_admin}"
 export RHDH_LOG_LEVEL="${RHDH_LOG_LEVEL:-warn}"
+export KEYCLOAK_LOG_LEVEL="${KEYCLOAK_LOG_LEVEL:-WARN}"
 
 export PSQL_LOG="${PSQL_LOG:-true}"
 export RHDH_METRIC="${RHDH_METRIC:-true}"
@@ -238,11 +239,28 @@ keycloak_install() {
     )
     envsubst <template/keycloak/keycloak-op.yaml | $clin apply -f -
     envsubst <template/backstage/perf-test-secrets.yaml | $clin apply -f -
-    grep -m 1 "rhsso-operator" <($clin get pods -w)
-    wait_to_start deployment rhsso-operator 300 300
+    grep -m 1 "rhbk-operator" <($clin get pods -w)
+    wait_to_start deployment rhbk-operator 300 300
+
+    export KEYCLOAK_DB_PASSWORD
+    KEYCLOAK_DB_PASSWORD=$(mktemp -u XXXXXXXXXX)
+    export KEYCLOAK_DB_STORAGE
+    KEYCLOAK_DB_STORAGE=${KEYCLOAK_DB_STORAGE:-${RHDH_DB_STORAGE:-1Gi}}
+
+    log_info "Creating Keycloak PostgreSQL database with storage: $KEYCLOAK_DB_STORAGE"
+    envsubst <template/keycloak/keycloak-postgresql.yaml | $clin apply -f -
+    wait_to_start statefulset keycloak-postgresql 300 300
+
+    $clin create secret generic keycloak-db-user --from-literal=keycloak-db-user=keycloak --dry-run=client -o yaml | $clin apply -f -
+
     envsubst <template/keycloak/keycloak.yaml | $clin apply -f -
-    wait_to_start statefulset keycloak 450 600
-    envsubst <template/keycloak/keycloakRealm.yaml | $clin apply -f -
+    wait_to_start statefulset rhdh-keycloak 450 600
+
+    $clin create route edge keycloak \
+        --service=rhdh-keycloak-service \
+        --port=8080 \
+        --dry-run=client -o yaml | $clin apply -f -
+
     if [ "$INSTALL_METHOD" == "helm" ]; then
         export OAUTH2_REDIRECT_URI="https://${RHDH_HELM_RELEASE_NAME}-developer-hub-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}/oauth2/callback"
     elif [ "$INSTALL_METHOD" == "olm" ]; then
@@ -252,9 +270,33 @@ keycloak_install() {
             export OAUTH2_REDIRECT_URI="https://backstage-developer-hub-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}/oauth2/callback"
         fi
     fi
-    envsubst <template/keycloak/keycloakClient.yaml | $clin apply -f -
     # shellcheck disable=SC2016
-    envsubst '${KEYCLOAK_USER_PASS}' <template/keycloak/keycloakUser.yaml | $clin apply -f -
+    envsubst '${KEYCLOAK_CLIENT_SECRET} ${OAUTH2_REDIRECT_URI} ${KEYCLOAK_USER_PASS}' <template/keycloak/keycloakRealmImport.yaml | $clin apply -f -
+    $clin create secret generic keycloak-client-secret-backstage --from-literal=CLIENT_ID=backstage --from-literal=CLIENT_SECRET="$KEYCLOAK_CLIENT_SECRET" --dry-run=client -o yaml | oc apply -f -
+    # Wait up to 1 minute for completion realm generation
+    $clin wait --for=condition=Done keycloakrealmimport/backstage-realm-import --timeout=60s
+    assign_roles_to_client
+}
+
+assign_roles_to_client() {
+    ADMIN_TOKEN=$(get_token "keycloak")
+    SA_USER_ID=$(curl -s -k "$(keycloak_url)/admin/realms/backstage/users?username=service-account-backstage" -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r '.[0].id')
+    REALM_MGMT_ID=$(curl -s -k "$(keycloak_url)/admin/realms/backstage/clients?clientId=realm-management" -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r '.[0].id')
+
+    ROLE_NAMES=$(curl -s -k "$(keycloak_url)/admin/realms/backstage/clients/$REALM_MGMT_ID/roles" -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r '.[].name')
+
+    while IFS= read -r role_name; do
+        [ -z "$role_name" ] && continue
+
+        ROLE_JSON=$(curl -s -k "$(keycloak_url)/admin/realms/backstage/clients/$REALM_MGMT_ID/roles/$role_name" \
+            -H "Authorization: Bearer $ADMIN_TOKEN")
+
+        curl -s -k -X POST \
+            "$(keycloak_url)/admin/realms/backstage/users/$SA_USER_ID/role-mappings/clients/$REALM_MGMT_ID" \
+            -H "Authorization: Bearer $ADMIN_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "[$ROLE_JSON]"
+    done <<< "$ROLE_NAMES"
 }
 
 create_users_groups() {

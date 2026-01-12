@@ -1,4 +1,4 @@
-app:
+\app:
   title: Red Hat Developer Hub
   analytics:
     adoptionInsights: {}
@@ -25,7 +25,7 @@ catalog:
           frequency: 
             hours: 2
           timeout: 
-            minutes: 1
+            minutes: 10
           initialDelay: 
             minutes: 1
 techdocs:

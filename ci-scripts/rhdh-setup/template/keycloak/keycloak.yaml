@@ -1,10 +1,30 @@
-apiVersion: keycloak.org/v1alpha1
+apiVersion: k8s.keycloak.org/v2alpha1
 kind: Keycloak
 metadata:
-  name: rhdh-sso
+  name: rhdh-keycloak
   labels:
-    app: sso
+    app: keycloak
 spec:
   instances: ${RHDH_KEYCLOAK_REPLICAS}
-  externalAccess:
-    enabled: True
+  db:
+    vendor: postgres
+    host: keycloak-postgresql
+    port: 5432
+    database: keycloak
+    usernameSecret:
+      name: keycloak-db-user
+      key: keycloak-db-user
+    passwordSecret:
+      name: keycloak-postgresql
+      key: password
+  hostname:
+    strict: false
+  http:
+    httpEnabled: true
+  ingress:
+    enabled: true
+  additionalOptions:
+    - name: proxy-headers
+      value: forwarded
+    - name: log-level
+      value: ${KEYCLOAK_LOG_LEVEL}
