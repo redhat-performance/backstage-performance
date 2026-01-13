@@ -57,6 +57,10 @@ export RHDH_RESOURCES_CPU_REQUESTS ?=
 export RHDH_RESOURCES_CPU_LIMITS ?=
 export RHDH_RESOURCES_MEMORY_REQUESTS ?=
 export RHDH_RESOURCES_MEMORY_LIMITS ?=
+export RHDH_DB_RESOURCES_CPU_REQUESTS ?=
+export RHDH_DB_RESOURCES_CPU_LIMITS ?=
+export RHDH_DB_RESOURCES_MEMORY_REQUESTS ?=
+export RHDH_DB_RESOURCES_MEMORY_LIMITS ?=
 export RHDH_KEYCLOAK_REPLICAS ?= 1
 export LOCUST_EXTRA_CMD ?=
 export AUTH_PROVIDER ?= keycloak
@@ -103,7 +107,7 @@ namespace:
 
 ## Deploy RHDH with Helm
 .PHONY: deploy-rhdh-helm
-deploy-rhdh-helm: $(TMP_DIR)
+deploy-rhdh-helm: $(TMP_DIR) deploy-rhdh-db
 	date -u -Ins>$(TMP_DIR)/deploy-before
 	cd ./ci-scripts/rhdh-setup/; ./deploy.sh -i "$(AUTH_PROVIDER)" || true
 	date -u -Ins>$(TMP_DIR)/deploy-after
@@ -123,9 +127,19 @@ $(TMP_DIR):
 $(ARTIFACT_DIR):
 	mkdir -p $(ARTIFACT_DIR)
 
+## Deploy RHDH database
+.PHONY: deploy-rhdh-db
+deploy-rhdh-db:
+	cd ./ci-scripts/rhdh-setup; ./deploy.sh -c
+
+## Undeploy RHDH database
+.PHONY: undeploy-rhdh-db
+undeploy-rhdh-db:
+	cd ./ci-scripts/rhdh-setup; ./deploy.sh -C
+
 ## Deploy RHDH with OLM
 .PHONY: deploy-rhdh-olm
-deploy-rhdh-olm: $(TMP_DIR)
+deploy-rhdh-olm: $(TMP_DIR) deploy-rhdh-db
 	date -u -Ins>$(TMP_DIR)/deploy-before
 	cd ./ci-scripts/rhdh-setup; ./deploy.sh -o -i "$(AUTH_PROVIDER)" || true
 	date -u -Ins>$(TMP_DIR)/deploy-after
@@ -309,7 +323,7 @@ clean-artifacts:
 
 ## Clean all
 .PHONY: clean-all
-clean-all: namespace clean clean-local clean-artifacts uninstall-workflows undeploy-rhdh
+clean-all: namespace clean clean-local clean-artifacts uninstall-workflows undeploy-rhdh-db undeploy-rhdh
 
 ## Deploy pgAdmin
 .PHONY: deploy-pgadmin

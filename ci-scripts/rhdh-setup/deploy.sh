@@ -31,6 +31,10 @@ export RHDH_RESOURCES_CPU_REQUESTS=${RHDH_RESOURCES_CPU_REQUESTS:-}
 export RHDH_RESOURCES_CPU_LIMITS=${RHDH_RESOURCES_CPU_LIMITS:-}
 export RHDH_RESOURCES_MEMORY_REQUESTS=${RHDH_RESOURCES_MEMORY_REQUESTS:-}
 export RHDH_RESOURCES_MEMORY_LIMITS=${RHDH_RESOURCES_MEMORY_LIMITS:-}
+export RHDH_DB_RESOURCES_CPU_REQUESTS=${RHDH_DB_RESOURCES_CPU_REQUESTS:-}
+export RHDH_DB_RESOURCES_CPU_LIMITS=${RHDH_DB_RESOURCES_CPU_LIMITS:-}
+export RHDH_DB_RESOURCES_MEMORY_REQUESTS=${RHDH_DB_RESOURCES_MEMORY_REQUESTS:-}
+export RHDH_DB_RESOURCES_MEMORY_LIMITS=${RHDH_DB_RESOURCES_MEMORY_LIMITS:-}
 export RHDH_KEYCLOAK_REPLICAS=${RHDH_KEYCLOAK_REPLICAS:-1}
 
 export RHDH_IMAGE_REGISTRY=${RHDH_IMAGE_REGISTRY:-}
@@ -76,7 +80,6 @@ export KEYCLOAK_LOG_LEVEL="${KEYCLOAK_LOG_LEVEL:-WARN}"
 export PSQL_LOG="${PSQL_LOG:-true}"
 export RHDH_METRIC="${RHDH_METRIC:-true}"
 export PSQL_EXPORT="${PSQL_EXPORT:-false}"
-export ENABLE_PGBOUNCER="${ENABLE_PGBOUNCER:-true}"
 export PGBOUNCER_REPLICAS="${PGBOUNCER_REPLICAS:-2}"
 export LOG_MIN_DURATION_STATEMENT="${LOG_MIN_DURATION_STATEMENT:-65}"
 export LOG_MIN_DURATION_SAMPLE="${LOG_MIN_DURATION_SAMPLE:-50}"
@@ -87,57 +90,31 @@ export INSTALL_METHOD=helm
 TMP_DIR=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "${TMP_DIR:-.tmp}")
 mkdir -p "${TMP_DIR}"
 
-wait_to_exist() {
-    namespace=${1:-${RHDH_NAMESPACE}}
-    resource=${2:-deployment}
-    name=${3:-name}
-    initial_timeout=${4:-300}
-    rn=$resource/$name
-    description=${5:-$rn}
-    timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$initial_timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
+###############################################################################
+# Section 1: Namespace and Operator Setup
+###############################################################################
 
-    interval=10s
-    while ! /bin/bash -c "$cli -n $namespace get $rn -o name"; do
-        if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
-            log_error "Timeout waiting for $description to exist"
-            exit 1
-        else
-            log_info "Waiting $interval for $description to exist..."
-            sleep "$interval"
-        fi
-    done
+setup_rhdh_namespace() {
+    log_info "Setting up RHDH namespace"
+    if ! $cli get namespace "${RHDH_NAMESPACE}" >/dev/null 2>&1; then
+        $cli create namespace "${RHDH_NAMESPACE}"
+    else
+        log_info "RHDH namespace already exists, skipping..."
+    fi
 }
 
-wait_to_start_in_namespace() {
-    namespace=${1:-${RHDH_NAMESPACE}}
-    resource=${2:-deployment}
-    name=${3:-name}
-    initial_timeout=${4:-300}
-    wait_timeout=${5:-300}
-    rn=$resource/$name
-    description=${6:-$rn}
-    wait_to_exist "$namespace" "$resource" "$name" "$initial_timeout" "$description"
-    $cli -n "$namespace" rollout status "$rn" --timeout="${wait_timeout}s"
-    return $?
+setup_operator_group() {
+    if $clin get operatorgroup -o name 2>/dev/null | grep -q .; then
+        log_info "OperatorGroup already exists in $RHDH_NAMESPACE namespace, skipping..."
+    else
+        log_info "Creating OperatorGroup in $RHDH_NAMESPACE namespace"
+        envsubst <template/backstage/operator-group.yaml | $clin apply -f -
+    fi
 }
 
-wait_for_crd() {
-    name=${1:-name}
-    initial_timeout=${2:-300}
-    rn=crd/$name
-    description=${3:-$rn}
-    timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$initial_timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
-    interval=10s
-    while ! /bin/bash -c "$cli get $rn"; do
-        if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
-            log_error "Timeout waiting for $description to exist"
-            exit 1
-        else
-            log_info "Waiting $interval for $description to exist..."
-            sleep "$interval"
-        fi
-    done
-}
+###############################################################################
+# Section 2: Orchestrator Infrastructure
+###############################################################################
 
 is_orchestrator_infra_installed() {
     helm list -n "${RHDH_NAMESPACE}" -q | grep -q "^${RHDH_HELM_RELEASE_NAME}-orchestrator-infra$"
@@ -176,87 +153,156 @@ install_orchestrator_infra() {
     wait_and_approve_install_plans openshift-serverless-logic
 }
 
-wait_to_start() {
-    wait_to_start_in_namespace "$RHDH_NAMESPACE" "$@"
-    return $?
-}
+delete_orchestrator_infra() {
+    log_info "Deleting RHDH Orchestrator infra"
+    helm uninstall "${RHDH_HELM_RELEASE_NAME}-orchestrator-infra" --namespace "${RHDH_NAMESPACE}" --ignore-not-found=true --wait
 
-restart_rhdh_deployment() {
-    replica_count=${1:-1}
-    if [ "$INSTALL_METHOD" == "helm" ]; then
-        rhdh_deployment="${RHDH_HELM_RELEASE_NAME}-developer-hub"
-    elif [ "$INSTALL_METHOD" == "olm" ]; then
-        rhdh_deployment="backstage-developer-hub"
-    fi
-    $clin scale deployment "$rhdh_deployment" --replicas=0
-    for ((replicas = 1; replicas <= replica_count; replicas++)); do
-        log_info "Scaling developer-hub deployment to $replicas/$replica_count replicas"
-        $clin scale deployment "$rhdh_deployment" --replicas=$replicas
-        wait_to_start deployment "$rhdh_deployment" 300 300
+    # Delete KnativeEventing custom resources first
+    log_info "Deleting KnativeEventing custom resources"
+    for ns in knative-eventing openshift-serverless; do
+        if $cli get ns "$ns" >/dev/null 2>&1; then
+            for res in $($cli get knativeeventings.operator.knative.dev -n "$ns" -o name 2>/dev/null); do
+                log_info "Removing finalizers from $res in namespace $ns"
+                $cli patch "$res" -n "$ns" -p '{"metadata":{"finalizers":[]}}' --type=merge
+                $cli delete "$res" -n "$ns" --ignore-not-found=true --wait
+            done
+        fi
     done
+
+    # Delete KnativeServing custom resources
+    log_info "Deleting KnativeServing custom resources"
+    for ns in knative-serving openshift-serverless; do
+        if $cli get ns "$ns" >/dev/null 2>&1; then
+            for res in $($cli get knativeservings.operator.knative.dev -n "$ns" -o name 2>/dev/null); do
+                log_info "Removing finalizers from $res in namespace $ns"
+                $cli patch "$res" -n "$ns" -p '{"metadata":{"finalizers":[]}}' --type=merge
+                $cli delete "$res" -n "$ns" --ignore-not-found=true --wait
+            done
+        fi
+    done
+
+    # Delete subscriptions
+    $cli delete subscription.operators.coreos.com serverless-operator -n openshift-serverless --ignore-not-found=true --wait
+    $cli delete subscription.operators.coreos.com logic-operator-rhel8 -n openshift-serverless-logic --ignore-not-found=true --wait
+
+    # Delete CSVs (ClusterServiceVersions) to remove operators
+    log_info "Deleting ClusterServiceVersions for Knative operators"
+    for ns in openshift-serverless openshift-serverless-logic knative-eventing knative-serving; do
+        if $cli get ns "$ns" >/dev/null 2>&1; then
+            for csv in $($cli get csv -n "$ns" -o name 2>/dev/null | grep -E 'serverless|knative|logic-operator'); do
+                $cli delete "$csv" -n "$ns" --ignore-not-found=true --wait
+            done
+        fi
+    done
+
+    # Remove Knative webhook configurations to prevent validation errors during cleanup
+    log_info "Removing Knative webhook configurations"
+    $cli delete validatingwebhookconfiguration config.webhook.serving.knative.dev --ignore-not-found=true --wait
+    $cli delete validatingwebhookconfiguration validation.webhook.serving.knative.dev --ignore-not-found=true --wait
+    $cli delete validatingwebhookconfiguration validation.webhook.eventing.knative.dev --ignore-not-found=true --wait
+    $cli delete mutatingwebhookconfiguration webhook.serving.knative.dev --ignore-not-found=true --wait
+    $cli delete mutatingwebhookconfiguration webhook.eventing.knative.dev --ignore-not-found=true --wait
+
+    # Force delete any remaining pods in Knative namespaces
+    log_info "Force deleting remaining pods in Knative namespaces"
+    for ns in knative-eventing knative-eventing-ingress knative-serving knative-serving-ingress openshift-serverless openshift-serverless-logic; do
+        if $cli get ns "$ns" >/dev/null 2>&1; then
+            for pod in $($cli get pods -n "$ns" -o name 2>/dev/null); do
+                $cli delete "$pod" -n "$ns" --force --grace-period=0 --ignore-not-found=true --wait
+            done
+        fi
+    done
+
+    # Now delete the namespaces
+    log_info "Deleting Knative and Serverless namespaces"
+    $cli delete ns openshift-serverless --ignore-not-found=true --wait
+    $cli delete ns openshift-serverless-logic --ignore-not-found=true --wait
+    $cli delete ns knative-eventing --ignore-not-found=true --wait
+    $cli delete ns knative-eventing-ingress --ignore-not-found=true --wait
+    $cli delete ns knative-serving --ignore-not-found=true --wait
+    $cli delete ns knative-serving-ingress --ignore-not-found=true --wait
 }
 
-label() {
-    namespace=$1
-    resource=$2
-    name=$3
-    label=$4
-    $cli -n "$namespace" label "$resource" "$name" "$label"
+install_workflows() {
+    export POSTGRES_HOST POSTGRES_PORT
+    POSTGRES_HOST="$($clin get secret rhdh-db-sonataflow-credentials -o json | jq -r '.data.POSTGRES_HOST' | base64 -d)"
+    POSTGRES_PORT="$($clin get secret rhdh-db-sonataflow-credentials -o json | jq -r '.data.POSTGRES_PORT' | base64 -d)"
+    log_info "Installing Orchestrator workflows"
+    mkdir -p "$TMP_DIR/workflows"
+    while IFS= read -r -d '' i; do
+        # shellcheck disable=SC2094
+        envsubst <"$i" >"$TMP_DIR/workflows/$(basename "$i")"
+        $clin apply -f "$TMP_DIR/workflows/$(basename "$i")"
+    done < <(find template/workflows/basic -type f -print0)
 }
 
-label_n() {
-    label "$RHDH_NAMESPACE" "$1" "$2" "$3"
+patch_sonataflow_flyway() {
+    # Patch SonataFlowPlatform CR to use separate Flyway schema history tables
+    # This prevents conflicts when data-index-service and jobs-service share the same database
+    log_info "Patching SonataFlowPlatform CR for Flyway compatibility"
+
+    # Patch dataIndex service with Flyway env vars
+    log_info "Adding Flyway env vars to dataIndex service"
+    $clin patch sonataflowplatform sonataflow-platform --type='merge' -p='{
+        "spec": {
+            "services": {
+                "dataIndex": {
+                    "podTemplate": {
+                        "container": {
+                            "env": [
+                                {"name": "QUARKUS_FLYWAY_TABLE", "value": "flyway_schema_history_data_index"},
+                                {"name": "QUARKUS_FLYWAY_SCHEMAS", "value": "data-index-service"},
+                                {"name": "QUARKUS_FLYWAY_BASELINE_ON_MIGRATE", "value": "true"}
+                            ]
+                        }
+                    }
+                },
+                "jobService": {
+                    "podTemplate": {
+                        "container": {
+                            "env": [
+                                {"name": "QUARKUS_FLYWAY_TABLE", "value": "flyway_schema_history_jobs"}
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    }'
+
+    log_info "Waiting for SonataFlow deployments to be ready"
+    wait_to_start deployment "sonataflow-platform-data-index-service" 300 300
+    wait_to_start deployment "sonataflow-platform-jobs-service" 300 300
 }
 
-annotate() {
-    namespace=$1
-    resource=$2
-    name=$3
-    annotation=$4
-    $cli -n "$namespace" annotate "$resource" "$name" "$annotation"
+uninstall_workflows() {
+    log_info "Uninstalling Orchestrator workflows"
+    $clin delete -f template/workflows/basic --ignore-not-found=true || true
 }
 
-annotate_n() {
-    annotate "$RHDH_NAMESPACE" "$1" "$2" "$3"
-}
+###############################################################################
+# Section 3: Keycloak Authentication
+###############################################################################
 
-mark_resource_for_rhdh() {
-    resource=$1
-    name=$2
-    annotate_n "$resource" "$name" "rhdh.redhat.com/backstage-name=developer-hub"
-    label_n "$resource" "$name" "rhdh.redhat.com/ext-config-sync=true"
-}
+assign_roles_to_client() {
+    ADMIN_TOKEN=$(get_token "keycloak")
+    SA_USER_ID=$(curl -s -k "$(keycloak_url)/admin/realms/backstage/users?username=service-account-backstage" -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r '.[0].id')
+    REALM_MGMT_ID=$(curl -s -k "$(keycloak_url)/admin/realms/backstage/clients?clientId=realm-management" -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r '.[0].id')
 
-install() {
-    if [ "$INSTALL_METHOD" != "helm" ] && ${ENABLE_ORCHESTRATOR}; then
-        log_error "Orchestrator is only supported with Helm install method"
-        return 1
-    fi
-    setup_monitoring
-    appurl=$(oc whoami --show-console)
-    export OPENSHIFT_APP_DOMAIN=${appurl#*.}
-    $cli create namespace "${RHDH_NAMESPACE}" --dry-run=client -o yaml | $cli apply -f -
-    keycloak_install 2>&1 | tee "${TMP_DIR}/keycloak_install.log"
+    ROLE_NAMES=$(curl -s -k "$(keycloak_url)/admin/realms/backstage/clients/$REALM_MGMT_ID/roles" -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r '.[].name')
 
-    if $PRE_LOAD_DB; then
-        log_info "Creating users and groups in Keycloak in background"
-        create_users_groups 2>&1 | tee -a "${TMP_DIR}/create-users-groups.log"
-    fi
+    while IFS= read -r role_name; do
+        [ -z "$role_name" ] && continue
 
-    backstage_install 2>&1 | tee -a "${TMP_DIR}/backstage-install.log"
-    exit_code=${PIPESTATUS[0]}
-    if [ "$exit_code" -ne 0 ]; then
-        log_error "Installation failed!!!"
-        return "$exit_code"
-    fi
+        ROLE_JSON=$(curl -s -k "$(keycloak_url)/admin/realms/backstage/clients/$REALM_MGMT_ID/roles/$role_name" \
+            -H "Authorization: Bearer $ADMIN_TOKEN")
 
-    if ${ENABLE_ORCHESTRATOR}; then
-        install_workflows
-    fi
-    psql_debug
-
-    log_info "Scaling RHDH deployment to $RHDH_DEPLOYMENT_REPLICAS replicas"
-    restart_rhdh_deployment "$RHDH_DEPLOYMENT_REPLICAS"
+        curl -s -k -X POST \
+            "$(keycloak_url)/admin/realms/backstage/users/$SA_USER_ID/role-mappings/clients/$REALM_MGMT_ID" \
+            -H "Authorization: Bearer $ADMIN_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "[$ROLE_JSON]"
+    done <<<"$ROLE_NAMES"
 }
 
 keycloak_install() {
@@ -308,26 +354,9 @@ keycloak_install() {
     assign_roles_to_client
 }
 
-assign_roles_to_client() {
-    ADMIN_TOKEN=$(get_token "keycloak")
-    SA_USER_ID=$(curl -s -k "$(keycloak_url)/admin/realms/backstage/users?username=service-account-backstage" -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r '.[0].id')
-    REALM_MGMT_ID=$(curl -s -k "$(keycloak_url)/admin/realms/backstage/clients?clientId=realm-management" -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r '.[0].id')
-
-    ROLE_NAMES=$(curl -s -k "$(keycloak_url)/admin/realms/backstage/clients/$REALM_MGMT_ID/roles" -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r '.[].name')
-
-    while IFS= read -r role_name; do
-        [ -z "$role_name" ] && continue
-
-        ROLE_JSON=$(curl -s -k "$(keycloak_url)/admin/realms/backstage/clients/$REALM_MGMT_ID/roles/$role_name" \
-            -H "Authorization: Bearer $ADMIN_TOKEN")
-
-        curl -s -k -X POST \
-            "$(keycloak_url)/admin/realms/backstage/users/$SA_USER_ID/role-mappings/clients/$REALM_MGMT_ID" \
-            -H "Authorization: Bearer $ADMIN_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "[$ROLE_JSON]"
-    done <<< "$ROLE_NAMES"
-}
+###############################################################################
+# Section 4: Catalog Population
+###############################################################################
 
 create_users_groups() {
     date -u -Ins >"${TMP_DIR}/populate-users-groups-before"
@@ -354,6 +383,323 @@ get_catalog_entity_count() {
     curl -s -k "$(backstage_url)/api/catalog/entities/by-query?limit=0&filter=kind%3D${entity_type}" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$ACCESS_TOKEN" | tee -a "$TMP_DIR/get_$(echo "$entity_type" | tr '[:upper:]' '[:lower:]')_count.log" | jq -r '.totalItems'
 }
 
+###############################################################################
+# Section 5: Database
+###############################################################################
+
+wait_for_rhdh_db_to_start() {
+    wait_to_exist "$RHDH_NAMESPACE" "statefulset" "rhdh-postgresql-cluster-primary" 300
+    $clin wait --for=condition=Ready pod -l postgres-operator.crunchydata.com/instance-set=primary --timeout=300s
+    wait_to_start deployment "rhdh-postgresql-cluster-pgbouncer" 300 300
+}
+
+setup_rhdh_db() {
+    log_info "Setting up RHDH database"
+    setup_rhdh_namespace
+    setup_operator_group
+    envsubst <template/backstage/rhdh-db/crunchy-postgres-op.yaml | $clin apply -f -
+    wait_to_start deployment pgo 300 300
+    export RHDH_DB_MAX_CONNECTIONS PGBOUNCER_MAX_CLIENT_CONNECTIONS PGBOUNCER_DEFAULT_POOL_SIZE PGBOUNCER_MAX_DB_CONNECTIONS PGBOUNCER_MAX_USER_CONNECTIONS
+
+    # Connection sizing parameters
+    CLIENT_CONNECTIONS_PER_RHDH_INSTANCE=50     # Expected DB connections per RHDH replica
+    DB_CONNECTIONS_HEADROOM_PER_RHDH_INSTANCE=5 # Extra headroom per RHDH replica
+    DB_CONNECTIONS_ADMIN_HEADROOM=20            # Reserved for admin/monitoring connections
+    RHDH_DATABASE_COUNT=30                      # Approximate number of RHDH plugin databases (~20 current + ~10 future)
+
+    # Minimum values to handle Backstage startup burst (concurrent plugin initialization)
+    # During startup, ~30 plugins create schemas concurrently regardless of replica count
+    MIN_RHDH_DB_MAX_CONNECTIONS=150
+    MIN_PGBOUNCER_MAX_CLIENT_CONNECTIONS=120
+    MIN_PGBOUNCER_MAX_DB_CONNECTIONS=60
+    # Pool size minimum equals database count to ensure each plugin can connect during startup burst
+    MIN_PGBOUNCER_DEFAULT_POOL_SIZE=$RHDH_DATABASE_COUNT
+
+    # Calculate based on replicas
+    _rhdh_db_max_conn=$(bc <<<"$RHDH_DEPLOYMENT_REPLICAS * ($CLIENT_CONNECTIONS_PER_RHDH_INSTANCE + $DB_CONNECTIONS_HEADROOM_PER_RHDH_INSTANCE)")
+    RHDH_DB_MAX_CONNECTIONS=$(bc <<<"if ($_rhdh_db_max_conn < $MIN_RHDH_DB_MAX_CONNECTIONS) $MIN_RHDH_DB_MAX_CONNECTIONS else $_rhdh_db_max_conn")
+
+    # Each PgBouncer instance is sized to handle ALL client connections (for HA/failover)
+    _pgb_max_client=$(bc <<<"scale=0; $RHDH_DEPLOYMENT_REPLICAS * $CLIENT_CONNECTIONS_PER_RHDH_INSTANCE" | sed 's,\..*,,')
+    PGBOUNCER_MAX_CLIENT_CONNECTIONS=$(bc <<<"if ($_pgb_max_client < $MIN_PGBOUNCER_MAX_CLIENT_CONNECTIONS) $MIN_PGBOUNCER_MAX_CLIENT_CONNECTIONS else $_pgb_max_client")
+
+    # Backend connections per instance - divided by PGBOUNCER_REPLICAS to ensure total doesn't exceed PostgreSQL max_connections
+    _pgb_max_db=$(bc <<<"scale=0; ($RHDH_DB_MAX_CONNECTIONS - $DB_CONNECTIONS_ADMIN_HEADROOM) / $PGBOUNCER_REPLICAS" | sed 's,\..*,,')
+    PGBOUNCER_MAX_DB_CONNECTIONS=$(bc <<<"if ($_pgb_max_db < $MIN_PGBOUNCER_MAX_DB_CONNECTIONS) $MIN_PGBOUNCER_MAX_DB_CONNECTIONS else $_pgb_max_db")
+
+    # Pool size per database - ensures all databases can use their share without exceeding max_db_connections
+    _pgb_pool_size=$(bc <<<"scale=0; $PGBOUNCER_MAX_DB_CONNECTIONS / $RHDH_DATABASE_COUNT" | sed 's,\..*,,')
+    PGBOUNCER_DEFAULT_POOL_SIZE=$(bc <<<"if ($_pgb_pool_size < $MIN_PGBOUNCER_DEFAULT_POOL_SIZE) $MIN_PGBOUNCER_DEFAULT_POOL_SIZE else $_pgb_pool_size")
+
+    PGBOUNCER_MAX_USER_CONNECTIONS=$(bc <<<"scale=0; $PGBOUNCER_MAX_DB_CONNECTIONS * 1.2" | sed 's,\..*,,')
+
+    # Note: With pool_mode=transaction, connections are quickly returned to the pool after each transaction.
+    # This allows efficient sharing even when pool_size * databases > max_db_connections,
+    # as long as concurrent transactions don't exceed the limit simultaneously.
+    # The reserve_pool provides additional burst capacity for ~30 plugins (reserve_pool_size=10, reserve_pool_timeout=5s).
+
+    log_info "Database connection sizing: RHDH_DB_MAX_CONNECTIONS=$RHDH_DB_MAX_CONNECTIONS, PGBOUNCER_MAX_CLIENT_CONNECTIONS=$PGBOUNCER_MAX_CLIENT_CONNECTIONS, PGBOUNCER_MAX_DB_CONNECTIONS=$PGBOUNCER_MAX_DB_CONNECTIONS, PGBOUNCER_DEFAULT_POOL_SIZE=$PGBOUNCER_DEFAULT_POOL_SIZE, PGBOUNCER_MAX_USER_CONNECTIONS=$PGBOUNCER_MAX_USER_CONNECTIONS"
+
+    export POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DATABASE_NAME POSTGRES_HOST POSTGRES_PORT
+    POSTGRES_USER=rhdh
+    POSTGRES_DATABASE_NAME="${POSTGRES_USER}"
+    POSTGRES_HOST="rhdh-postgresql-cluster-pgbouncer"
+    POSTGRES_PORT=5432
+
+    # Create ConfigMap with SQL to grant permissions to rhdh user on public schema
+    # Required for PostgreSQL 15+ where public schema CREATE is not granted by default
+    #$clin create configmap rhdh-db-init-sql --from-literal=init.sql="ALTER SCHEMA public OWNER TO ${POSTGRES_USER}; GRANT ALL ON SCHEMA public TO ${POSTGRES_USER};" --dry-run=client -o yaml | $clin apply -f -
+
+    envsubst <template/backstage/rhdh-db/postgres-cluster.yaml >|"$TMP_DIR/postgres-cluster.yaml" && $clin apply -f "$TMP_DIR/postgres-cluster.yaml"
+    wait_for_rhdh_db_to_start
+
+    POSTGRES_PASSWORD=$($clin get secret "rhdh-postgresql-cluster-pguser-$POSTGRES_USER" -o jsonpath='{.data.password}' | base64 -d)
+
+    $clin create secret generic rhdh-db-credentials --from-literal=POSTGRES_USER="$POSTGRES_USER" --from-literal=POSTGRES_PASSWORD="$POSTGRES_PASSWORD" --from-literal=POSTGRES_DATABASE_NAME="$POSTGRES_DATABASE_NAME" --from-literal=POSTGRES_HOST="$POSTGRES_HOST" --from-literal=POSTGRES_PORT="$POSTGRES_PORT" --dry-run=client -o yaml | $clin apply -f -
+
+    if ${ENABLE_ORCHESTRATOR}; then
+        POSTGRES_SONATAFLOW_PASSWORD=$($clin get secret "rhdh-postgresql-cluster-pguser-sonataflow" -o jsonpath='{.data.password}' | base64 -d)
+        $clin create secret generic rhdh-db-sonataflow-credentials --from-literal=POSTGRES_USER="sonataflow" --from-literal=POSTGRES_PASSWORD="$POSTGRES_SONATAFLOW_PASSWORD" --from-literal=POSTGRES_DATABASE_NAME="sonataflow" --from-literal=POSTGRES_HOST="$POSTGRES_HOST" --from-literal=POSTGRES_PORT="$POSTGRES_PORT" --dry-run=client -o yaml | $clin apply -f -
+    fi
+}
+
+delete_rhdh_db() {
+    log_info "Deleting RHDH database"
+    $clin delete -f template/backstage/rhdh-db/postgres-cluster.yaml --ignore-not-found=true --wait
+    $clin delete -f template/backstage/rhdh-db/crunchy-postgres-op.yaml --ignore-not-found=true --wait
+    $clin delete secret rhdh-db-credentials --ignore-not-found=true --wait
+    $clin delete configmap rhdh-db-init-sql --ignore-not-found=true --wait
+    $clin delete statefulset rhdh-postgresql-cluster-primary --ignore-not-found=true --wait
+    $clin delete statefulset rhdh-postgresql-cluster-pgbouncer --ignore-not-found=true --wait
+}
+
+# shellcheck disable=SC2016,SC1001,SC2086
+psql_debug() {
+    if [ "$INSTALL_METHOD" == "helm" ]; then
+        wait_to_exist "$RHDH_NAMESPACE" "statefulset" "rhdh-postgresql-cluster-primary" 300
+        psql_db=$($clin get statefulset -o name | grep rhdh-postgresql-cluster-primary | sed 's/statefulset.apps\///')
+    elif [ "$INSTALL_METHOD" == "olm" ]; then
+        psql_db_ss=backstage-psql-developer-hub
+        psql_db="${psql_db_ss}-0"
+    fi
+    if ${PSQL_LOG}; then
+        log_info "Setting up PostgreSQL logging"
+        $clin exec "${psql_db}" -- sh -c "sed -i "s/^\s*#log_min_duration_statement.*/log_min_duration_statement=${LOG_MIN_DURATION_STATEMENT}/" /var/lib/pgsql/data/userdata/postgresql.conf "
+        $clin exec "${psql_db}" -- sh -c "sed -i "s/^\s*#log_min_duration_sample.*/log_min_duration_sample=${LOG_MIN_DURATION_SAMPLE}/" /var/lib/pgsql/data/userdata/postgresql.conf "
+        $clin exec "${psql_db}" -- sh -c "sed -i "s/^\s*#log_statement_sample_rate.*/log_statement_sample_rate=${LOG_STATEMENT_SAMPLE_RATE}/" /var/lib/pgsql/data/userdata/postgresql.conf "
+    fi
+    if ${PSQL_EXPORT}; then
+        log_info "Setting up PostgreSQL tracking"
+        $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#track_io_timing.*/track_io_timing = on/" /var/lib/pgsql/data/userdata/postgresql.conf'
+        $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#track_wal_io_timing.*/track_wal_io_timing = on/" /var/lib/pgsql/data/userdata/postgresql.conf'
+        $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#track_functions.*/track_functions = all/" /var/lib/pgsql/data/userdata/postgresql.conf'
+        $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#stats_fetch_consistency.*/stats_fetch_consistency = cache/" /var/lib/pgsql/data/userdata/postgresql.conf'
+        $clin exec "${psql_db}" -- sh -c "echo shared_preload_libraries = \'pgaudit,auto_explain,pg_stat_statements\' >> /var/lib/pgsql/data/userdata/postgresql.conf"
+    fi
+
+    if ${PSQL_LOG} || ${PSQL_EXPORT}; then
+        log_info "Restarting RHDH DB..."
+        $clin rollout restart statefulset/"$psql_db"
+        wait_for_rhdh_db_to_start
+    fi
+
+    if ${PSQL_EXPORT}; then
+        log_info "Setting up PostgreSQL metrics exporter"
+        $clin exec "${psql_db}" -- sh -c 'psql -c "CREATE EXTENSION pg_stat_statements;"'
+        uid=$(oc get namespace "${RHDH_NAMESPACE}" -o go-template='{{ index .metadata.annotations "openshift.io/sa.scc.supplemental-groups" }}' | cut -d '/' -f 1)
+        pg_pass=$(${clin} get secret rhdh-postgresql -o jsonpath='{.data.postgres-password}' | base64 -d)
+        plugins=("backstage_plugin_permission" "backstage_plugin_auth" "backstage_plugin_catalog" "backstage_plugin_scaffolder" "backstage_plugin_search" "backstage_plugin_app")
+        helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+        cp template/postgres-exporter/chart-values.yaml "$TMP_DIR/pg-exporter.yaml"
+        sed -i "s/uid/$uid/g" "$TMP_DIR/pg-exporter.yaml"
+        sed -i "s/pg_password/'$pg_pass'/g" "$TMP_DIR/pg-exporter.yaml"
+        helm install pg-exporter prometheus-community/prometheus-postgres-exporter -n "${RHDH_NAMESPACE}" -f "$TMP_DIR/pg-exporter.yaml"
+        for plugin in "${plugins[@]}"; do
+            cp template/postgres-exporter/values-template.yaml "${TMP_DIR}/${plugin}.yaml"
+            sed -i "s/'dbname'/'$plugin'/" "${TMP_DIR}/${plugin}.yaml"
+            sed -i "s/uid/$uid/g" "${TMP_DIR}/${plugin}.yaml"
+            sed -i "s/pg_password/'$pg_pass'/g" "${TMP_DIR}/${plugin}.yaml"
+            helm_name=${plugin//_/-}
+            helm install "${helm_name}" prometheus-community/prometheus-postgres-exporter -n "${RHDH_NAMESPACE}" -f "${TMP_DIR}/${plugin}.yaml"
+        done
+    fi
+
+    if ${PSQL_LOG} || ${PSQL_EXPORT}; then
+        log_info "Restarting RHDH..."
+        restart_rhdh_deployment 1
+    fi
+
+    if ${PSQL_EXPORT}; then
+        log_info "Setting up PostgreSQL monitoring"
+        plugins=("pg-exporter" "backstage-plugin-permission" "backstage-plugin-auth" "backstage-plugin-catalog" "backstage-plugin-scaffolder" "backstage-plugin-search" "backstage-plugin-app")
+        for plugin in "${plugins[@]}"; do
+            cp template/postgres-exporter/service-monitor-template.yaml "${TMP_DIR}/${plugin}-monitor.yaml"
+            sed -i "s/pglabel/$plugin/" "${TMP_DIR}/${plugin}-monitor.yaml"
+            sed -i "s/pgnamespace/$RHDH_NAMESPACE/g" "${TMP_DIR}/${plugin}-monitor.yaml"
+            $clin create -f "${TMP_DIR}/${plugin}-monitor.yaml"
+        done
+    fi
+}
+
+###############################################################################
+# Section 6: RHDH Deployment
+###############################################################################
+
+restart_rhdh_deployment() {
+    replica_count=${1:-1}
+    if [ "$INSTALL_METHOD" == "helm" ]; then
+        rhdh_deployment="${RHDH_HELM_RELEASE_NAME}-developer-hub"
+    elif [ "$INSTALL_METHOD" == "olm" ]; then
+        rhdh_deployment="backstage-developer-hub"
+    fi
+    $clin scale deployment "$rhdh_deployment" --replicas=0
+    for ((replicas = 1; replicas <= replica_count; replicas++)); do
+        log_info "Scaling developer-hub deployment to $replicas/$replica_count replicas"
+        $clin scale deployment "$rhdh_deployment" --replicas=$replicas
+        wait_to_start deployment "$rhdh_deployment" 300 300
+    done
+}
+
+# shellcheck disable=SC2016,SC1004
+install_rhdh_with_helm() {
+    chart_values_template=template/backstage/helm/chart-values.yaml
+    if [ -n "${RHDH_IMAGE_REGISTRY}${RHDH_IMAGE_REPO}${RHDH_IMAGE_TAG}" ]; then
+        echo "Using '$RHDH_IMAGE_REGISTRY/$RHDH_IMAGE_REPO:$RHDH_IMAGE_TAG' image for RHDH"
+        chart_values_template=template/backstage/helm/chart-values.image-override.yaml
+    fi
+    version_arg=""
+    chart_origin=$RHDH_HELM_REPO
+    if [ -n "${RHDH_HELM_CHART_VERSION}" ]; then
+        version_arg="--version $RHDH_HELM_CHART_VERSION"
+        chart_origin="$chart_origin@$RHDH_HELM_CHART_VERSION"
+    fi
+
+    cp "$chart_values_template" "$TMP_DIR/chart-values.temp.yaml"
+
+    # OAuth2 Proxy
+    log_info "Setting up OAuth2 Proxy"
+    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.backstage |= . + load("template/backstage/helm/oauth2-container-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"; fi
+    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.service.ports.targetPort = "oauth2-proxy"' "$TMP_DIR/chart-values.temp.yaml"; fi
+    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.service.ports.backend = 4180' "$TMP_DIR/chart-values.temp.yaml"; fi
+
+    # RBAC
+    if ${ENABLE_RBAC}; then
+        log_info "Setting up RBAC"
+        yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.x.yaml")' "$TMP_DIR/chart-values.temp.yaml"
+        yq -i '.global.dynamic.plugins |= . + load("template/backstage/helm/rbac-plugin-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"
+    fi
+
+    # Pod affinity for multiple replicas to schedule on same node
+    if [ "${RHDH_DEPLOYMENT_REPLICAS}" -gt 1 ]; then
+        log_info "Applying pod affinity for multiple replicas to schedule on same node"
+        yq -i '.upstream.backstage |= . + load("template/backstage/helm/pod-affinity-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"
+    fi
+
+    log_info "Installing RHDH Helm chart $RHDH_HELM_RELEASE_NAME from $chart_origin in $RHDH_NAMESPACE namespace"
+
+    envsubst \
+        '${OPENSHIFT_APP_DOMAIN} \
+            ${RHDH_HELM_RELEASE_NAME} \
+            ${RHDH_HELM_CHART} \
+            ${RHDH_DEPLOYMENT_REPLICAS} \
+            ${RHDH_DB_REPLICAS} \
+            ${RHDH_DB_MAX_CONNECTIONS} \
+            ${RHDH_DB_STORAGE} \
+            ${RHDH_IMAGE_REGISTRY} \
+            ${RHDH_IMAGE_REPO} \
+            ${RHDH_IMAGE_TAG} \
+            ${RHDH_NAMESPACE} \
+            ${RHDH_METRIC} \
+            ${RHDH_LOG_LEVEL} \
+            ${COOKIE_SECRET} \
+            ' <"$TMP_DIR/chart-values.temp.yaml" >"$TMP_DIR/chart-values.yaml"
+
+    # Orchestrator
+    if ${ENABLE_ORCHESTRATOR}; then
+        log_info "Enabling orchestrator plugins"
+        yq -i '.orchestrator.enabled = true' "$TMP_DIR/chart-values.yaml"
+        yq -i ".orchestrator.sonataflowPlatform.externalDBHost=\"${POSTGRES_HOST}\"" "$TMP_DIR/chart-values.yaml"
+        yq -i ".orchestrator.sonataflowPlatform.externalDBPort=\"${POSTGRES_PORT}\"" "$TMP_DIR/chart-values.yaml"
+        yq -i '.orchestrator.sonataflowPlatform.externalDBsecretRef="rhdh-db-sonataflow-credentials"' "$TMP_DIR/chart-values.yaml"
+        yq -i '.orchestrator.sonataflowPlatform.externalDBName="postgres"' "$TMP_DIR/chart-values.yaml"
+    fi
+
+    # RHDH resources
+    log_info "Setting up RHDH resources"
+    if [ -n "${RHDH_RESOURCES_CPU_REQUESTS}" ]; then yq -i '.upstream.backstage.resources.requests.cpu = "'"${RHDH_RESOURCES_CPU_REQUESTS}"'"' "$TMP_DIR/chart-values.yaml"; fi
+    if [ -n "${RHDH_RESOURCES_CPU_LIMITS}" ]; then yq -i '.upstream.backstage.resources.limits.cpu = "'"${RHDH_RESOURCES_CPU_LIMITS}"'"' "$TMP_DIR/chart-values.yaml"; fi
+    if [ -n "${RHDH_RESOURCES_MEMORY_REQUESTS}" ]; then yq -i '.upstream.backstage.resources.requests.memory = "'"${RHDH_RESOURCES_MEMORY_REQUESTS}"'"' "$TMP_DIR/chart-values.yaml"; fi
+    if [ -n "${RHDH_RESOURCES_MEMORY_LIMITS}" ]; then yq -i '.upstream.backstage.resources.limits.memory = "'"${RHDH_RESOURCES_MEMORY_LIMITS}"'"' "$TMP_DIR/chart-values.yaml"; fi
+
+    # NodeJS Profiling
+    if ${ENABLE_PROFILING}; then
+        log_info "Setting up NodeJS Profiling"
+        yq -i '.upstream.backstage.command |= ["node", "--prof", "--heapsnapshot-signal=SIGUSR2", "packages/backend"]' "$TMP_DIR/chart-values.yaml"
+        # Collecting the heap snapshot freezes the RHDH while getting and writting the heap snapshot to a file
+        # which makes the out-of-the-box liveness/readiness probes (set to 10s period) unhappy
+        # and makes the scheduler to restart the Pod(s).
+        # The following patch prolongs the period to 5 minutes to avoid that to happen.
+        yq -i '.upstream.backstage.readinessProbe |= {"httpGet":{"path":"/healthcheck","port":7007,"scheme":"HTTP"},"initialDelaySeconds":30,"timeoutSeconds":2,"periodSeconds":300,"successThreshold":1,"failureThreshold":3}' "$TMP_DIR/chart-values.yaml"
+        yq -i '.upstream.backstage.livenessProbe |= {"httpGet":{"path":"/healthcheck","port":7007,"scheme":"HTTP"},"initialDelaySeconds":30,"timeoutSeconds":2,"periodSeconds":300,"successThreshold":1,"failureThreshold":3}' "$TMP_DIR/chart-values.yaml"
+    fi
+
+    # RHDH database connection
+    yq -i '.upstream.backstage.appConfig.database.connection.host = "'"${POSTGRES_HOST}"'"' "$TMP_DIR/chart-values.yaml"
+
+    # Initial RHDH replicas to 1 before scaling up
+    yq -i '.upstream.backstage.replicas = 1' "$TMP_DIR/chart-values.yaml"
+
+    # Install RHDH Helm chart
+    #shellcheck disable=SC2086
+    helm upgrade "${RHDH_HELM_RELEASE_NAME}" -i "${RHDH_HELM_REPO}" ${version_arg} -n "${RHDH_NAMESPACE}" --values "$TMP_DIR/chart-values.yaml"
+
+    # Patch deployment strategy to start replicas one by one
+    log_info "Patching RHDH deployment strategy for sequential replica startup"
+    oc patch deployment "${RHDH_HELM_RELEASE_NAME}-developer-hub" --type='merge' -p '{"spec":{"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxUnavailable":0,"maxSurge":1}}}}'
+
+    patch_sonataflow_flyway
+    restart_rhdh_deployment 1
+
+    return $?
+}
+
+install_rhdh_with_olm() {
+    $clin create secret generic rhdh-backend-secret --from-literal=BACKEND_SECRET="$(mktemp -u XXXXXXXXXXX)"
+    mark_resource_for_rhdh secret rhdh-backend-secret
+    $clin create cm app-config-backend-secret --from-file=template/backstage/olm/app-config.rhdh.backend-secret.yaml
+    mark_resource_for_rhdh cm app-config-backend-secret
+    cp template/backstage/olm/dynamic-plugins.configmap.yaml "$TMP_DIR/dynamic-plugins.configmap.yaml"
+    if ${ENABLE_RBAC}; then
+        cat template/backstage/olm/rbac-plugin-patch.yaml >>"$TMP_DIR/dynamic-plugins.configmap.yaml"
+    fi
+    $clin apply -f "$TMP_DIR/dynamic-plugins.configmap.yaml"
+    mark_resource_for_rhdh cm dynamic-plugins-rhdh
+    set -x
+    OLM_CHANNEL="${RHDH_OLM_CHANNEL}" UPSTREAM_IIB="${RHDH_OLM_INDEX_IMAGE}" NAMESPACE_SUBSCRIPTION="${RHDH_OPERATOR_NAMESPACE}" WATCH_EXT_CONF="${RHDH_OLM_WATCH_EXT_CONF}" ./install-rhdh-catalog-source.sh --install-operator "${RHDH_OLM_OPERATOR_PACKAGE:-rhdh}"
+    set +x
+    wait_for_crd backstages.rhdh.redhat.com
+
+    if [ "$AUTH_PROVIDER" == "keycloak" ]; then
+        envsubst <template/backstage/olm/rhdh-oauth2.deployment.yaml | $clin apply -f -
+    fi
+
+    backstage_yaml="$TMP_DIR/backstage.yaml"
+    envsubst <template/backstage/olm/backstage.yaml >"$backstage_yaml"
+    if [ -n "${RHDH_IMAGE_REGISTRY}${RHDH_IMAGE_REPO}${RHDH_IMAGE_TAG}" ]; then
+        echo "Using '$RHDH_IMAGE_REGISTRY/$RHDH_IMAGE_REPO:$RHDH_IMAGE_TAG' image for RHDH"
+        yq -i '(.spec.application.image |= "'"${RHDH_IMAGE_REGISTRY}/${RHDH_IMAGE_REPO}:${RHDH_IMAGE_TAG}"'")' "$backstage_yaml"
+    fi
+    if ${ENABLE_RBAC}; then
+        rbac_policy='[{"name": "rbac-policy"}]'
+        yq -i '(.spec.application.extraFiles.configMaps |= (. // []) + '"$rbac_policy"')' "$backstage_yaml"
+    fi
+    $clin apply -f "$backstage_yaml"
+
+    wait_to_start statefulset "backstage-psql-developer-hub" 300 300
+    wait_to_start deployment "backstage-developer-hub" 300 300
+    return $?
+}
+
 backstage_install() {
     log_info "Installing RHDH with install method: $INSTALL_METHOD"
     cp "template/backstage/app-config.yaml" "$TMP_DIR/app-config.yaml"
@@ -362,9 +708,6 @@ backstage_install() {
 
     if ${ENABLE_ORCHESTRATOR}; then
         install_orchestrator_infra
-
-        yq -i '.orchestrator.dataIndexService.url="http://sonataflow-platform-data-index-service.'"$RHDH_NAMESPACE"'"' "$TMP_DIR/app-config.yaml"
-        yq -i '.orchestrator.enabled=true' "$TMP_DIR/app-config.yaml"
     fi
     until envsubst <template/backstage/secret-rhdh-pull-secret.yaml | $clin apply -f -; do $clin delete secret rhdh-pull-secret --ignore-not-found=true; done
     if ${ENABLE_RBAC}; then yq -i '. |= . + load("template/backstage/'$INSTALL_METHOD'/app-rbac-patch.yaml")' "$TMP_DIR/app-config.yaml"; fi
@@ -391,6 +734,9 @@ backstage_install() {
     fi
     envsubst <template/backstage/plugin-secrets.yaml | $clin apply -f -
     until $clin create -f "template/backstage/techdocs-pvc.yaml"; do $clin delete pvc rhdh-techdocs --ignore-not-found=true; done
+
+    setup_rhdh_db
+
     if [ "$INSTALL_METHOD" == "helm" ]; then
         install_rhdh_with_helm
         install_exit_code=$?
@@ -453,234 +799,9 @@ backstage_install() {
     done
 }
 
-install_workflows() {
-    log_info "Installing Orchestrator workflows"
-    mkdir -p "$TMP_DIR/workflows"
-    find template/workflows/basic -type f -print0 | while IFS= read -r -d '' i; do
-        # shellcheck disable=SC2094
-        envsubst <"$i" >"$TMP_DIR/workflows/$(basename "$i")"
-        $clin apply -f "$TMP_DIR/workflows/$(basename "$i")"
-    done
-}
-
-uninstall_workflows() {
-    log_info "Uninstalling Orchestrator workflows"
-    $clin delete -f template/workflows/basic --ignore-not-found=true || true
-}
-
-# shellcheck disable=SC2016,SC1004
-install_rhdh_with_helm() {
-    chart_values=template/backstage/helm/chart-values.yaml
-    if [ -n "${RHDH_IMAGE_REGISTRY}${RHDH_IMAGE_REPO}${RHDH_IMAGE_TAG}" ]; then
-        echo "Using '$RHDH_IMAGE_REGISTRY/$RHDH_IMAGE_REPO:$RHDH_IMAGE_TAG' image for RHDH"
-        chart_values=template/backstage/helm/chart-values.image-override.yaml
-    fi
-    version_arg=""
-    chart_origin=$RHDH_HELM_REPO
-    if [ -n "${RHDH_HELM_CHART_VERSION}" ]; then
-        version_arg="--version $RHDH_HELM_CHART_VERSION"
-        chart_origin="$chart_origin@$RHDH_HELM_CHART_VERSION"
-    fi
-    log_info "Installing RHDH Helm chart $RHDH_HELM_RELEASE_NAME from $chart_origin in $RHDH_NAMESPACE namespace"
-    cp "$chart_values" "$TMP_DIR/chart-values.temp.yaml"
-    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.backstage |= . + load("template/backstage/helm/oauth2-container-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"; fi
-    if ${ENABLE_RBAC}; then
-        yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.x.yaml")' "$TMP_DIR/chart-values.temp.yaml"
-        yq -i '.global.dynamic.plugins |= . + load("template/backstage/helm/rbac-plugin-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"
-    fi
-    if ${ENABLE_ORCHESTRATOR}; then
-        log_info "Enabling orchestrator plugins"
-        yq -i '.orchestrator.enabled = true' "$TMP_DIR/chart-values.temp.yaml"
-    fi
-    if [ "${RHDH_DEPLOYMENT_REPLICAS}" -gt 1 ]; then
-        log_info "Applying pod affinity for multiple replicas to schedule on same node"
-        yq -i '.upstream.backstage |= . + load("template/backstage/helm/pod-affinity-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"
-    fi
-    # Connection sizing parameters
-    CLIENT_CONNECTIONS_PER_RHDH_INSTANCE=50  # Expected DB connections per RHDH replica
-    DB_CONNECTIONS_HEADROOM_PER_RHDH_INSTANCE=5  # Extra headroom per RHDH replica
-    DB_CONNECTIONS_ADMIN_HEADROOM=20  # Reserved for admin/monitoring connections
-    RHDH_DATABASE_COUNT=20  # Approximate number of RHDH plugin databases
-
-    export RHDH_DB_MAX_CONNECTIONS
-    RHDH_DB_MAX_CONNECTIONS=$(bc <<<"$RHDH_DEPLOYMENT_REPLICAS * ($CLIENT_CONNECTIONS_PER_RHDH_INSTANCE + $DB_CONNECTIONS_HEADROOM_PER_RHDH_INSTANCE)")
-    envsubst \
-        '${OPENSHIFT_APP_DOMAIN} \
-            ${RHDH_HELM_RELEASE_NAME} \
-            ${RHDH_HELM_CHART} \
-            ${RHDH_DEPLOYMENT_REPLICAS} \
-            ${RHDH_DB_REPLICAS} \
-            ${RHDH_DB_MAX_CONNECTIONS} \
-            ${RHDH_DB_STORAGE} \
-            ${RHDH_IMAGE_REGISTRY} \
-            ${RHDH_IMAGE_REPO} \
-            ${RHDH_IMAGE_TAG} \
-            ${RHDH_NAMESPACE} \
-            ${RHDH_METRIC} \
-            ${RHDH_LOG_LEVEL} \
-            ${COOKIE_SECRET} \
-            ' <"$TMP_DIR/chart-values.temp.yaml" >"$TMP_DIR/chart-values.yaml"
-    if [ -n "${RHDH_RESOURCES_CPU_REQUESTS}" ]; then yq -i '.upstream.backstage.resources.requests.cpu = "'"${RHDH_RESOURCES_CPU_REQUESTS}"'"' "$TMP_DIR/chart-values.yaml"; fi
-    if [ -n "${RHDH_RESOURCES_CPU_LIMITS}" ]; then yq -i '.upstream.backstage.resources.limits.cpu = "'"${RHDH_RESOURCES_CPU_LIMITS}"'"' "$TMP_DIR/chart-values.yaml"; fi
-    if [ -n "${RHDH_RESOURCES_MEMORY_REQUESTS}" ]; then yq -i '.upstream.backstage.resources.requests.memory = "'"${RHDH_RESOURCES_MEMORY_REQUESTS}"'"' "$TMP_DIR/chart-values.yaml"; fi
-    if [ -n "${RHDH_RESOURCES_MEMORY_LIMITS}" ]; then yq -i '.upstream.backstage.resources.limits.memory = "'"${RHDH_RESOURCES_MEMORY_LIMITS}"'"' "$TMP_DIR/chart-values.yaml"; fi
-    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.service.ports.targetPort = "oauth2-proxy"' "$TMP_DIR/chart-values.yaml"; fi
-    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.service.ports.backend = 4180' "$TMP_DIR/chart-values.yaml"; fi
-    if ${ENABLE_PROFILING}; then
-        yq -i '.upstream.backstage.command |= ["node", "--prof", "--heapsnapshot-signal=SIGUSR1", "packages/backend"]' "$TMP_DIR/chart-values.yaml"
-        # Collecting the heap snapshot freezes the RHDH while getting and writting the heap snapshot to a file
-        # which makes the out-of-the-box liveness/readiness probes (set to 10s period) unhappy
-        # and makes the scheduler to restart the Pod(s).
-        # The following patch prolongs the period to 5 minutes to avoid that to happen.
-        yq -i '.upstream.backstage.readinessProbe |= {"httpGet":{"path":"/healthcheck","port":7007,"scheme":"HTTP"},"initialDelaySeconds":30,"timeoutSeconds":2,"periodSeconds":300,"successThreshold":1,"failureThreshold":3}' "$TMP_DIR/chart-values.yaml"
-        yq -i '.upstream.backstage.livenessProbe |= {"httpGet":{"path":"/healthcheck","port":7007,"scheme":"HTTP"},"initialDelaySeconds":30,"timeoutSeconds":2,"periodSeconds":300,"successThreshold":1,"failureThreshold":3}' "$TMP_DIR/chart-values.yaml"
-    fi
-
-    # Configure database host (PgBouncer or direct PostgreSQL)
-    if ${ENABLE_PGBOUNCER}; then
-        log_info "PgBouncer enabled - configuring Backstage to connect via PgBouncer"
-        yq -i '.upstream.backstage.appConfig.database.connection.host = "'"${RHDH_HELM_RELEASE_NAME}"'-pgbouncer"' "$TMP_DIR/chart-values.yaml"
-    fi
-
-    #shellcheck disable=SC2086
-    helm upgrade "${RHDH_HELM_RELEASE_NAME}" -i "${RHDH_HELM_REPO}" ${version_arg} -n "${RHDH_NAMESPACE}" --values "$TMP_DIR/chart-values.yaml"
-
-    # Patch deployment strategy to start replicas one by one
-    log_info "Patching RHDH deployment strategy for sequential replica startup"
-    wait_to_exist "${RHDH_NAMESPACE}" deployment "${RHDH_HELM_RELEASE_NAME}-developer-hub" 300 "RHDH deployment"
-    $clin patch deployment "${RHDH_HELM_RELEASE_NAME}-developer-hub" --type='merge' -p '{"spec":{"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxUnavailable":0,"maxSurge":1}}}}'
-
-    wait_to_start statefulset "${RHDH_HELM_RELEASE_NAME}-postgresql-primary" 300 300
-
-    # Deploy PgBouncer if enabled
-    if ${ENABLE_PGBOUNCER}; then
-        log_info "Deploying PgBouncer connection pooler"
-        POSTGRESQL_ADMIN_PASSWORD=$($clin get secret "${RHDH_HELM_RELEASE_NAME}-postgresql" -o jsonpath='{.data.postgres-password}' | base64 -d)
-        export POSTGRESQL_ADMIN_PASSWORD PGBOUNCER_MAX_CLIENT_CONNECTIONS PGBOUNCER_DEFAULT_POOL_SIZE PGBOUNCER_MAX_DB_CONNECTIONS PGBOUNCER_MAX_USER_CONNECTIONS
-
-        # Each PgBouncer instance is sized to handle ALL client connections (for HA/failover)
-        PGBOUNCER_MAX_CLIENT_CONNECTIONS=$(bc <<<"scale=0; $RHDH_DEPLOYMENT_REPLICAS * $CLIENT_CONNECTIONS_PER_RHDH_INSTANCE" | sed 's,\..*,,')
-        # Backend connections per instance - divided by PGBOUNCER_REPLICAS to ensure total doesn't exceed PostgreSQL max_connections
-        PGBOUNCER_MAX_DB_CONNECTIONS=$(bc <<<"scale=0; ($RHDH_DB_MAX_CONNECTIONS - $DB_CONNECTIONS_ADMIN_HEADROOM) / $PGBOUNCER_REPLICAS" | sed 's,\..*,,')
-        # Pool size per database - ensures all databases can use their share without exceeding max_db_connections
-        # Minimum pool size of 5 to ensure basic functionality
-        PGBOUNCER_DEFAULT_POOL_SIZE=$(bc <<<"scale=0; x=$PGBOUNCER_MAX_DB_CONNECTIONS / $RHDH_DATABASE_COUNT; if (x < 5) 5 else x" | sed 's,\..*,,')
-        PGBOUNCER_MAX_USER_CONNECTIONS=$(bc <<<"scale=0; $PGBOUNCER_MAX_DB_CONNECTIONS * 1.2" | sed 's,\..*,,')
-
-        envsubst '${RHDH_HELM_RELEASE_NAME} ${RHDH_NAMESPACE} ${POSTGRESQL_ADMIN_PASSWORD} ${PGBOUNCER_REPLICAS} ${PGBOUNCER_MAX_CLIENT_CONNECTIONS} ${PGBOUNCER_DEFAULT_POOL_SIZE} ${PGBOUNCER_MAX_DB_CONNECTIONS} ${PGBOUNCER_MAX_USER_CONNECTIONS}' \
-            <template/backstage/helm/pgbouncer.yaml >"$TMP_DIR/pgbouncer.yaml"
-        $clin apply -f "$TMP_DIR/pgbouncer.yaml"
-        wait_to_start deployment "${RHDH_HELM_RELEASE_NAME}-pgbouncer" 300 300
-    fi
-
-    restart_rhdh_deployment 1
-    return $?
-}
-
-install_rhdh_with_olm() {
-    $clin create secret generic rhdh-backend-secret --from-literal=BACKEND_SECRET="$(mktemp -u XXXXXXXXXXX)"
-    mark_resource_for_rhdh secret rhdh-backend-secret
-    $clin create cm app-config-backend-secret --from-file=template/backstage/olm/app-config.rhdh.backend-secret.yaml
-    mark_resource_for_rhdh cm app-config-backend-secret
-    cp template/backstage/olm/dynamic-plugins.configmap.yaml "$TMP_DIR/dynamic-plugins.configmap.yaml"
-    if ${ENABLE_RBAC}; then
-        cat template/backstage/olm/rbac-plugin-patch.yaml >>"$TMP_DIR/dynamic-plugins.configmap.yaml"
-    fi
-    $clin apply -f "$TMP_DIR/dynamic-plugins.configmap.yaml"
-    mark_resource_for_rhdh cm dynamic-plugins-rhdh
-    set -x
-    OLM_CHANNEL="${RHDH_OLM_CHANNEL}" UPSTREAM_IIB="${RHDH_OLM_INDEX_IMAGE}" NAMESPACE_SUBSCRIPTION="${RHDH_OPERATOR_NAMESPACE}" WATCH_EXT_CONF="${RHDH_OLM_WATCH_EXT_CONF}" ./install-rhdh-catalog-source.sh --install-operator "${RHDH_OLM_OPERATOR_PACKAGE:-rhdh}"
-    set +x
-    wait_for_crd backstages.rhdh.redhat.com
-
-    if [ "$AUTH_PROVIDER" == "keycloak" ]; then
-        envsubst <template/backstage/olm/rhdh-oauth2.deployment.yaml | $clin apply -f -
-    fi
-
-    backstage_yaml="$TMP_DIR/backstage.yaml"
-    envsubst <template/backstage/olm/backstage.yaml >"$backstage_yaml"
-    if [ -n "${RHDH_IMAGE_REGISTRY}${RHDH_IMAGE_REPO}${RHDH_IMAGE_TAG}" ]; then
-        echo "Using '$RHDH_IMAGE_REGISTRY/$RHDH_IMAGE_REPO:$RHDH_IMAGE_TAG' image for RHDH"
-        yq -i '(.spec.application.image |= "'"${RHDH_IMAGE_REGISTRY}/${RHDH_IMAGE_REPO}:${RHDH_IMAGE_TAG}"'")' "$backstage_yaml"
-    fi
-    if ${ENABLE_RBAC}; then
-        rbac_policy='[{"name": "rbac-policy"}]'
-        yq -i '(.spec.application.extraFiles.configMaps |= (. // []) + '"$rbac_policy"')' "$backstage_yaml"
-    fi
-    $clin apply -f "$backstage_yaml"
-
-    wait_to_start statefulset "backstage-psql-developer-hub" 300 300
-    wait_to_start deployment "backstage-developer-hub" 300 300
-    return $?
-}
-
-# shellcheck disable=SC2016,SC1001,SC2086
-psql_debug() {
-    if [ "$INSTALL_METHOD" == "helm" ]; then
-        psql_db_ss="${RHDH_HELM_RELEASE_NAME}-postgresql-primary"
-        psql_db="${psql_db_ss}-0"
-    elif [ "$INSTALL_METHOD" == "olm" ]; then
-        psql_db_ss=backstage-psql-developer-hub
-        psql_db="${psql_db_ss}-0"
-    fi
-    if ${PSQL_LOG}; then
-        log_info "Setting up PostgreSQL logging"
-        $clin exec "${psql_db}" -- sh -c "sed -i "s/^\s*#log_min_duration_statement.*/log_min_duration_statement=${LOG_MIN_DURATION_STATEMENT}/" /var/lib/pgsql/data/userdata/postgresql.conf "
-        $clin exec "${psql_db}" -- sh -c "sed -i "s/^\s*#log_min_duration_sample.*/log_min_duration_sample=${LOG_MIN_DURATION_SAMPLE}/" /var/lib/pgsql/data/userdata/postgresql.conf "
-        $clin exec "${psql_db}" -- sh -c "sed -i "s/^\s*#log_statement_sample_rate.*/log_statement_sample_rate=${LOG_STATEMENT_SAMPLE_RATE}/" /var/lib/pgsql/data/userdata/postgresql.conf "
-    fi
-    if ${PSQL_EXPORT}; then
-        log_info "Setting up PostgreSQL tracking"
-        $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#track_io_timing.*/track_io_timing = on/" /var/lib/pgsql/data/userdata/postgresql.conf'
-        $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#track_wal_io_timing.*/track_wal_io_timing = on/" /var/lib/pgsql/data/userdata/postgresql.conf'
-        $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#track_functions.*/track_functions = all/" /var/lib/pgsql/data/userdata/postgresql.conf'
-        $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#stats_fetch_consistency.*/stats_fetch_consistency = cache/" /var/lib/pgsql/data/userdata/postgresql.conf'
-        $clin exec "${psql_db}" -- sh -c "echo shared_preload_libraries = \'pgaudit,auto_explain,pg_stat_statements\' >> /var/lib/pgsql/data/userdata/postgresql.conf"
-    fi
-
-    if ${PSQL_LOG} || ${PSQL_EXPORT}; then
-        log_info "Restarting RHDH DB..."
-        $clin rollout restart statefulset/"$psql_db_ss"
-        wait_to_start statefulset "$psql_db_ss" 300 300
-    fi
-
-    if ${PSQL_EXPORT}; then
-        log_info "Setting up PostgreSQL metrics exporter"
-        $clin exec "${psql_db}" -- sh -c 'psql -c "CREATE EXTENSION pg_stat_statements;"'
-        uid=$(oc get namespace "${RHDH_NAMESPACE}" -o go-template='{{ index .metadata.annotations "openshift.io/sa.scc.supplemental-groups" }}' | cut -d '/' -f 1)
-        pg_pass=$(${clin} get secret rhdh-postgresql -o jsonpath='{.data.postgres-password}' | base64 -d)
-        plugins=("backstage_plugin_permission" "backstage_plugin_auth" "backstage_plugin_catalog" "backstage_plugin_scaffolder" "backstage_plugin_search" "backstage_plugin_app")
-        helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-        cp template/postgres-exporter/chart-values.yaml "$TMP_DIR/pg-exporter.yaml"
-        sed -i "s/uid/$uid/g" "$TMP_DIR/pg-exporter.yaml"
-        sed -i "s/pg_password/'$pg_pass'/g" "$TMP_DIR/pg-exporter.yaml"
-        helm install pg-exporter prometheus-community/prometheus-postgres-exporter -n "${RHDH_NAMESPACE}" -f "$TMP_DIR/pg-exporter.yaml"
-        for plugin in "${plugins[@]}"; do
-            cp template/postgres-exporter/values-template.yaml "${TMP_DIR}/${plugin}.yaml"
-            sed -i "s/'dbname'/'$plugin'/" "${TMP_DIR}/${plugin}.yaml"
-            sed -i "s/uid/$uid/g" "${TMP_DIR}/${plugin}.yaml"
-            sed -i "s/pg_password/'$pg_pass'/g" "${TMP_DIR}/${plugin}.yaml"
-            helm_name=${plugin//_/-}
-            helm install "${helm_name}" prometheus-community/prometheus-postgres-exporter -n "${RHDH_NAMESPACE}" -f "${TMP_DIR}/${plugin}.yaml"
-        done
-    fi
-
-    if ${PSQL_LOG} || ${PSQL_EXPORT}; then
-        log_info "Restarting RHDH..."
-        restart_rhdh_deployment 1
-    fi
-
-    if ${PSQL_EXPORT}; then
-        log_info "Setting up PostgreSQL monitoring"
-        plugins=("pg-exporter" "backstage-plugin-permission" "backstage-plugin-auth" "backstage-plugin-catalog" "backstage-plugin-scaffolder" "backstage-plugin-search" "backstage-plugin-app")
-        for plugin in "${plugins[@]}"; do
-            cp template/postgres-exporter/service-monitor-template.yaml "${TMP_DIR}/${plugin}-monitor.yaml"
-            sed -i "s/pglabel/$plugin/" "${TMP_DIR}/${plugin}-monitor.yaml"
-            sed -i "s/pgnamespace/$RHDH_NAMESPACE/g" "${TMP_DIR}/${plugin}-monitor.yaml"
-            $clin create -f "${TMP_DIR}/${plugin}-monitor.yaml"
-        done
-    fi
-}
+###############################################################################
+# Section 7: Monitoring
+###############################################################################
 
 setup_monitoring() {
     log_info "Ensuring Prometheus persistent storage"
@@ -754,33 +875,9 @@ setup_monitoring() {
     envsubst <template/locust-metrics/locust-service-monitor.yaml | kubectl -n "${LOCUST_NAMESPACE}" apply -f -
 }
 
-delete() {
-    log_info "Remove RHDH with install method: $INSTALL_METHOD"
-    if ! $cli get ns "$RHDH_NAMESPACE" >/dev/null; then
-        log_info "$RHDH_NAMESPACE namespace does not exit... Skipping. "
-    else
-        for cr in keycloakusers keycloakclients keycloakrealms keycloaks; do
-            for res in $($clin get "$cr.keycloak.org" -o name); do
-                $clin patch "$res" -p '{"metadata":{"finalizers":[]}}' --type=merge
-                $clin delete "$res" --wait
-            done
-        done
-    fi
-    if [ "$INSTALL_METHOD" == "helm" ]; then
-        log_info "Uninstalling RHDH Helm release"
-        helm uninstall "${RHDH_HELM_RELEASE_NAME}" --namespace "${RHDH_NAMESPACE}"
-        $clin delete pvc "data-${RHDH_HELM_RELEASE_NAME}-postgresql-0" --ignore-not-found=true
-        $cli delete ns "${RHDH_NAMESPACE}" --ignore-not-found=true --wait
-    elif [ "$INSTALL_METHOD" == "olm" ]; then
-        delete_rhdh_with_olm
-    fi
-    if ${ENABLE_ORCHESTRATOR}; then
-        if ${FORCE_ORCHESTRATOR_INFRA_UNINSTALL}; then
-            log_info "FORCE_ORCHESTRATOR_INFRA_UNINSTALL=true, uninstalling existing orchestrator infra if present"
-            delete_orchestrator_infra
-        fi
-    fi
-}
+###############################################################################
+# Section 8: Cleanup & Delete
+###############################################################################
 
 delete_rhdh_with_olm() {
     $clin delete backstage developer-hub --ignore-not-found=true --wait
@@ -794,77 +891,69 @@ delete_rhdh_with_olm() {
     $cli delete crd backstages.rhdh.redhat.com --ignore-not-found=true --wait
 }
 
-delete_orchestrator_infra() {
-    log_info "Deleting RHDH Orchestrator infra"
-    helm uninstall "${RHDH_HELM_RELEASE_NAME}-orchestrator-infra" --namespace "${RHDH_NAMESPACE}" --ignore-not-found=true --wait
-
-    # Delete KnativeEventing custom resources first
-    log_info "Deleting KnativeEventing custom resources"
-    for ns in knative-eventing openshift-serverless; do
-        if $cli get ns "$ns" >/dev/null 2>&1; then
-            for res in $($cli get knativeeventings.operator.knative.dev -n "$ns" -o name 2>/dev/null); do
-                log_info "Removing finalizers from $res in namespace $ns"
-                $cli patch "$res" -n "$ns" -p '{"metadata":{"finalizers":[]}}' --type=merge
-                $cli delete "$res" -n "$ns" --ignore-not-found=true --wait
-            done
+delete() {
+    log_info "Remove RHDH with install method: $INSTALL_METHOD"
+    if [ "$INSTALL_METHOD" == "helm" ]; then
+        log_info "Uninstalling RHDH Helm release"
+        helm uninstall "${RHDH_HELM_RELEASE_NAME}" --namespace "${RHDH_NAMESPACE}"
+        $clin delete pvc "data-${RHDH_HELM_RELEASE_NAME}-postgresql-0" --ignore-not-found=true
+        envsubst <template/backstage/rhdh-db/postgres-cluster.yaml | $clin delete -f - --ignore-not-found=true --wait
+        envsubst <template/backstage/rhdh-db/crunchy-postgres-op.yaml | $clin delete -f - --ignore-not-found=true --wait
+        $cli delete ns "${RHDH_NAMESPACE}" --ignore-not-found=true --wait
+    elif [ "$INSTALL_METHOD" == "olm" ]; then
+        delete_rhdh_with_olm
+    fi
+    if ${ENABLE_ORCHESTRATOR}; then
+        if ${FORCE_ORCHESTRATOR_INFRA_UNINSTALL}; then
+            log_info "FORCE_ORCHESTRATOR_INFRA_UNINSTALL=true, uninstalling existing orchestrator infra if present"
+            delete_orchestrator_infra
         fi
-    done
-
-    # Delete KnativeServing custom resources
-    log_info "Deleting KnativeServing custom resources"
-    for ns in knative-serving openshift-serverless; do
-        if $cli get ns "$ns" >/dev/null 2>&1; then
-            for res in $($cli get knativeservings.operator.knative.dev -n "$ns" -o name 2>/dev/null); do
-                log_info "Removing finalizers from $res in namespace $ns"
-                $cli patch "$res" -n "$ns" -p '{"metadata":{"finalizers":[]}}' --type=merge
-                $cli delete "$res" -n "$ns" --ignore-not-found=true --wait
-            done
-        fi
-    done
-
-    # Delete subscriptions
-    $cli delete subscription.operators.coreos.com serverless-operator -n openshift-serverless --ignore-not-found=true --wait
-    $cli delete subscription.operators.coreos.com logic-operator-rhel8 -n openshift-serverless-logic --ignore-not-found=true --wait
-
-    # Delete CSVs (ClusterServiceVersions) to remove operators
-    log_info "Deleting ClusterServiceVersions for Knative operators"
-    for ns in openshift-serverless openshift-serverless-logic knative-eventing knative-serving; do
-        if $cli get ns "$ns" >/dev/null 2>&1; then
-            for csv in $($cli get csv -n "$ns" -o name 2>/dev/null | grep -E 'serverless|knative|logic-operator'); do
-                $cli delete "$csv" -n "$ns" --ignore-not-found=true --wait
-            done
-        fi
-    done
-
-    # Remove Knative webhook configurations to prevent validation errors during cleanup
-    log_info "Removing Knative webhook configurations"
-    $cli delete validatingwebhookconfiguration config.webhook.serving.knative.dev --ignore-not-found=true --wait
-    $cli delete validatingwebhookconfiguration validation.webhook.serving.knative.dev --ignore-not-found=true --wait
-    $cli delete validatingwebhookconfiguration validation.webhook.eventing.knative.dev --ignore-not-found=true --wait
-    $cli delete mutatingwebhookconfiguration webhook.serving.knative.dev --ignore-not-found=true --wait
-    $cli delete mutatingwebhookconfiguration webhook.eventing.knative.dev --ignore-not-found=true --wait
-
-    # Force delete any remaining pods in Knative namespaces
-    log_info "Force deleting remaining pods in Knative namespaces"
-    for ns in knative-eventing knative-eventing-ingress knative-serving knative-serving-ingress openshift-serverless openshift-serverless-logic; do
-        if $cli get ns "$ns" >/dev/null 2>&1; then
-            for pod in $($cli get pods -n "$ns" -o name 2>/dev/null); do
-                $cli delete "$pod" -n "$ns" --force --grace-period=0 --ignore-not-found=true --wait
-            done
-        fi
-    done
-
-    # Now delete the namespaces
-    log_info "Deleting Knative and Serverless namespaces"
-    $cli delete ns openshift-serverless --ignore-not-found=true --wait
-    $cli delete ns openshift-serverless-logic --ignore-not-found=true --wait
-    $cli delete ns knative-eventing --ignore-not-found=true --wait
-    $cli delete ns knative-eventing-ingress --ignore-not-found=true --wait
-    $cli delete ns knative-serving --ignore-not-found=true --wait
-    $cli delete ns knative-serving-ingress --ignore-not-found=true --wait
+    fi
 }
 
-while getopts "oi:mrdwW" flag; do
+###############################################################################
+# Section 9: Main Entry Point
+###############################################################################
+
+install() {
+    if [ "$INSTALL_METHOD" != "helm" ] && ${ENABLE_ORCHESTRATOR}; then
+        log_error "Orchestrator is only supported with Helm install method"
+        return 1
+    fi
+    setup_rhdh_namespace
+    setup_operator_group
+    setup_monitoring
+    appurl=$(oc whoami --show-console)
+    export OPENSHIFT_APP_DOMAIN=${appurl#*.}
+
+    keycloak_install 2>&1 | tee "${TMP_DIR}/keycloak_install.log"
+
+    if $PRE_LOAD_DB; then
+        log_info "Creating users and groups in Keycloak in background"
+        create_users_groups 2>&1 | tee -a "${TMP_DIR}/create-users-groups.log"
+    fi
+
+    backstage_install 2>&1 | tee -a "${TMP_DIR}/backstage-install.log"
+    exit_code=${PIPESTATUS[0]}
+    if [ "$exit_code" -ne 0 ]; then
+        log_error "Installation failed!!!"
+        return "$exit_code"
+    fi
+
+    if ${ENABLE_ORCHESTRATOR}; then
+        install_workflows
+    fi
+    psql_debug
+
+    log_info "Scaling RHDH deployment to $RHDH_DEPLOYMENT_REPLICAS replicas"
+    restart_rhdh_deployment "$RHDH_DEPLOYMENT_REPLICAS"
+}
+
+###############################################################################
+# Section 10: CLI Parsing
+###############################################################################
+
+while getopts "oi:mrdwcWC" flag; do
     case "${flag}" in
     o)
         export INSTALL_METHOD=olm
@@ -896,6 +985,12 @@ while getopts "oi:mrdwW" flag; do
         ;;
     m)
         setup_monitoring
+        ;;
+    c)
+        setup_rhdh_db
+        ;;
+    C)
+        delete_rhdh_db
         ;;
     \?)
         log_warn "Invalid option: ${flag} - defaulting to -i (install)"
