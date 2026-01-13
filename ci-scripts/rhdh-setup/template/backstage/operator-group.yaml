@@ -1,0 +1,8 @@
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: rhdh-performance-operatorgroup
+  namespace: rhdh-performance
+spec:
+  targetNamespaces:
+    - rhdh-performance

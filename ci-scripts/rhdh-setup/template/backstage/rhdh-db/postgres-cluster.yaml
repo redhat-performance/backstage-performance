@@ -1,0 +1,49 @@
+apiVersion: postgres-operator.crunchydata.com/v1beta1
+kind: PostgresCluster
+metadata:
+  name: rhdh-postgresql-cluster
+spec:
+  postgresVersion: 18
+  instances:
+    - name: primary
+      replicas: ${RHDH_DB_REPLICAS}
+      dataVolumeClaimSpec:
+        accessModes:
+        - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: ${RHDH_DB_STORAGE}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  postgres-operator.crunchydata.com/cluster: rhdh-postgresql-cluster
+                  postgres-operator.crunchydata.com/instance-set: primary
+  backups:
+    pgbackrest:
+      repos:
+      - name: repo1
+        volume:
+          volumeClaimSpec:
+            accessModes:
+            - "ReadWriteOnce"
+            resources:
+              requests:
+                storage: ${RHDH_DB_STORAGE}
+  proxy:
+    pgBouncer:
+      replicas: ${RHDH_DB_REPLICAS}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  postgres-operator.crunchydata.com/cluster: rhdh-postgresql-cluster
+                  postgres-operator.crunchydata.com/role: pgbouncer
