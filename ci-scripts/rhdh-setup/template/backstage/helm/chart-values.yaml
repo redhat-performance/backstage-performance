@@ -76,7 +76,7 @@ upstream:
         value: "${RHDH_LOG_LEVEL}"
       - name: NODE_TLS_REJECT_UNAUTHORIZED
         value: "0"
-    replicas: ${RHDH_DEPLOYMENT_REPLICAS}
+    replicas: 1
   metrics:
     serviceMonitor:
       enabled: ${RHDH_METRIC}
@@ -96,12 +96,23 @@ upstream:
     primary:
       containerSecurityContext:
         enabled: false
+      resources:
+        requests:
+          cpu: 1
+          memory: 1Gi
+        limits:
+          cpu: 2
+          memory: 5Gi
+      extendedConfiguration: |
+        max_connections = ${RHDH_DB_MAX_CONNECTIONS}
       extraEnvVars:
         - name: POSTGRESQL_ADMIN_PASSWORD
           valueFrom:
             secretKeyRef:
               key: postgres-password
               name: "{{ .Release.Name }}-postgresql"
+        - name: POSTGRESQL_MAX_CONNECTIONS
+          value: "${RHDH_DB_MAX_CONNECTIONS}"
       persistence:
         enabled: true
         mountPath: /var/lib/pgsql/data
@@ -115,12 +126,16 @@ upstream:
     readReplicas:
       containerSecurityContext:
         enabled: false
+      extendedConfiguration: |
+        max_connections = 650
       extraEnvVars:
         - name: POSTGRESQL_ADMIN_PASSWORD
           valueFrom:
             secretKeyRef:
               key: replication-password
               name: "{{ .Release.Name }}-postgresql"
+        - name: POSTGRESQL_MAX_CONNECTIONS
+          value: "650"
       podSecurityContext:
         enabled: false
       replicaCount: ${RHDH_DB_REPLICAS}
