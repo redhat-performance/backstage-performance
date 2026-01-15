@@ -235,22 +235,64 @@ setup_operator_group() {
     fi
 }
 
+wait_for_rhdh_db_to_start() {
+    wait_to_exist "$RHDH_NAMESPACE" "statefulset" "rhdh-postgresql-cluster-primary" 300 300
+    primary_ss=$($clin get statefulset -o name | grep rhdh-postgresql-cluster-primary | sed 's/statefulset.apps\///')
+    $clin wait --for=condition=Ready pod -l postgres-operator.crunchydata.com/instance-set=primary --timeout=300s
+    wait_to_start deployment "rhdh-postgresql-cluster-pgbouncer" 300 300
+}
+
 setup_rhdh_db() {
     log_info "Setting up RHDH database"
     setup_rhdh_namespace
     setup_operator_group
     envsubst <template/backstage/rhdh-db/crunchy-postgres-op.yaml | $clin apply -f -
     wait_to_start deployment pgo 300 300
-    envsubst <template/backstage/rhdh-db/postgres-cluster.yaml | $clin apply -f -
-    wait_to_exist "$RHDH_NAMESPACE" "statefulset" "rhdh-postgresql-cluster-primary" 300 300
-    primary_ss=$($clin get statefulset -o name | grep rhdh-postgresql-cluster-primary | sed 's/statefulset.apps\///')
-    $clin wait --for=condition=Ready pod -l postgres-operator.crunchydata.com/instance-set=primary --timeout=300s
-    wait_to_start deployment "rhdh-postgresql-cluster-pgbouncer" 300 300
-    # extract db credentials
-    # PG_USER=$($clin get secret rhdh-postgresql-cluster-pguser-rhdh-postgresql-cluster -o jsonpath='{.data.user}' | base64 -d)
-    # PG_ADMIN_PASSWORD=$($clin get secret rhdh-postgresql-cluster-pguser-rhdh-postgresql-cluster -o jsonpath='{.data.password}' | base64 -d)
-    # $clin create secret generic rhdh-db-credentials --from-literal=user="$PG_USER" --from-literal=password="$PG_ADMIN_PASSWORD" --dry-run=client -o yaml | $clin apply -f -   
-    }
+    export RHDH_DB_MAX_CONNECTIONS PGBOUNCER_MAX_CLIENT_CONNECTIONS PGBOUNCER_DEFAULT_POOL_SIZE PGBOUNCER_MAX_DB_CONNECTIONS PGBOUNCER_MAX_USER_CONNECTIONS
+
+    # Connection sizing parameters
+    CLIENT_CONNECTIONS_PER_RHDH_INSTANCE=50     # Expected DB connections per RHDH replica
+    DB_CONNECTIONS_HEADROOM_PER_RHDH_INSTANCE=5 # Extra headroom per RHDH replica
+    DB_CONNECTIONS_ADMIN_HEADROOM=20            # Reserved for admin/monitoring connections
+    RHDH_DATABASE_COUNT=20                      # Approximate number of RHDH plugin databases
+
+    # Minimum values to handle Backstage startup burst (concurrent plugin initialization)
+    # During startup, ~6+ plugins create schemas concurrently regardless of replica count
+    MIN_RHDH_DB_MAX_CONNECTIONS=120
+    MIN_PGBOUNCER_MAX_CLIENT_CONNECTIONS=100
+    MIN_PGBOUNCER_MAX_DB_CONNECTIONS=50
+    MIN_PGBOUNCER_DEFAULT_POOL_SIZE=20
+
+    # Calculate based on replicas
+    _rhdh_db_max_conn=$(bc <<<"$RHDH_DEPLOYMENT_REPLICAS * ($CLIENT_CONNECTIONS_PER_RHDH_INSTANCE + $DB_CONNECTIONS_HEADROOM_PER_RHDH_INSTANCE)")
+    RHDH_DB_MAX_CONNECTIONS=$(bc <<<"if ($_rhdh_db_max_conn < $MIN_RHDH_DB_MAX_CONNECTIONS) $MIN_RHDH_DB_MAX_CONNECTIONS else $_rhdh_db_max_conn")
+
+    # Each PgBouncer instance is sized to handle ALL client connections (for HA/failover)
+    _pgb_max_client=$(bc <<<"scale=0; $RHDH_DEPLOYMENT_REPLICAS * $CLIENT_CONNECTIONS_PER_RHDH_INSTANCE" | sed 's,\..*,,')
+    PGBOUNCER_MAX_CLIENT_CONNECTIONS=$(bc <<<"if ($_pgb_max_client < $MIN_PGBOUNCER_MAX_CLIENT_CONNECTIONS) $MIN_PGBOUNCER_MAX_CLIENT_CONNECTIONS else $_pgb_max_client")
+
+    # Backend connections per instance - divided by PGBOUNCER_REPLICAS to ensure total doesn't exceed PostgreSQL max_connections
+    _pgb_max_db=$(bc <<<"scale=0; ($RHDH_DB_MAX_CONNECTIONS - $DB_CONNECTIONS_ADMIN_HEADROOM) / $PGBOUNCER_REPLICAS" | sed 's,\..*,,')
+    PGBOUNCER_MAX_DB_CONNECTIONS=$(bc <<<"if ($_pgb_max_db < $MIN_PGBOUNCER_MAX_DB_CONNECTIONS) $MIN_PGBOUNCER_MAX_DB_CONNECTIONS else $_pgb_max_db")
+
+    # Pool size per database - ensures all databases can use their share without exceeding max_db_connections
+    _pgb_pool_size=$(bc <<<"scale=0; $PGBOUNCER_MAX_DB_CONNECTIONS / $RHDH_DATABASE_COUNT" | sed 's,\..*,,')
+    PGBOUNCER_DEFAULT_POOL_SIZE=$(bc <<<"if ($_pgb_pool_size < $MIN_PGBOUNCER_DEFAULT_POOL_SIZE) $MIN_PGBOUNCER_DEFAULT_POOL_SIZE else $_pgb_pool_size")
+
+    PGBOUNCER_MAX_USER_CONNECTIONS=$(bc <<<"scale=0; $PGBOUNCER_MAX_DB_CONNECTIONS * 1.2" | sed 's,\..*,,')
+
+    log_info "Database connection sizing: RHDH_DB_MAX_CONNECTIONS=$RHDH_DB_MAX_CONNECTIONS, PGBOUNCER_MAX_CLIENT_CONNECTIONS=$PGBOUNCER_MAX_CLIENT_CONNECTIONS, PGBOUNCER_MAX_DB_CONNECTIONS=$PGBOUNCER_MAX_DB_CONNECTIONS, PGBOUNCER_DEFAULT_POOL_SIZE=$PGBOUNCER_DEFAULT_POOL_SIZE, PGBOUNCER_MAX_USER_CONNECTIONS=$PGBOUNCER_MAX_USER_CONNECTIONS"
+
+    envsubst <template/backstage/rhdh-db/postgres-cluster.yaml >|"$TMP_DIR/postgres-cluster.yaml" && $clin apply -f "$TMP_DIR/postgres-cluster.yaml"
+    wait_for_rhdh_db_to_start
+
+    export POSTGRES_USER POSTGRES_PASSWORD POSTGRES_HOST POSTGRES_PORT
+    POSTGRES_USER=$($clin get secret rhdh-postgresql-cluster-pguser-rhdh-postgresql-cluster -o jsonpath='{.data.user}' | base64 -d)
+    POSTGRES_PASSWORD=$($clin get secret rhdh-postgresql-cluster-pguser-rhdh-postgresql-cluster -o jsonpath='{.data.password}' | base64 -d)
+    POSTGRES_HOST=$($clin get secret rhdh-postgresql-cluster-pguser-rhdh-postgresql-cluster -o jsonpath='{.data.pgbouncer-host}' | base64 -d)
+    POSTGRES_PORT=5432
+    $clin create secret generic rhdh-db-credentials --from-literal=POSTGRES_USER="$POSTGRES_USER" --from-literal=POSTGRES_PASSWORD="$POSTGRES_PASSWORD" --from-literal=POSTGRES_HOST="$POSTGRES_HOST" --from-literal=POSTGRES_PORT="$POSTGRES_PORT" --dry-run=client -o yaml | $clin apply -f -
+}
 
 setup_rhdh_namespace() {
     log_info "Setting up RHDH namespace"
@@ -425,7 +467,7 @@ backstage_install() {
     until $clin create -f "template/backstage/techdocs-pvc.yaml"; do $clin delete pvc rhdh-techdocs --ignore-not-found=true; done
 
     setup_rhdh_db
-    
+
     if [ "$INSTALL_METHOD" == "helm" ]; then
         install_rhdh_with_helm
         install_exit_code=$?
@@ -581,7 +623,10 @@ install_rhdh_with_helm() {
     wait_to_exist "${RHDH_NAMESPACE}" deployment "${RHDH_HELM_RELEASE_NAME}-developer-hub" 300 "RHDH deployment"
     $clin patch deployment "${RHDH_HELM_RELEASE_NAME}-developer-hub" --type='merge' -p '{"spec":{"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxUnavailable":0,"maxSurge":1}}}}'
 
-    wait_to_start statefulset "${RHDH_HELM_RELEASE_NAME}-postgresql-primary" 300 300
+    wait_to_exist "$RHDH_NAMESPACE" "statefulset" "rhdh-postgresql-cluster-primary" 300 300
+    primary_ss=$($clin get statefulset -o name | grep rhdh-postgresql-cluster-primary | sed 's/statefulset.apps\///')
+    $clin wait --for=condition=Ready pod -l postgres-operator.crunchydata.com/instance-set=primary --timeout=300s
+    wait_to_start deployment "rhdh-postgresql-cluster-pgbouncer" 300 300
 
     restart_rhdh_deployment 1
     return $?
@@ -627,8 +672,8 @@ install_rhdh_with_olm() {
 # shellcheck disable=SC2016,SC1001,SC2086
 psql_debug() {
     if [ "$INSTALL_METHOD" == "helm" ]; then
-        psql_db_ss="${RHDH_HELM_RELEASE_NAME}-postgresql-primary"
-        psql_db="${psql_db_ss}-0"
+        wait_to_exist "$RHDH_NAMESPACE" "statefulset" "rhdh-postgresql-cluster-primary" 300 300
+        psql_db=$($clin get statefulset -o name | grep rhdh-postgresql-cluster-primary | sed 's/statefulset.apps\///')
     elif [ "$INSTALL_METHOD" == "olm" ]; then
         psql_db_ss=backstage-psql-developer-hub
         psql_db="${psql_db_ss}-0"
@@ -650,8 +695,8 @@ psql_debug() {
 
     if ${PSQL_LOG} || ${PSQL_EXPORT}; then
         log_info "Restarting RHDH DB..."
-        $clin rollout restart statefulset/"$psql_db_ss"
-        wait_to_start statefulset "$psql_db_ss" 300 300
+        $clin rollout restart statefulset/"$psql_db"
+        wait_for_rhdh_db_to_start
     fi
 
     if ${PSQL_EXPORT}; then

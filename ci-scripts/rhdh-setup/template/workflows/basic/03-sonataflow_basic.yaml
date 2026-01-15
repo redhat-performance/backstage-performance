@@ -71,11 +71,11 @@ spec:
   persistence:
     postgresql:
       secretRef:
-        name: ${RHDH_HELM_RELEASE_NAME}-postgresql-svcbind-postgres
-        userKey: username
-        passwordKey: password
+        name: rhdh-db-credentials
+        userKey: POSTGRES_USER
+        passwordKey: POSTGRES_PASSWORD
       serviceRef:
-        name: ${RHDH_HELM_RELEASE_NAME}-postgresql-primary
+        name: rhdh-postgresql-cluster-pgbouncer
         port: 5432
         databaseName: sonataflow
         databaseSchema: basic

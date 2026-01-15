@@ -18,9 +18,9 @@ global:
 orchestrator:
   enabled: false
   sonataflowPlatform:
-    externalDBsecretRef: "rhdh-postgresql-cluster-pguser-rhdh-postgresql-cluster"
+    externalDBsecretRef: "rhdh-db-credentials"
     externalDBName: "sonataflow"
-    externalDBHost: "${POSTGRESQL_HOST}"
+    externalDBHost: "rhdh-postgresql-cluster-pgbouncer"
     externalDBPort: "5432"
 upstream:
   backstage:
@@ -31,12 +31,24 @@ upstream:
             options:
               secret: ${BACKEND_SECRET}
               subject: legacy-catalog
-      database:
-        connection:
-          host: "${POSTGRESQL_HOST}"
-          port: "${POSTGRESQL_PORT}"
-          user: "${POSTGRESQL_ADMIN_USER}"
-          password: "${POSTGRESQL_ADMIN_PASSWORD}"
+      backend:
+        database:
+          connection:
+            host: "${POSTGRESQL_HOST}"
+            port: "${POSTGRESQL_PORT}"
+            user: "${POSTGRESQL_ADMIN_USER}"
+            password: "${POSTGRESQL_ADMIN_PASSWORD}"
+            ssl:
+              rejectUnauthorized: false
+            pool:
+              min: 1
+              max: 2
+              acquireTimeoutMillis: 120000
+              createTimeoutMillis: 60000
+              idleTimeoutMillis: 600000
+              reapIntervalMillis: 1000
+              createRetryIntervalMillis: 500
+          pluginDivisionMode: schema
     containerPorts:
       backend: 7007
     extraAppConfig:
@@ -46,17 +58,23 @@ upstream:
       - name: POSTGRESQL_ADMIN_USER
         valueFrom:
           secretKeyRef:
-            key: rhdh-postgresql-cluster-pguser-rhdh-postgresql-cluster
-            name: "user"
+            name: "rhdh-db-credentials"
+            key: "POSTGRES_USER"
       - name: POSTGRESQL_ADMIN_PASSWORD
         valueFrom:
           secretKeyRef:
-            key: rhdh-postgresql-cluster-pguser-rhdh-postgresql-cluster
-            name: "password"
+            name: "rhdh-db-credentials"
+            key: "POSTGRES_PASSWORD"
       - name: POSTGRESQL_HOST
-        value: "rhdh-postgresql-cluster-pgbouncer"
+        valueFrom:
+          secretKeyRef:
+            name: "rhdh-db-credentials"
+            key: "POSTGRES_HOST"
       - name: POSTGRESQL_PORT
-        value: "5432"
+        valueFrom:
+          secretKeyRef:
+            name: "rhdh-db-credentials"
+            key: "POSTGRES_PORT"
       - name: BACKEND_SECRET
         valueFrom:
           secretKeyRef:
@@ -88,6 +106,8 @@ upstream:
       - name: NODE_TLS_REJECT_UNAUTHORIZED
         value: "0"
     replicas: 1
+  postgresql:
+    enabled: false
   metrics:
     serviceMonitor:
       enabled: ${RHDH_METRIC}
