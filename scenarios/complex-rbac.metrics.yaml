@@ -1,0 +1,35 @@
+- name: results.rbac.catalog.allow_avg
+  monitoring_query: avg(locust_requests_avg_response_time{name=~"\\[catalog\\].*\\|ALLOW", namespace="${LOCUST_NAMESPACE}", job="${SCENARIO}-test-master"})
+  monitoring_step: 15
+
+- name: results.rbac.catalog.deny_avg
+  monitoring_query: avg(locust_requests_avg_response_time{name=~"\\[catalog\\].*\\|DENY", namespace="${LOCUST_NAMESPACE}", job="${SCENARIO}-test-master"})
+  monitoring_step: 15
+
+- name: results.rbac.rbac.allow_avg
+  monitoring_query: avg(locust_requests_avg_response_time{name=~"\\[rbac\\].*\\|ALLOW", namespace="${LOCUST_NAMESPACE}", job="${SCENARIO}-test-master"})
+  monitoring_step: 15
+
+- name: results.rbac.rbac.deny_avg
+  monitoring_query: avg(locust_requests_avg_response_time{name=~"\\[rbac\\].*\\|DENY", namespace="${LOCUST_NAMESPACE}", job="${SCENARIO}-test-master"})
+  monitoring_step: 15
+
+- name: results.rbac.scaffolder.allow_avg
+  monitoring_query: avg(locust_requests_avg_response_time{name=~"\\[scaffolder\\].*\\|ALLOW", namespace="${LOCUST_NAMESPACE}", job="${SCENARIO}-test-master"})
+  monitoring_step: 15
+
+- name: results.rbac.scaffolder.deny_avg
+  monitoring_query: avg(locust_requests_avg_response_time{name=~"\\[scaffolder\\].*\\|DENY", namespace="${LOCUST_NAMESPACE}", job="${SCENARIO}-test-master"})
+  monitoring_step: 15
+
+- name: results.rbac.orchestrator.allow_avg
+  monitoring_query: avg(locust_requests_avg_response_time{name=~"\\[orchestrator\\].*\\|ALLOW", namespace="${LOCUST_NAMESPACE}", job="${SCENARIO}-test-master"})
+  monitoring_step: 15
+
+- name: results.rbac.orchestrator.deny_avg
+  monitoring_query: avg(locust_requests_avg_response_time{name=~"\\[orchestrator\\].*\\|DENY", namespace="${LOCUST_NAMESPACE}", job="${SCENARIO}-test-master"})
+  monitoring_step: 15
+
+- name: results.rbac.auth.policy_check_avg
+  monitoring_query: avg(locust_requests_avg_response_time{name=~"\\[AUTH\\].*", namespace="${LOCUST_NAMESPACE}", job="${SCENARIO}-test-master"})
+  monitoring_step: 15
