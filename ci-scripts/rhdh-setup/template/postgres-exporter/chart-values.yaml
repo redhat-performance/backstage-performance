@@ -18,7 +18,7 @@ config:
     - --collector.stat_statements
     - --auto-discover-databases
   datasource:
-    host: 'rhdh-postgresql-primary'
+    host: 'rhdh-postgresql-cluster-primary'
     user: 'postgres'
     password: pg_password
     port: "5432"

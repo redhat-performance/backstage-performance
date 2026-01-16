@@ -76,7 +76,6 @@ export KEYCLOAK_LOG_LEVEL="${KEYCLOAK_LOG_LEVEL:-WARN}"
 export PSQL_LOG="${PSQL_LOG:-true}"
 export RHDH_METRIC="${RHDH_METRIC:-true}"
 export PSQL_EXPORT="${PSQL_EXPORT:-false}"
-export ENABLE_PGBOUNCER="${ENABLE_PGBOUNCER:-true}"
 export PGBOUNCER_REPLICAS="${PGBOUNCER_REPLICAS:-2}"
 export LOG_MIN_DURATION_STATEMENT="${LOG_MIN_DURATION_STATEMENT:-65}"
 export LOG_MIN_DURATION_SAMPLE="${LOG_MIN_DURATION_SAMPLE:-50}"
@@ -93,11 +92,11 @@ wait_to_exist() {
     name=${3:-name}
     initial_timeout=${4:-300}
     rn=$resource/$name
-    description=${5:-$rn}
+    description=${5:-"*$rn*"}
     timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$initial_timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
 
     interval=10s
-    while ! /bin/bash -c "$cli -n $namespace get $rn -o name"; do
+    while ! /bin/bash -c "$cli -n $namespace get $resource -o name | grep $name"; do
         if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
             log_error "Timeout waiting for $description to exist"
             exit 1
@@ -227,15 +226,90 @@ mark_resource_for_rhdh() {
     label_n "$resource" "$name" "rhdh.redhat.com/ext-config-sync=true"
 }
 
+setup_operator_group() {
+    if $clin get operatorgroup -o name 2>/dev/null | grep -q .; then
+        log_info "OperatorGroup already exists in $RHDH_NAMESPACE namespace, skipping..."
+    else
+        log_info "Creating OperatorGroup in $RHDH_NAMESPACE namespace"
+        $clin apply -f template/backstage/operator-group.yaml
+    fi
+}
+
+wait_for_rhdh_db_to_start() {
+    wait_to_exist "$RHDH_NAMESPACE" "statefulset" "rhdh-postgresql-cluster-primary" 300 300
+    primary_ss=$($clin get statefulset -o name | grep rhdh-postgresql-cluster-primary | sed 's/statefulset.apps\///')
+    $clin wait --for=condition=Ready pod -l postgres-operator.crunchydata.com/instance-set=primary --timeout=300s
+    wait_to_start deployment "rhdh-postgresql-cluster-pgbouncer" 300 300
+}
+
+setup_rhdh_db() {
+    log_info "Setting up RHDH database"
+    setup_rhdh_namespace
+    setup_operator_group
+    envsubst <template/backstage/rhdh-db/crunchy-postgres-op.yaml | $clin apply -f -
+    wait_to_start deployment pgo 300 300
+    export RHDH_DB_MAX_CONNECTIONS PGBOUNCER_MAX_CLIENT_CONNECTIONS PGBOUNCER_DEFAULT_POOL_SIZE PGBOUNCER_MAX_DB_CONNECTIONS PGBOUNCER_MAX_USER_CONNECTIONS
+
+    # Connection sizing parameters
+    CLIENT_CONNECTIONS_PER_RHDH_INSTANCE=50     # Expected DB connections per RHDH replica
+    DB_CONNECTIONS_HEADROOM_PER_RHDH_INSTANCE=5 # Extra headroom per RHDH replica
+    DB_CONNECTIONS_ADMIN_HEADROOM=20            # Reserved for admin/monitoring connections
+    RHDH_DATABASE_COUNT=20                      # Approximate number of RHDH plugin databases
+
+    # Minimum values to handle Backstage startup burst (concurrent plugin initialization)
+    # During startup, ~6+ plugins create schemas concurrently regardless of replica count
+    MIN_RHDH_DB_MAX_CONNECTIONS=120
+    MIN_PGBOUNCER_MAX_CLIENT_CONNECTIONS=100
+    MIN_PGBOUNCER_MAX_DB_CONNECTIONS=50
+    MIN_PGBOUNCER_DEFAULT_POOL_SIZE=20
+
+    # Calculate based on replicas
+    _rhdh_db_max_conn=$(bc <<<"$RHDH_DEPLOYMENT_REPLICAS * ($CLIENT_CONNECTIONS_PER_RHDH_INSTANCE + $DB_CONNECTIONS_HEADROOM_PER_RHDH_INSTANCE)")
+    RHDH_DB_MAX_CONNECTIONS=$(bc <<<"if ($_rhdh_db_max_conn < $MIN_RHDH_DB_MAX_CONNECTIONS) $MIN_RHDH_DB_MAX_CONNECTIONS else $_rhdh_db_max_conn")
+
+    # Each PgBouncer instance is sized to handle ALL client connections (for HA/failover)
+    _pgb_max_client=$(bc <<<"scale=0; $RHDH_DEPLOYMENT_REPLICAS * $CLIENT_CONNECTIONS_PER_RHDH_INSTANCE" | sed 's,\..*,,')
+    PGBOUNCER_MAX_CLIENT_CONNECTIONS=$(bc <<<"if ($_pgb_max_client < $MIN_PGBOUNCER_MAX_CLIENT_CONNECTIONS) $MIN_PGBOUNCER_MAX_CLIENT_CONNECTIONS else $_pgb_max_client")
+
+    # Backend connections per instance - divided by PGBOUNCER_REPLICAS to ensure total doesn't exceed PostgreSQL max_connections
+    _pgb_max_db=$(bc <<<"scale=0; ($RHDH_DB_MAX_CONNECTIONS - $DB_CONNECTIONS_ADMIN_HEADROOM) / $PGBOUNCER_REPLICAS" | sed 's,\..*,,')
+    PGBOUNCER_MAX_DB_CONNECTIONS=$(bc <<<"if ($_pgb_max_db < $MIN_PGBOUNCER_MAX_DB_CONNECTIONS) $MIN_PGBOUNCER_MAX_DB_CONNECTIONS else $_pgb_max_db")
+
+    # Pool size per database - ensures all databases can use their share without exceeding max_db_connections
+    _pgb_pool_size=$(bc <<<"scale=0; $PGBOUNCER_MAX_DB_CONNECTIONS / $RHDH_DATABASE_COUNT" | sed 's,\..*,,')
+    PGBOUNCER_DEFAULT_POOL_SIZE=$(bc <<<"if ($_pgb_pool_size < $MIN_PGBOUNCER_DEFAULT_POOL_SIZE) $MIN_PGBOUNCER_DEFAULT_POOL_SIZE else $_pgb_pool_size")
+
+    PGBOUNCER_MAX_USER_CONNECTIONS=$(bc <<<"scale=0; $PGBOUNCER_MAX_DB_CONNECTIONS * 1.2" | sed 's,\..*,,')
+
+    log_info "Database connection sizing: RHDH_DB_MAX_CONNECTIONS=$RHDH_DB_MAX_CONNECTIONS, PGBOUNCER_MAX_CLIENT_CONNECTIONS=$PGBOUNCER_MAX_CLIENT_CONNECTIONS, PGBOUNCER_MAX_DB_CONNECTIONS=$PGBOUNCER_MAX_DB_CONNECTIONS, PGBOUNCER_DEFAULT_POOL_SIZE=$PGBOUNCER_DEFAULT_POOL_SIZE, PGBOUNCER_MAX_USER_CONNECTIONS=$PGBOUNCER_MAX_USER_CONNECTIONS"
+
+    envsubst <template/backstage/rhdh-db/postgres-cluster.yaml >|"$TMP_DIR/postgres-cluster.yaml" && $clin apply -f "$TMP_DIR/postgres-cluster.yaml"
+    wait_for_rhdh_db_to_start
+
+    export POSTGRES_USER POSTGRES_PASSWORD POSTGRES_HOST POSTGRES_PORT
+    POSTGRES_USER=$($clin get secret rhdh-postgresql-cluster-pguser-rhdh-postgresql-cluster -o jsonpath='{.data.user}' | base64 -d)
+    POSTGRES_PASSWORD=$($clin get secret rhdh-postgresql-cluster-pguser-rhdh-postgresql-cluster -o jsonpath='{.data.password}' | base64 -d)
+    POSTGRES_HOST=$($clin get secret rhdh-postgresql-cluster-pguser-rhdh-postgresql-cluster -o jsonpath='{.data.pgbouncer-host}' | base64 -d)
+    POSTGRES_PORT=5432
+    $clin create secret generic rhdh-db-credentials --from-literal=POSTGRES_USER="$POSTGRES_USER" --from-literal=POSTGRES_PASSWORD="$POSTGRES_PASSWORD" --from-literal=POSTGRES_HOST="$POSTGRES_HOST" --from-literal=POSTGRES_PORT="$POSTGRES_PORT" --dry-run=client -o yaml | $clin apply -f -
+}
+
+setup_rhdh_namespace() {
+    log_info "Setting up RHDH namespace"
+    $cli create namespace "${RHDH_NAMESPACE}" --dry-run=client -o yaml | $cli apply -f -
+}
+
 install() {
     if [ "$INSTALL_METHOD" != "helm" ] && ${ENABLE_ORCHESTRATOR}; then
         log_error "Orchestrator is only supported with Helm install method"
         return 1
     fi
+    setup_rhdh_namespace
+    setup_operator_group
     setup_monitoring
     appurl=$(oc whoami --show-console)
     export OPENSHIFT_APP_DOMAIN=${appurl#*.}
-    $cli create namespace "${RHDH_NAMESPACE}" --dry-run=client -o yaml | $cli apply -f -
+
     keycloak_install 2>&1 | tee "${TMP_DIR}/keycloak_install.log"
 
     if $PRE_LOAD_DB; then
@@ -326,7 +400,7 @@ assign_roles_to_client() {
             -H "Authorization: Bearer $ADMIN_TOKEN" \
             -H "Content-Type: application/json" \
             -d "[$ROLE_JSON]"
-    done <<< "$ROLE_NAMES"
+    done <<<"$ROLE_NAMES"
 }
 
 create_users_groups() {
@@ -391,6 +465,9 @@ backstage_install() {
     fi
     envsubst <template/backstage/plugin-secrets.yaml | $clin apply -f -
     until $clin create -f "template/backstage/techdocs-pvc.yaml"; do $clin delete pvc rhdh-techdocs --ignore-not-found=true; done
+
+    setup_rhdh_db
+
     if [ "$INSTALL_METHOD" == "helm" ]; then
         install_rhdh_with_helm
         install_exit_code=$?
@@ -497,10 +574,10 @@ install_rhdh_with_helm() {
         yq -i '.upstream.backstage |= . + load("template/backstage/helm/pod-affinity-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"
     fi
     # Connection sizing parameters
-    CLIENT_CONNECTIONS_PER_RHDH_INSTANCE=50  # Expected DB connections per RHDH replica
-    DB_CONNECTIONS_HEADROOM_PER_RHDH_INSTANCE=5  # Extra headroom per RHDH replica
-    DB_CONNECTIONS_ADMIN_HEADROOM=20  # Reserved for admin/monitoring connections
-    RHDH_DATABASE_COUNT=20  # Approximate number of RHDH plugin databases
+    CLIENT_CONNECTIONS_PER_RHDH_INSTANCE=50     # Expected DB connections per RHDH replica
+    DB_CONNECTIONS_HEADROOM_PER_RHDH_INSTANCE=5 # Extra headroom per RHDH replica
+    DB_CONNECTIONS_ADMIN_HEADROOM=20            # Reserved for admin/monitoring connections
+    RHDH_DATABASE_COUNT=20                      # Approximate number of RHDH plugin databases
 
     export RHDH_DB_MAX_CONNECTIONS
     RHDH_DB_MAX_CONNECTIONS=$(bc <<<"$RHDH_DEPLOYMENT_REPLICAS * ($CLIENT_CONNECTIONS_PER_RHDH_INSTANCE + $DB_CONNECTIONS_HEADROOM_PER_RHDH_INSTANCE)")
@@ -536,11 +613,7 @@ install_rhdh_with_helm() {
         yq -i '.upstream.backstage.livenessProbe |= {"httpGet":{"path":"/healthcheck","port":7007,"scheme":"HTTP"},"initialDelaySeconds":30,"timeoutSeconds":2,"periodSeconds":300,"successThreshold":1,"failureThreshold":3}' "$TMP_DIR/chart-values.yaml"
     fi
 
-    # Configure database host (PgBouncer or direct PostgreSQL)
-    if ${ENABLE_PGBOUNCER}; then
-        log_info "PgBouncer enabled - configuring Backstage to connect via PgBouncer"
-        yq -i '.upstream.backstage.appConfig.database.connection.host = "'"${RHDH_HELM_RELEASE_NAME}"'-pgbouncer"' "$TMP_DIR/chart-values.yaml"
-    fi
+    yq -i '.upstream.backstage.appConfig.database.connection.host = "rhdh-postgresql-cluster-pgbouncer"' "$TMP_DIR/chart-values.yaml"
 
     #shellcheck disable=SC2086
     helm upgrade "${RHDH_HELM_RELEASE_NAME}" -i "${RHDH_HELM_REPO}" ${version_arg} -n "${RHDH_NAMESPACE}" --values "$TMP_DIR/chart-values.yaml"
@@ -550,28 +623,10 @@ install_rhdh_with_helm() {
     wait_to_exist "${RHDH_NAMESPACE}" deployment "${RHDH_HELM_RELEASE_NAME}-developer-hub" 300 "RHDH deployment"
     $clin patch deployment "${RHDH_HELM_RELEASE_NAME}-developer-hub" --type='merge' -p '{"spec":{"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxUnavailable":0,"maxSurge":1}}}}'
 
-    wait_to_start statefulset "${RHDH_HELM_RELEASE_NAME}-postgresql-primary" 300 300
-
-    # Deploy PgBouncer if enabled
-    if ${ENABLE_PGBOUNCER}; then
-        log_info "Deploying PgBouncer connection pooler"
-        POSTGRESQL_ADMIN_PASSWORD=$($clin get secret "${RHDH_HELM_RELEASE_NAME}-postgresql" -o jsonpath='{.data.postgres-password}' | base64 -d)
-        export POSTGRESQL_ADMIN_PASSWORD PGBOUNCER_MAX_CLIENT_CONNECTIONS PGBOUNCER_DEFAULT_POOL_SIZE PGBOUNCER_MAX_DB_CONNECTIONS PGBOUNCER_MAX_USER_CONNECTIONS
-
-        # Each PgBouncer instance is sized to handle ALL client connections (for HA/failover)
-        PGBOUNCER_MAX_CLIENT_CONNECTIONS=$(bc <<<"scale=0; $RHDH_DEPLOYMENT_REPLICAS * $CLIENT_CONNECTIONS_PER_RHDH_INSTANCE" | sed 's,\..*,,')
-        # Backend connections per instance - divided by PGBOUNCER_REPLICAS to ensure total doesn't exceed PostgreSQL max_connections
-        PGBOUNCER_MAX_DB_CONNECTIONS=$(bc <<<"scale=0; ($RHDH_DB_MAX_CONNECTIONS - $DB_CONNECTIONS_ADMIN_HEADROOM) / $PGBOUNCER_REPLICAS" | sed 's,\..*,,')
-        # Pool size per database - ensures all databases can use their share without exceeding max_db_connections
-        # Minimum pool size of 5 to ensure basic functionality
-        PGBOUNCER_DEFAULT_POOL_SIZE=$(bc <<<"scale=0; x=$PGBOUNCER_MAX_DB_CONNECTIONS / $RHDH_DATABASE_COUNT; if (x < 5) 5 else x" | sed 's,\..*,,')
-        PGBOUNCER_MAX_USER_CONNECTIONS=$(bc <<<"scale=0; $PGBOUNCER_MAX_DB_CONNECTIONS * 1.2" | sed 's,\..*,,')
-
-        envsubst '${RHDH_HELM_RELEASE_NAME} ${RHDH_NAMESPACE} ${POSTGRESQL_ADMIN_PASSWORD} ${PGBOUNCER_REPLICAS} ${PGBOUNCER_MAX_CLIENT_CONNECTIONS} ${PGBOUNCER_DEFAULT_POOL_SIZE} ${PGBOUNCER_MAX_DB_CONNECTIONS} ${PGBOUNCER_MAX_USER_CONNECTIONS}' \
-            <template/backstage/helm/pgbouncer.yaml >"$TMP_DIR/pgbouncer.yaml"
-        $clin apply -f "$TMP_DIR/pgbouncer.yaml"
-        wait_to_start deployment "${RHDH_HELM_RELEASE_NAME}-pgbouncer" 300 300
-    fi
+    wait_to_exist "$RHDH_NAMESPACE" "statefulset" "rhdh-postgresql-cluster-primary" 300 300
+    primary_ss=$($clin get statefulset -o name | grep rhdh-postgresql-cluster-primary | sed 's/statefulset.apps\///')
+    $clin wait --for=condition=Ready pod -l postgres-operator.crunchydata.com/instance-set=primary --timeout=300s
+    wait_to_start deployment "rhdh-postgresql-cluster-pgbouncer" 300 300
 
     restart_rhdh_deployment 1
     return $?
@@ -617,8 +672,8 @@ install_rhdh_with_olm() {
 # shellcheck disable=SC2016,SC1001,SC2086
 psql_debug() {
     if [ "$INSTALL_METHOD" == "helm" ]; then
-        psql_db_ss="${RHDH_HELM_RELEASE_NAME}-postgresql-primary"
-        psql_db="${psql_db_ss}-0"
+        wait_to_exist "$RHDH_NAMESPACE" "statefulset" "rhdh-postgresql-cluster-primary" 300 300
+        psql_db=$($clin get statefulset -o name | grep rhdh-postgresql-cluster-primary | sed 's/statefulset.apps\///')
     elif [ "$INSTALL_METHOD" == "olm" ]; then
         psql_db_ss=backstage-psql-developer-hub
         psql_db="${psql_db_ss}-0"
@@ -640,8 +695,8 @@ psql_debug() {
 
     if ${PSQL_LOG} || ${PSQL_EXPORT}; then
         log_info "Restarting RHDH DB..."
-        $clin rollout restart statefulset/"$psql_db_ss"
-        wait_to_start statefulset "$psql_db_ss" 300 300
+        $clin rollout restart statefulset/"$psql_db"
+        wait_for_rhdh_db_to_start
     fi
 
     if ${PSQL_EXPORT}; then
@@ -770,6 +825,8 @@ delete() {
         log_info "Uninstalling RHDH Helm release"
         helm uninstall "${RHDH_HELM_RELEASE_NAME}" --namespace "${RHDH_NAMESPACE}"
         $clin delete pvc "data-${RHDH_HELM_RELEASE_NAME}-postgresql-0" --ignore-not-found=true
+        envsubst <template/backstage/rhdh-db/postgres-cluster.yaml | $clin delete -f - --ignore-not-found=true --wait
+        envsubst <template/backstage/rhdh-db/crunchy-postgres-op.yaml | $clin delete -f - --ignore-not-found=true --wait
         $cli delete ns "${RHDH_NAMESPACE}" --ignore-not-found=true --wait
     elif [ "$INSTALL_METHOD" == "olm" ]; then
         delete_rhdh_with_olm
@@ -864,7 +921,7 @@ delete_orchestrator_infra() {
     $cli delete ns knative-serving-ingress --ignore-not-found=true --wait
 }
 
-while getopts "oi:mrdwW" flag; do
+while getopts "oi:mrdwcW" flag; do
     case "${flag}" in
     o)
         export INSTALL_METHOD=olm
@@ -896,6 +953,9 @@ while getopts "oi:mrdwW" flag; do
         ;;
     m)
         setup_monitoring
+        ;;
+    c)
+        setup_rhdh_db
         ;;
     \?)
         log_warn "Invalid option: ${flag} - defaulting to -i (install)"
