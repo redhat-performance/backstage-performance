@@ -377,14 +377,14 @@ backstage_install() {
     if ${ENABLE_RBAC}; then
         cp template/backstage/rbac-config.yaml "${TMP_DIR}/rbac-config.yaml"
         if [[ $RBAC_POLICY == "$RBAC_POLICY_REALISTIC" ]]; then
-            cat template/backstage/realistic-rbac-config.yaml >>"${TMP_DIR}/rbac-config.yaml"
+            cat template/backstage/complex-rbac-config.yaml >>"${TMP_DIR}/rbac-config.yaml"
         fi
         create_rbac_policy "$RBAC_POLICY"
         cat "$TMP_DIR/group-rbac.yaml" >>"$TMP_DIR/rbac-config.yaml"
         if [[ "$INSTALL_METHOD" == "helm" ]] && ${ENABLE_ORCHESTRATOR}; then
             cat template/backstage/helm/orchestrator-rbac-patch.yaml >>"$TMP_DIR/rbac-config.yaml"
             if [[ $RBAC_POLICY == "$RBAC_POLICY_REALISTIC" ]]; then
-                cat template/backstage/helm/realistic-orchestrator-rbac-patch.yaml >>"${TMP_DIR}/rbac-config.yaml"
+                cat template/backstage/helm/complex-orchestrator-rbac-patch.yaml >>"${TMP_DIR}/rbac-config.yaml"
             fi
         fi
         until $clin create -f "$TMP_DIR/rbac-config.yaml"; do $clin delete configmap rbac-policy --ignore-not-found=true; done

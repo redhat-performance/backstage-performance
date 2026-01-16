@@ -3,7 +3,6 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: rhdh-pgbouncer-config
-  namespace: rhdh-performance
 data:
   pgbouncer.ini: |
     [databases]
@@ -44,23 +43,21 @@ data:
     
     ; Admin
     admin_users = postgres
-    ignore_startup_parameters = extra_float_digits
+    ignore_startup_parameters = extra_float_digits,search_path
 ---
 apiVersion: v1
 kind: Secret
 metadata:
   name: rhdh-pgbouncer-userlist
-  namespace: rhdh-performance
 type: Opaque
 stringData:
   userlist.txt: |
-    "postgres" "Txv4Ch4gsL"
+    "postgres" "$POSTGRESQL_ADMIN_PASSWORD"
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: rhdh-pgbouncer
-  namespace: rhdh-performance
   labels:
     app: pgbouncer
     app.kubernetes.io/name: pgbouncer
@@ -125,7 +122,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: rhdh-pgbouncer
-  namespace: rhdh-performance
   labels:
     app: pgbouncer
     app.kubernetes.io/name: pgbouncer
