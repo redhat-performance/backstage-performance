@@ -149,7 +149,7 @@ def on_test_start(environment, **_kwargs):
     if not isinstance(environment.runner, WorkerRunner):
         users = []
         for i in range(1, int(environment.runner.target_user_count)+1):
-            users.append(f"t{i}")
+            users.append(f"t_{i}")
 
         worker_count = environment.runner.worker_count
         chunk_size = int(len(users) / worker_count)
@@ -234,7 +234,7 @@ class ComplexRbacTest(HttpUser):
             if len(usernames) > 0:
                 self.USERNAME = usernames.pop()
             else:
-                self.USERNAME = "t1"
+                self.USERNAME = "t_1"
             kc_host = self.environment.parsed_options.keycloak_host
             self.KEYCLOAK_URL = f'https://{kc_host}/auth'
             bs_host = self.environment.host
