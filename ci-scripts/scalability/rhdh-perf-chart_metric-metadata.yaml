@@ -183,3 +183,57 @@ metrics:
     subtitle: "Orchestrator Workflow All Instances"
     label: "Response Time"
     units: "ms"
+
+  Catalog_Allow_Response_Time_Avg:
+    title: "Catalog API Response Time"
+    subtitle: "Permission ALLOWED"
+    label: "Response Time"
+    units: "ms"
+
+  Catalog_Deny_Response_Time_Avg:
+    title: "Catalog API Response Time"
+    subtitle: "Permission DENIED"
+    label: "Response Time"
+    units: "ms"
+
+  RBAC_Allow_Response_Time_Avg:
+    title: "RBAC API Response Time"
+    subtitle: "Permission ALLOWED"
+    label: "Response Time"
+    units: "ms"
+
+  RBAC_Deny_Response_Time_Avg:
+    title: "RBAC API Response Time"
+    subtitle: "Permission DENIED"
+    label: "Response Time"
+    units: "ms"
+
+  Scaffolder_Allow_Response_Time_Avg:
+    title: "Scaffolder API Response Time"
+    subtitle: "Permission ALLOWED"
+    label: "Response Time"
+    units: "ms"
+
+  Scaffolder_Deny_Response_Time_Avg:
+    title: "Scaffolder API Response Time"
+    subtitle: "Permission DENIED"
+    label: "Response Time"
+    units: "ms"
+
+  Orchestrator_Allow_Response_Time_Avg:
+    title: "Orchestrator API Response Time"
+    subtitle: "Permission ALLOWED"
+    label: "Response Time"
+    units: "ms"
+
+  Orchestrator_Deny_Response_Time_Avg:
+    title: "Orchestrator API Response Time"
+    subtitle: "Permission DENIED"
+    label: "Response Time"
+    units: "ms"
+
+  Auth_Policy_Response_Time_Avg:
+    title: "Authorization Check Time"
+    subtitle: "Policy permission"
+    label: "Response Time"
+    units: "ms"
