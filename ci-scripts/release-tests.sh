@@ -410,6 +410,30 @@ function rbac_nested_test() {
     _test "$name" "$nick" "$ticket"
 }
 
+function complex_rbac_test() {
+    name="Complex Rbac test"
+    nick="complex-rbac"
+    ticket="$1" # Jira story
+
+    export DURATION="10m"
+    export RHDH_LOG_LEVEL=debug
+    export SCALE_WORKERS=100
+    export RBAC_POLICY=complex
+    export ENABLE_ORCHESTRATOR=true
+    export SCENARIO=complex-rbac
+    export ALWAYS_CLEANUP=true
+
+    export SCALE_ACTIVE_USERS_SPAWN_RATES="1:1 10:2 25:5 50:10 100:20 150:30 200:40 250:50 300:60 400:80 500:100"
+    export SCALE_BS_USERS_GROUPS="1000:250"
+    export SCALE_CATALOG_SIZES="2500:2500"
+    export SCALE_REPLICAS="1:1"
+    export SCALE_DB_STORAGES="2Gi"
+    export SCALE_CPU_REQUESTS_LIMITS=":"
+    export SCALE_MEMORY_REQUESTS_LIMITS=":"
+
+    _test "$name" "$nick" "$ticket"
+}
+
 # !!! Configure here !!!
 VERSION_OLD="1.7"
 VERSION_NEW="1.8"
@@ -457,6 +481,9 @@ run_rbac_groups_test() {
 run_rbac_nested_test() {
     rbac_nested_test "RHIDP-9173"
 }
+run_complex_rbac_test() {
+    complex_rbac_test "RHIDP-XXXX"
+}
 
 IFS="," read -ra test_ids <<<"${1:-all}"
 for test_id in "${test_ids[@]}"; do
@@ -500,6 +527,9 @@ for test_id in "${test_ids[@]}"; do
     "rbac_nested")
         run_rbac_nested_test
         ;;
+    "complex_rbac")
+        run_complex_rbac_test
+        ;;
     \? | "all")
         run_compare_previous_test
         run_entity_burden_test
@@ -514,6 +544,7 @@ for test_id in "${test_ids[@]}"; do
         # run_rbac_test
         # run_rbac_groups_test
         # run_rbac_nested_test
+        # run_complex_rbac_test
         ;;
     *)
         echo "$(date -u +'%Y-%m-%dT%H:%M:%S,%N+00:00') ERROR Unsupported test option: '$test_id'"
