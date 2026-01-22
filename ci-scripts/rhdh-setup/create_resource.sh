@@ -198,52 +198,36 @@ get_group_path_by_name() {
   local group_name="$input"
   token=$(get_token)
 
-  response=$(curl -s -k --location --request GET "$(keycloak_url)/admin/realms/backstage/groups?search=${group_name}" \
+  response=$(curl -s -k --location --request GET "$(keycloak_url)/admin/realms/backstage/groups?search=${group_name}&populateHierarchy=false" \
     -H 'Content-Type: application/json' \
     -H "Authorization: Bearer $token" 2>&1)
 
-  if [[ "$response" == "["* ]] && [[ "$response" == *"]" ]] && [[ "$response" != "[]" ]]; then
-    group_path=$(echo "$response" | jq -r --stream --arg name "$group_name" '
-      [., inputs] |
-      map(select(.[0][-1] == "name" and .[1] == $name) | .[0][:-1]) as $paths |
-      if $paths | length > 0 then
-        map(select(.[0] == ($paths[0] + ["path"]))) | .[0][1]
-      else empty end
-    ')
+  if [[ "$response" == "["* ]] && [[ "$response" != "[]" ]]; then
+    group_path=$(echo "$response" | jq -r '.[0].path // empty')
     if [ -n "$group_path" ] && [ "$group_path" != "null" ]; then
       echo "$group_path"
-    else
-      return 1
+      return 0
     fi
-  else
-    return 1
   fi
+  return 1
 }
 
 get_group_id_by_name() {
   group_name="$1"
   token=$(get_token)
 
-  response=$(curl -s -k --location --request GET "$(keycloak_url)/admin/realms/backstage/groups?search=${group_name}" \
+  response=$(curl -s -k --location --request GET "$(keycloak_url)/admin/realms/backstage/groups?search=${group_name}&populateHierarchy=false" \
     -H 'Content-Type: application/json' \
     -H "Authorization: Bearer $token" 2>&1)
 
-  if [[ "$response" == "["* ]] && [[ "$response" == *"]" ]] && [[ "$response" != "[]" ]]; then
-    group_id=$(echo "$response" | jq -r --stream --arg name "$group_name" '
-      [., inputs] |
-      map(select(.[0][-1] == "name" and .[1] == $name) | .[0][:-1]) as $paths |
-      if $paths | length > 0 then
-        map(select(.[0] == ($paths[0] + ["id"]))) | .[0][1]
-      else empty end
-    ')
+  if [[ "$response" == "["* ]] && [[ "$response" != "[]" ]]; then
+    group_id=$(echo "$response" | jq -r '.[0].id // empty')
     if [ -n "$group_id" ] && [ "$group_id" != "null" ]; then
       echo "$group_id"
-    else
-      return 1
+      return 0
     fi
-  else
-    return 1
   fi
+  return 1
 }
 
 assign_parent_group() {
