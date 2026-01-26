@@ -1,6 +1,6 @@
 podSecurityContext:
-  runAsGroup: uid
-  runAsUser: uid
+  runAsGroup: $POSTGRES_EXPORTER_UID
+  runAsUser: $POSTGRES_EXPORTER_UID
   runAsNonRoot: true
   seccompProfile:
     type: RuntimeDefault
@@ -27,8 +27,8 @@ config:
     - --collector.statio_user_indexes
     - --collector.statio_user_tables
   datasource:
-    host: 'rhdh-postgresql-primary'
-    user: 'postgres'
-    password: pg_password
-    port: "5432"
-    database: 'dbname'
+    host: '${POSTGRES_HOST}'
+    user: '${POSTGRES_USER}'
+    password: '${POSTGRES_PASSWORD}'
+    port: "${POSTGRES_PORT}"
+    database: '${POSTGRES_DATABASE_NAME}'

@@ -450,7 +450,25 @@ setup_rhdh_db() {
     # Required for PostgreSQL 15+ where public schema CREATE is not granted by default
     #$clin create configmap rhdh-db-init-sql --from-literal=init.sql="ALTER SCHEMA public OWNER TO ${POSTGRES_USER}; GRANT ALL ON SCHEMA public TO ${POSTGRES_USER};" --dry-run=client -o yaml | $clin apply -f -
 
-    envsubst <template/backstage/rhdh-db/postgres-cluster.yaml >|"$TMP_DIR/postgres-cluster.yaml" && $clin apply -f "$TMP_DIR/postgres-cluster.yaml"
+    envsubst <template/backstage/rhdh-db/postgres-cluster.yaml >|"$TMP_DIR/postgres-cluster.yaml"
+
+    # Build the patch for PostgresCluster CR to persist config across restarts
+    if ${PSQL_LOG}; then
+        log_info "Setting up PostgreSQL logging via PostgresCluster CR"
+        yq -i '.spec.patroni.dynamicConfiguration.postgresql.parameters |= . + {"log_min_duration_statement": "'"${LOG_MIN_DURATION_STATEMENT}"'"}' "$TMP_DIR/postgres-cluster.yaml"
+        yq -i '.spec.patroni.dynamicConfiguration.postgresql.parameters |= . + {"log_min_duration_sample": "'"${LOG_MIN_DURATION_SAMPLE}"'"}' "$TMP_DIR/postgres-cluster.yaml"
+        yq -i '.spec.patroni.dynamicConfiguration.postgresql.parameters |= . + {"log_statement_sample_rate": "'"${LOG_STATEMENT_SAMPLE_RATE}"'"}' "$TMP_DIR/postgres-cluster.yaml"
+    fi
+    if ${PSQL_EXPORT}; then
+        log_info "Setting up PostgreSQL tracking via PostgresCluster CR"
+        yq -i '.spec.patroni.dynamicConfiguration.postgresql.parameters |= . + {"track_io_timing": "on"}' "$TMP_DIR/postgres-cluster.yaml"
+        yq -i '.spec.patroni.dynamicConfiguration.postgresql.parameters |= . + {"track_wal_io_timing": "on"}' "$TMP_DIR/postgres-cluster.yaml"
+        yq -i '.spec.patroni.dynamicConfiguration.postgresql.parameters |= . + {"track_functions": "all"}' "$TMP_DIR/postgres-cluster.yaml"
+        yq -i '.spec.patroni.dynamicConfiguration.postgresql.parameters |= . + {"stats_fetch_consistency": "cache"}' "$TMP_DIR/postgres-cluster.yaml"
+        yq -i '.spec.patroni.dynamicConfiguration.postgresql.parameters |= . + {"shared_preload_libraries": "pgaudit,auto_explain,pg_stat_statements"}' "$TMP_DIR/postgres-cluster.yaml"
+    fi
+
+    $clin apply -f "$TMP_DIR/postgres-cluster.yaml"
     wait_for_rhdh_db_to_start
 
     POSTGRES_PASSWORD=$($clin get secret "rhdh-postgresql-cluster-pguser-$POSTGRES_USER" -o jsonpath='{.data.password}' | base64 -d)
@@ -473,70 +491,49 @@ delete_rhdh_db() {
     $clin delete statefulset rhdh-postgresql-cluster-pgbouncer --ignore-not-found=true --wait
 }
 
+plugins=("backstage_plugin_permission" "backstage_plugin_auth" "backstage_plugin_catalog" "backstage_plugin_scaffolder" "backstage_plugin_search" "backstage_plugin_app")
+
+psql_debug_cleanup() {
+    log_info "Removing PostgreSQL debug"
+    helm uninstall pg-exporter -n "${RHDH_NAMESPACE}" --ignore-not-found=true --wait
+    for plugin in "${plugins[@]}"; do
+        helm uninstall "${plugin//_/-}" -n "${RHDH_NAMESPACE}" --ignore-not-found=true --wait
+    done
+}
+
 # shellcheck disable=SC2016,SC1001,SC2086
 psql_debug() {
-    if [ "$INSTALL_METHOD" == "helm" ]; then
+    if ${PSQL_EXPORT}; then
+        log_info "Debugging PostgreSQL"
         wait_to_exist "$RHDH_NAMESPACE" "statefulset" "rhdh-postgresql-cluster-primary" 300
-        psql_db=$($clin get statefulset -o name | grep rhdh-postgresql-cluster-primary | sed 's/statefulset.apps\///')
-    elif [ "$INSTALL_METHOD" == "olm" ]; then
-        psql_db_ss=backstage-psql-developer-hub
-        psql_db="${psql_db_ss}-0"
-    fi
-    if ${PSQL_LOG}; then
-        log_info "Setting up PostgreSQL logging"
-        $clin exec "${psql_db}" -- sh -c "sed -i "s/^\s*#log_min_duration_statement.*/log_min_duration_statement=${LOG_MIN_DURATION_STATEMENT}/" /var/lib/pgsql/data/userdata/postgresql.conf "
-        $clin exec "${psql_db}" -- sh -c "sed -i "s/^\s*#log_min_duration_sample.*/log_min_duration_sample=${LOG_MIN_DURATION_SAMPLE}/" /var/lib/pgsql/data/userdata/postgresql.conf "
-        $clin exec "${psql_db}" -- sh -c "sed -i "s/^\s*#log_statement_sample_rate.*/log_statement_sample_rate=${LOG_STATEMENT_SAMPLE_RATE}/" /var/lib/pgsql/data/userdata/postgresql.conf "
-    fi
-    if ${PSQL_EXPORT}; then
-        log_info "Setting up PostgreSQL tracking"
-        $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#track_io_timing.*/track_io_timing = on/" /var/lib/pgsql/data/userdata/postgresql.conf'
-        $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#track_wal_io_timing.*/track_wal_io_timing = on/" /var/lib/pgsql/data/userdata/postgresql.conf'
-        $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#track_functions.*/track_functions = all/" /var/lib/pgsql/data/userdata/postgresql.conf'
-        $clin exec "${psql_db}" -- sh -c 'sed -i "s/^\s*#stats_fetch_consistency.*/stats_fetch_consistency = cache/" /var/lib/pgsql/data/userdata/postgresql.conf'
-        $clin exec "${psql_db}" -- sh -c "echo shared_preload_libraries = \'pgaudit,auto_explain,pg_stat_statements\' >> /var/lib/pgsql/data/userdata/postgresql.conf"
-    fi
-
-    if ${PSQL_LOG} || ${PSQL_EXPORT}; then
-        log_info "Restarting RHDH DB..."
-        $clin rollout restart statefulset/"$psql_db"
-        wait_for_rhdh_db_to_start
-    fi
-
-    if ${PSQL_EXPORT}; then
+        psql_db_ss=$($clin get statefulset -o name | grep rhdh-postgresql-cluster-primary | sed 's/statefulset.apps\///')
+        psql_db_pod="${psql_db_ss}-0"
         log_info "Setting up PostgreSQL metrics exporter"
-        $clin exec "${psql_db}" -- sh -c 'psql -c "CREATE EXTENSION pg_stat_statements;"'
-        uid=$(oc get namespace "${RHDH_NAMESPACE}" -o go-template='{{ index .metadata.annotations "openshift.io/sa.scc.supplemental-groups" }}' | cut -d '/' -f 1)
-        pg_pass=$(${clin} get secret rhdh-postgresql -o jsonpath='{.data.postgres-password}' | base64 -d)
-        plugins=("backstage_plugin_permission" "backstage_plugin_auth" "backstage_plugin_catalog" "backstage_plugin_scaffolder" "backstage_plugin_search" "backstage_plugin_app")
+        $clin exec "${psql_db_pod}" -- sh -c 'psql -c "CREATE EXTENSION pg_stat_statements;"'
+
         helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-        cp template/postgres-exporter/chart-values.yaml "$TMP_DIR/pg-exporter.yaml"
-        sed -i "s/uid/$uid/g" "$TMP_DIR/pg-exporter.yaml"
-        sed -i "s/pg_password/'$pg_pass'/g" "$TMP_DIR/pg-exporter.yaml"
+        export POSTGRES_HOST POSTGRES_PORT POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DATABASE_NAME POSTGRES_EXPORTER_UID
+        POSTGRES_HOST=rhdh-postgresql-cluster-primary
+        POSTGRES_PORT=$($clin get secret "rhdh-db-credentials" -o jsonpath='{.data.POSTGRES_PORT}' | base64 -d)
+        POSTGRES_USER=$($clin get secret "rhdh-db-credentials" -o jsonpath='{.data.POSTGRES_USER}' | base64 -d)
+        POSTGRES_PASSWORD=$($clin get secret "rhdh-db-credentials" -o jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d)
+        POSTGRES_DATABASE_NAME=$($clin get secret "rhdh-db-credentials" -o jsonpath='{.data.POSTGRES_DATABASE_NAME}' | base64 -d)
+        POSTGRES_EXPORTER_UID=$(oc get namespace "${RHDH_NAMESPACE}" -o go-template='{{ index .metadata.annotations "openshift.io/sa.scc.supplemental-groups" }}' | cut -d '/' -f 1)
+        envsubst '${POSTGRES_HOST} ${POSTGRES_PORT} ${POSTGRES_USER} ${POSTGRES_PASSWORD} ${POSTGRES_EXPORTER_UID}' <template/postgres-exporter/chart-values.yaml >"$TMP_DIR/pg-exporter.yaml"
         helm install pg-exporter prometheus-community/prometheus-postgres-exporter -n "${RHDH_NAMESPACE}" -f "$TMP_DIR/pg-exporter.yaml"
         for plugin in "${plugins[@]}"; do
-            cp template/postgres-exporter/values-template.yaml "${TMP_DIR}/${plugin}.yaml"
-            sed -i "s/'dbname'/'$plugin'/" "${TMP_DIR}/${plugin}.yaml"
-            sed -i "s/uid/$uid/g" "${TMP_DIR}/${plugin}.yaml"
-            sed -i "s/pg_password/'$pg_pass'/g" "${TMP_DIR}/${plugin}.yaml"
+            export POSTGRES_DATABASE_NAME=$plugin
+            envsubst '${POSTGRES_HOST} ${POSTGRES_PORT} ${POSTGRES_USER} ${POSTGRES_PASSWORD} ${POSTGRES_DATABASE_NAME} ${POSTGRES_EXPORTER_UID}' <template/postgres-exporter/values-template.yaml >"${TMP_DIR}/${plugin}.yaml"
             helm_name=${plugin//_/-}
             helm install "${helm_name}" prometheus-community/prometheus-postgres-exporter -n "${RHDH_NAMESPACE}" -f "${TMP_DIR}/${plugin}.yaml"
         done
-    fi
 
-    if ${PSQL_LOG} || ${PSQL_EXPORT}; then
-        log_info "Restarting RHDH..."
-        restart_rhdh_deployment 1
-    fi
-
-    if ${PSQL_EXPORT}; then
         log_info "Setting up PostgreSQL monitoring"
         plugins=("pg-exporter" "backstage-plugin-permission" "backstage-plugin-auth" "backstage-plugin-catalog" "backstage-plugin-scaffolder" "backstage-plugin-search" "backstage-plugin-app")
         for plugin in "${plugins[@]}"; do
-            cp template/postgres-exporter/service-monitor-template.yaml "${TMP_DIR}/${plugin}-monitor.yaml"
-            sed -i "s/pglabel/$plugin/" "${TMP_DIR}/${plugin}-monitor.yaml"
-            sed -i "s/pgnamespace/$RHDH_NAMESPACE/g" "${TMP_DIR}/${plugin}-monitor.yaml"
-            $clin create -f "${TMP_DIR}/${plugin}-monitor.yaml"
+            export PG_LABEL=$plugin
+            envsubst '${PG_LABEL} ${RHDH_NAMESPACE}' <template/postgres-exporter/service-monitor-template.yaml >"${TMP_DIR}/${plugin}-monitor.yaml"
+            $clin apply -f "${TMP_DIR}/${plugin}-monitor.yaml"
         done
     fi
 }
@@ -551,6 +548,11 @@ restart_rhdh_deployment() {
         rhdh_deployment="${RHDH_HELM_RELEASE_NAME}-developer-hub"
     elif [ "$INSTALL_METHOD" == "olm" ]; then
         rhdh_deployment="backstage-developer-hub"
+    fi
+    # Check if the RHDH deployment exists before trying to scale or operate on it
+    if ! $clin get deployment "$rhdh_deployment" &>/dev/null; then
+        log_error "Deployment $rhdh_deployment does not exist. Skipping RHDH restart."
+        return 1
     fi
     $clin scale deployment "$rhdh_deployment" --replicas=0
     for ((replicas = 1; replicas <= replica_count; replicas++)); do
@@ -653,11 +655,15 @@ install_rhdh_with_helm() {
     #shellcheck disable=SC2086
     helm upgrade "${RHDH_HELM_RELEASE_NAME}" -i "${RHDH_HELM_REPO}" ${version_arg} -n "${RHDH_NAMESPACE}" --values "$TMP_DIR/chart-values.yaml"
 
+    wait_to_exist "${RHDH_NAMESPACE}" "deployment" "${RHDH_HELM_RELEASE_NAME}-developer-hub" 300
+
     # Patch deployment strategy to start replicas one by one
     log_info "Patching RHDH deployment strategy for sequential replica startup"
-    oc patch deployment "${RHDH_HELM_RELEASE_NAME}-developer-hub" --type='merge' -p '{"spec":{"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxUnavailable":0,"maxSurge":1}}}}'
+    $clin patch deployment "${RHDH_HELM_RELEASE_NAME}-developer-hub" --type='merge' -p '{"spec":{"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxUnavailable":0,"maxSurge":1}}}}'
 
-    patch_sonataflow_flyway
+    if ${ENABLE_ORCHESTRATOR}; then
+        patch_sonataflow_flyway
+    fi
     restart_rhdh_deployment 1
 
     return $?
@@ -953,7 +959,7 @@ install() {
 # Section 10: CLI Parsing
 ###############################################################################
 
-while getopts "oi:mrdwcWC" flag; do
+while getopts "oi:mrdwcWCeE" flag; do
     case "${flag}" in
     o)
         export INSTALL_METHOD=olm
@@ -991,6 +997,12 @@ while getopts "oi:mrdwcWC" flag; do
         ;;
     C)
         delete_rhdh_db
+        ;;
+    e)
+        psql_debug
+        ;;
+    E)
+        psql_debug_cleanup
         ;;
     \?)
         log_warn "Invalid option: ${flag} - defaulting to -i (install)"

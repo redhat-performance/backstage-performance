@@ -236,11 +236,7 @@ endif
 	@echo "Getting locust master log:"
 	kubectl logs --namespace $(LOCUST_NAMESPACE) -f -l performance-test-pod-name=$(SCENARIO)-test-master | tee load-test.log
 	date -u -Ins>$(TMP_DIR)/benchmark-after
-ifeq ($(RHDH_INSTALL_METHOD),helm)
-	oc exec rhdh-postgresql-primary-0 -n $(RHDH_NAMESPACE) -- sh -c 'cat  /var/lib/pgsql/data/userdata/log/postgresql*.log'>postgresql.log
-else
-	oc exec backstage-psql-developer-hub-0 -n $(RHDH_NAMESPACE) -- sh -c 'cat  /var/lib/pgsql/data/userdata/log/postgresql*.log'>postgresql.log
-endif
+	oc -n $(RHDH_NAMESPACE) exec "$$(oc -n $(RHDH_NAMESPACE) get statefulset -o name | grep rhdh-postgresql-cluster-primary | sed 's/statefulset.apps\///')-0" -- sh -c 'cat /pgdata/pg16/log/postgresql*.log' > postgresql.log
 	@echo "All done!!!"
 
 ## Run the scalability test
@@ -323,7 +319,7 @@ clean-artifacts:
 
 ## Clean all
 .PHONY: clean-all
-clean-all: namespace clean clean-local clean-artifacts uninstall-workflows undeploy-rhdh-db undeploy-rhdh
+clean-all: namespace clean clean-local clean-artifacts uninstall-workflows psql-debug-cleanup undeploy-rhdh-db undeploy-rhdh
 
 ## Deploy pgAdmin
 .PHONY: deploy-pgadmin
@@ -334,6 +330,16 @@ deploy-pgadmin:
 .PHONY: undeploy-pgadmin
 undeploy-pgadmin:
 	cd ci-scripts/rhdh-setup; ./pgadmin.sh -d
+
+## Debug PostgreSQL
+.PHONY: psql-debug
+psql-debug:
+	cd ci-scripts/rhdh-setup; ./deploy.sh -e
+
+## Clean PostgreSQL debug
+.PHONY: psql-debug-cleanup
+psql-debug-cleanup:
+	cd ci-scripts/rhdh-setup; ./deploy.sh -E
 
 ##	=== Help ===
 

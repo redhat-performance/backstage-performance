@@ -224,3 +224,8 @@
   monitoring_step: 15
 
 {{ results_scenario('Aggregated') }}
+
+# Image metadata
+- name: metadata.image
+  command: skopeo inspect "docker://$( oc get deployments -A -o json | jq -r '.items[] | select(.metadata.namespace | match("${RHDH_NAMESPACE}.*")) | select(.metadata.name | match("(rhdh|backstage)-developer-hub")).spec.template.spec.containers | map(select(.name == "backstage-backend"))[0].image' )" | jq --raw-output .Labels
+  output: json
