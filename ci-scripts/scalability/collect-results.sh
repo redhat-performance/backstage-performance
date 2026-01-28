@@ -167,7 +167,7 @@ Orchestrator_Deny_Response_Time_Avg \
 Auth_Policy_Response_Time_Avg"
 
 # Metrics
-for x_axis_scale_label in "ActiveUsers:linear:Active Users" "RBAC_POLICY_SIZE:log:RBAC Policy Size" "Iteration:linear:Iteration" "CATALOG_SIZE:linear:Catalog Size" "COMPONENT_COUNT:linear:Component Count" "API_COUNT:linear:API Count"; do
+for x_axis_scale_label in "ActiveUsers:linear:Active Users" "RBAC_POLICY_SIZE:log:RBAC Policy Size" "Iteration:linear:Iteration" "CATALOG_SIZE:linear:Catalog Size" "COMPONENT_COUNT:linear:Component Count" "API_COUNT:linear:API Count" "RHDH_DEPLOYMENT_REPLICAS:linear:RHDH Deployment Replicas"; do
     IFS=":" read -ra tokens <<<"${x_axis_scale_label}"
     xa="${tokens[0]}"                                         # x_axis
     [[ "${#tokens[@]}" -lt 2 ]] && sc="" || sc="${tokens[1]}" # scale

@@ -2,8 +2,8 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   labels:
-    release: pglabel
-  name: prometheus-pglabel
+    release: $PG_LABEL
+  name: prometheus-$PG_LABEL
 spec:
   endpoints:
   - interval: 30s
@@ -12,7 +12,7 @@ spec:
     path: /metrics
   namespaceSelector:
     matchNames:
-      - pgnamespace
+      - ${RHDH_NAMESPACE}
   selector:
     matchLabels:
-      release: pglabel
+      app.kubernetes.io/instance: $PG_LABEL

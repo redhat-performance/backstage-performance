@@ -23,7 +23,7 @@
   output: json
 {%- endmacro %}
 
-{{ collect_index_usage('${RHDH_NAMESPACE}', '(rhdh|backstage)-(postgresql|psql)-(primary|developer-hub)-0') }}
+{{ collect_index_usage('${RHDH_NAMESPACE}', 'rhdh-postgresql-cluster-primary-.*') }}
 
 
 {% macro pg_query_sum(alias, query) -%}
@@ -248,8 +248,3 @@
 {% endfor %}
 {% endfor %}
 {% endfor %}
-
-# Image metadata
-- name: metadata.image
-  command: skopeo inspect "docker://$( oc get deployments -A -o json | jq -r '.items[] | select(.metadata.namespace | match("rhdh-performance.*")) | select(.metadata.name | match("(rhdh|backstage)-developer-hub")).spec.template.spec.containers | map(select(.name == "backstage-backend"))[0].image' )" | jq --raw-output .Labels
-  output: json
