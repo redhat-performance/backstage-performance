@@ -1,0 +1,35 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rbac-policy-csv-generator
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: generate-rbac-policy-csv
+          image: quay.io/backstage-performance/rbac-policy-csv:latest
+          env:
+            - name: INSTALL_METHOD
+              value: "${INSTALL_METHOD}"
+            - name: ENABLE_ORCHESTRATOR
+              value: "${ENABLE_ORCHESTRATOR}"
+            - name: GROUP_COUNT
+              value: "${GROUP_COUNT}"
+            - name: BACKSTAGE_USER_COUNT
+              value: "${BACKSTAGE_USER_COUNT}"
+            - name: RBAC_POLICY_SIZE
+              value: "${RBAC_POLICY_SIZE}"
+            - name: RBAC_POLICY
+              value: "${RBAC_POLICY}"
+            - name: OUTPUT_PATH
+              value: "${OUTPUT_PATH}"
+          volumeMounts:
+            - name: rbac-data
+              mountPath: /rbac-data
+      volumes:
+        - name: rbac-data
+          persistentVolumeClaim:
+            claimName: rbac-policy-pvc

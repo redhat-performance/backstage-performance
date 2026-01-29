@@ -74,6 +74,9 @@ export ENABLE_ORCHESTRATOR="${ENABLE_ORCHESTRATOR:-false}"
 export FORCE_ORCHESTRATOR_INFRA_UNINSTALL="${FORCE_ORCHESTRATOR_INFRA_UNINSTALL:-false}"
 export ENABLE_PROFILING="${ENABLE_PROFILING:-false}"
 export RBAC_POLICY="${RBAC_POLICY:-all_groups_admin}"
+export RBAC_POLICY_FILE_URL="${RBAC_POLICY_FILE_URL:-}"
+export RBAC_POLICY_PVC_STORAGE="${RBAC_POLICY_PVC_STORAGE:-100Mi}"
+export RBAC_POLICY_UPLOAD_TO_GITHUB="${RBAC_POLICY_UPLOAD_TO_GITHUB:-true}"
 export RHDH_LOG_LEVEL="${RHDH_LOG_LEVEL:-warn}"
 export KEYCLOAK_LOG_LEVEL="${KEYCLOAK_LOG_LEVEL:-WARN}"
 
@@ -543,6 +546,45 @@ psql_debug() {
 # Section 6: RHDH Deployment
 ###############################################################################
 
+setup_rbac_policy_from_url() {
+    log_info "Setting up RBAC policy from URL: $RBAC_POLICY_FILE_URL"
+
+    # Create PVC for RBAC policy
+    log_info "Creating PVC for RBAC policy"
+    envsubst <template/backstage/helm/rbac-policy-pvc.yaml | $clin apply -f -
+
+    # Wait for PVC to be bound
+    log_info "Waiting for RBAC policy PVC to be bound"
+    $clin wait --for=jsonpath='{.status.phase}'=Bound pvc/rbac-policy-pvc --timeout=120s || {
+        log_warn "PVC not bound yet, checking status..."
+        $clin get pvc rbac-policy-pvc -o yaml
+    }
+
+    # Delete previous job if exists
+    $clin delete job rbac-policy-download --ignore-not-found=true --wait
+
+    # Create and run the download job
+    log_info "Creating RBAC policy download job"
+    envsubst <template/backstage/helm/rbac-policy-download-job.yaml | $clin apply -f -
+
+    # Wait for the job to complete
+    log_info "Waiting for RBAC policy download job to complete"
+    $clin wait --for=condition=complete job/rbac-policy-download --timeout=300s || {
+        log_error "RBAC policy download job failed"
+        $clin logs job/rbac-policy-download
+        return 1
+    }
+
+    log_info "RBAC policy download job completed successfully"
+    $clin logs job/rbac-policy-download
+}
+
+delete_rbac_policy_pvc() {
+    log_info "Deleting RBAC policy PVC and related resources"
+    $clin delete job rbac-policy-download --ignore-not-found=true --wait
+    $clin delete pvc rbac-policy-pvc --ignore-not-found=true --wait
+}
+
 restart_rhdh_deployment() {
     replica_count=${1:-1}
     if [ "$INSTALL_METHOD" == "helm" ]; then
@@ -588,7 +630,12 @@ install_rhdh_with_helm() {
     # RBAC
     if ${ENABLE_RBAC}; then
         log_info "Setting up RBAC"
-        yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.x.yaml")' "$TMP_DIR/chart-values.temp.yaml"
+        if ${RBAC_POLICY_UPLOAD_TO_GITHUB} || [ -n "${RBAC_POLICY_FILE_URL}" ]; then
+            log_info "Using RBAC policy from URL with PVC mount"
+            yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-rbac-pvc.yaml")' "$TMP_DIR/chart-values.temp.yaml"
+        else
+            yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.x.yaml")' "$TMP_DIR/chart-values.temp.yaml"
+        fi
         yq -i '.global.dynamic.plugins |= . + load("template/backstage/helm/rbac-plugin-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"
     fi
 
@@ -725,19 +772,29 @@ backstage_install() {
     fi
     until $clin create configmap app-config-rhdh --from-file "app-config.rhdh.yaml=$TMP_DIR/app-config.yaml"; do $clin delete configmap app-config-rhdh --ignore-not-found=true; done
     if ${ENABLE_RBAC}; then
-        cp template/backstage/rbac-config.yaml "${TMP_DIR}/rbac-config.yaml"
-        if [[ $RBAC_POLICY == "$RBAC_POLICY_COMPLEX" ]]; then
-            cat template/backstage/complex-rbac-config.yaml >>"${TMP_DIR}/rbac-config.yaml"
-        fi
-        create_rbac_policy "$RBAC_POLICY"
-        cat "$TMP_DIR/group-rbac.yaml" >>"$TMP_DIR/rbac-config.yaml"
-        if [[ "$INSTALL_METHOD" == "helm" ]] && ${ENABLE_ORCHESTRATOR}; then
-            cat template/backstage/helm/orchestrator-rbac-patch.yaml >>"$TMP_DIR/rbac-config.yaml"
+        if ${RBAC_POLICY_UPLOAD_TO_GITHUB}; then
+            log_info "RBAC policy will be generated and uploaded to GitHub"
+            create_and_upload_rbac_policy_csv "$RBAC_POLICY"
+            log_info "RBAC policy uploaded to GitHub. URL: $RBAC_POLICY_FILE_URL"
+            setup_rbac_policy_from_url
+        elif [ -n "${RBAC_POLICY_FILE_URL}" ]; then
+            log_info "RBAC policy will be downloaded from URL: $RBAC_POLICY_FILE_URL"
+            setup_rbac_policy_from_url
+        else
+            cp template/backstage/rbac-config.yaml "${TMP_DIR}/rbac-config.yaml"
             if [[ $RBAC_POLICY == "$RBAC_POLICY_COMPLEX" ]]; then
-                cat template/backstage/helm/complex-orchestrator-rbac-patch.yaml >>"${TMP_DIR}/rbac-config.yaml"
+                cat template/backstage/complex-rbac-config.yaml >>"${TMP_DIR}/rbac-config.yaml"
             fi
+            create_rbac_policy "$RBAC_POLICY"
+            cat "$TMP_DIR/group-rbac.yaml" >>"$TMP_DIR/rbac-config.yaml"
+            if [[ "$INSTALL_METHOD" == "helm" ]] && ${ENABLE_ORCHESTRATOR}; then
+                cat template/backstage/helm/orchestrator-rbac-patch.yaml >>"$TMP_DIR/rbac-config.yaml"
+                if [[ $RBAC_POLICY == "$RBAC_POLICY_COMPLEX" ]]; then
+                    cat template/backstage/helm/complex-orchestrator-rbac-patch.yaml >>"${TMP_DIR}/rbac-config.yaml"
+                fi
+            fi
+            until $clin create -f "$TMP_DIR/rbac-config.yaml"; do $clin delete configmap rbac-policy --ignore-not-found=true; done
         fi
-        until $clin create -f "$TMP_DIR/rbac-config.yaml"; do $clin delete configmap rbac-policy --ignore-not-found=true; done
     fi
     envsubst <template/backstage/plugin-secrets.yaml | $clin apply -f -
     until $clin create -f "template/backstage/techdocs-pvc.yaml"; do $clin delete pvc rhdh-techdocs --ignore-not-found=true; done
@@ -904,6 +961,8 @@ delete() {
         log_info "Uninstalling RHDH Helm release"
         helm uninstall "${RHDH_HELM_RELEASE_NAME}" --namespace "${RHDH_NAMESPACE}"
         $clin delete pvc "data-${RHDH_HELM_RELEASE_NAME}-postgresql-0" --ignore-not-found=true
+        # Clean up RBAC policy PVC if it exists
+        delete_rbac_policy_pvc
         envsubst <template/backstage/rhdh-db/postgres-cluster.yaml | $clin delete -f - --ignore-not-found=true --wait
         envsubst <template/backstage/rhdh-db/crunchy-postgres-op.yaml | $clin delete -f - --ignore-not-found=true --wait
         $cli delete ns "${RHDH_NAMESPACE}" --ignore-not-found=true --wait

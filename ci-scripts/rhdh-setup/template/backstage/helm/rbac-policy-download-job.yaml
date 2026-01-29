@@ -1,0 +1,31 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rbac-policy-download
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: download
+          image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "Downloading RBAC policy from ${RBAC_POLICY_FILE_URL}..."
+              curl -sSL -o /rbac-data/rbac-policy.csv "${RBAC_POLICY_FILE_URL}"
+              echo "Download complete. File contents:"
+              cat /rbac-data/rbac-policy.csv
+              echo ""
+              echo "RBAC policy file downloaded successfully."
+          volumeMounts:
+            - name: rbac-data
+              mountPath: /rbac-data
+      volumes:
+        - name: rbac-data
+          persistentVolumeClaim:
+            claimName: rbac-policy-pvc
