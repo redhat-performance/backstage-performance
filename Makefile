@@ -57,6 +57,10 @@ export RHDH_RESOURCES_CPU_REQUESTS ?=
 export RHDH_RESOURCES_CPU_LIMITS ?=
 export RHDH_RESOURCES_MEMORY_REQUESTS ?=
 export RHDH_RESOURCES_MEMORY_LIMITS ?=
+export RHDH_DB_RESOURCES_CPU_REQUESTS ?=
+export RHDH_DB_RESOURCES_CPU_LIMITS ?=
+export RHDH_DB_RESOURCES_MEMORY_REQUESTS ?=
+export RHDH_DB_RESOURCES_MEMORY_LIMITS ?=
 export RHDH_KEYCLOAK_REPLICAS ?= 1
 export LOCUST_EXTRA_CMD ?=
 export AUTH_PROVIDER ?= keycloak
@@ -103,7 +107,7 @@ namespace:
 
 ## Deploy RHDH with Helm
 .PHONY: deploy-rhdh-helm
-deploy-rhdh-helm: $(TMP_DIR)
+deploy-rhdh-helm: $(TMP_DIR) deploy-rhdh-db
 	date -u -Ins>$(TMP_DIR)/deploy-before
 	cd ./ci-scripts/rhdh-setup/; ./deploy.sh -i "$(AUTH_PROVIDER)" || true
 	date -u -Ins>$(TMP_DIR)/deploy-after
@@ -123,9 +127,19 @@ $(TMP_DIR):
 $(ARTIFACT_DIR):
 	mkdir -p $(ARTIFACT_DIR)
 
+## Deploy RHDH database
+.PHONY: deploy-rhdh-db
+deploy-rhdh-db:
+	cd ./ci-scripts/rhdh-setup; ./deploy.sh -c
+
+## Undeploy RHDH database
+.PHONY: undeploy-rhdh-db
+undeploy-rhdh-db:
+	cd ./ci-scripts/rhdh-setup; ./deploy.sh -C
+
 ## Deploy RHDH with OLM
 .PHONY: deploy-rhdh-olm
-deploy-rhdh-olm: $(TMP_DIR)
+deploy-rhdh-olm: $(TMP_DIR) deploy-rhdh-db
 	date -u -Ins>$(TMP_DIR)/deploy-before
 	cd ./ci-scripts/rhdh-setup; ./deploy.sh -o -i "$(AUTH_PROVIDER)" || true
 	date -u -Ins>$(TMP_DIR)/deploy-after
@@ -222,11 +236,7 @@ endif
 	@echo "Getting locust master log:"
 	kubectl logs --namespace $(LOCUST_NAMESPACE) -f -l performance-test-pod-name=$(SCENARIO)-test-master | tee load-test.log
 	date -u -Ins>$(TMP_DIR)/benchmark-after
-ifeq ($(RHDH_INSTALL_METHOD),helm)
-	oc exec rhdh-postgresql-primary-0 -n $(RHDH_NAMESPACE) -- sh -c 'cat  /var/lib/pgsql/data/userdata/log/postgresql*.log'>postgresql.log
-else
-	oc exec backstage-psql-developer-hub-0 -n $(RHDH_NAMESPACE) -- sh -c 'cat  /var/lib/pgsql/data/userdata/log/postgresql*.log'>postgresql.log
-endif
+	oc -n $(RHDH_NAMESPACE) exec "$$(oc -n $(RHDH_NAMESPACE) get statefulset -o name | grep rhdh-postgresql-cluster-primary | sed 's/statefulset.apps\///')-0" -- sh -c 'cat /pgdata/pg16/log/postgresql*.log' > postgresql.log
 	@echo "All done!!!"
 
 ## Run the scalability test
@@ -309,7 +319,7 @@ clean-artifacts:
 
 ## Clean all
 .PHONY: clean-all
-clean-all: namespace clean clean-local clean-artifacts uninstall-workflows undeploy-rhdh
+clean-all: namespace clean clean-local clean-artifacts uninstall-workflows psql-debug-cleanup undeploy-rhdh-db undeploy-rhdh
 
 ## Deploy pgAdmin
 .PHONY: deploy-pgadmin
@@ -320,6 +330,16 @@ deploy-pgadmin:
 .PHONY: undeploy-pgadmin
 undeploy-pgadmin:
 	cd ci-scripts/rhdh-setup; ./pgadmin.sh -d
+
+## Debug PostgreSQL
+.PHONY: psql-debug
+psql-debug:
+	cd ci-scripts/rhdh-setup; ./deploy.sh -e
+
+## Clean PostgreSQL debug
+.PHONY: psql-debug-cleanup
+psql-debug-cleanup:
+	cd ci-scripts/rhdh-setup; ./deploy.sh -E
 
 ##	=== Help ===
 

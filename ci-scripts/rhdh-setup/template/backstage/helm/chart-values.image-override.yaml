@@ -17,35 +17,30 @@ global:
         disabled: false
 orchestrator:
   enabled: false
-  sonataflowPlatform:
-    externalDBsecretRef: "${RHDH_HELM_RELEASE_NAME}-postgresql-svcbind-postgres"
-    externalDBName: "sonataflow"
-    externalDBHost: "${RHDH_HELM_RELEASE_NAME}-postgresql-primary"
-    externalDBPort: "5432"
 upstream:
   backstage:
     appConfig:
-      database:
-        connection:
-          password: "${POSTGRESQL_ADMIN_PASSWORD}"
-          user: postgres
       auth:
         externalAccess:
           - type: legacy
             options:
               secret: ${BACKEND_SECRET}
               subject: legacy-catalog
+      backend:
+        database:
+          connection:
+            host: "${POSTGRES_HOST}"
+            port: "${POSTGRES_PORT}"
+            user: "${POSTGRES_USER}"
+            password: "${POSTGRES_PASSWORD}"
     containerPorts:
       backend: 7007
     extraAppConfig:
       - configMapRef: app-config-rhdh
         filename: app-config.rhdh.yaml
+    extraEnvVarsSecrets:
+      - "rhdh-db-credentials"
     extraEnvVars:
-      - name: POSTGRESQL_ADMIN_PASSWORD
-        valueFrom:
-          secretKeyRef:
-            key: postgres-password
-            name: "{{ .Release.Name }}-postgresql"
       - name: BACKEND_SECRET
         valueFrom:
           secretKeyRef:
@@ -81,71 +76,15 @@ upstream:
       registry: ${RHDH_IMAGE_REGISTRY}
       repository: ${RHDH_IMAGE_REPO}
       tag: ${RHDH_IMAGE_TAG}
-    replicas: ${RHDH_DEPLOYMENT_REPLICAS}
+    replicas: 1
+  postgresql:
+    enabled: false
+    auth:
+      existingSecret: rhdh-db-credentials
   metrics:
     serviceMonitor:
       enabled: ${RHDH_METRIC}
       path: /metrics
-  postgresql:
-    auth:
-      secretKeys:
-        adminPasswordKey: postgres-password
-        userPasswordKey: password
-        replicationPasswordKey: replication-password
-    enabled: true
-    image:
-      registry: registry.redhat.io
-      repository: rhel9/postgresql-15
-      tag: latest
-    postgresqlDataDir: /var/lib/pgsql/data/userdata
-    primary:
-      containerSecurityContext:
-        enabled: false
-      resources:
-        requests:
-          cpu: 1
-          memory: 1Gi
-        limits:
-          cpu: 2
-          memory: 5Gi
-      extendedConfiguration: |
-        max_connections = ${RHDH_DB_MAX_CONNECTIONS}
-      extraEnvVars:
-        - name: POSTGRESQL_ADMIN_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              key: postgres-password
-              name: "{{ .Release.Name }}-postgresql"
-        - name: POSTGRESQL_MAX_CONNECTIONS
-          value: "${RHDH_DB_MAX_CONNECTIONS}"
-      persistence:
-        enabled: true
-        mountPath: /var/lib/pgsql/data
-        size: "${RHDH_DB_STORAGE}"
-    architecture: replication
-    replication:
-      enabled: true
-      synchronousCommit: "on"
-      numSynchronousReplicas: ${RHDH_DB_REPLICAS}
-      applicationName: "${RHDH_HELM_RELEASE_NAME}"
-    readReplicas:
-      containerSecurityContext:
-        enabled: false
-      extendedConfiguration: |
-        max_connections = 500
-      extraEnvVars:
-        - name: POSTGRESQL_ADMIN_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              key: replication-password
-              name: "{{ .Release.Name }}-postgresql"
-        - name: POSTGRESQL_MAX_CONNECTIONS
-          value: "500"
-      podSecurityContext:
-        enabled: false
-      replicaCount: ${RHDH_DB_REPLICAS}
-      securityContext:
-        enabled: false
   service:
     ports:
       backend: 7007
