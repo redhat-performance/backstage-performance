@@ -488,7 +488,7 @@ delete_rhdh_db() {
     $clin delete secret rhdh-db-credentials --ignore-not-found=true --wait
     $clin delete configmap rhdh-db-init-sql --ignore-not-found=true --wait
     $clin delete statefulset rhdh-postgresql-cluster-primary --ignore-not-found=true --wait
-    $clin delete statefulset rhdh-postgresql-cluster-pgbouncer --ignore-not-found=true --wait
+    $clin delete deployment rhdh-postgresql-cluster-pgbouncer --ignore-not-found=true --wait
 }
 
 plugins=("backstage_plugin_permission" "backstage_plugin_auth" "backstage_plugin_catalog" "backstage_plugin_scaffolder" "backstage_plugin_search" "backstage_plugin_app")
