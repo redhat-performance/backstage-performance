@@ -1,6 +1,6 @@
 podSecurityContext:
-  runAsGroup: uid
-  runAsUser: uid
+  runAsGroup: $POSTGRES_EXPORTER_UID
+  runAsUser: $POSTGRES_EXPORTER_UID
   runAsNonRoot: true
   seccompProfile:
     type: RuntimeDefault
@@ -18,8 +18,8 @@ config:
     - --collector.stat_statements
     - --auto-discover-databases
   datasource:
-    host: 'rhdh-postgresql-primary'
-    user: 'postgres'
-    password: pg_password
-    port: "5432"
+    host: '${POSTGRES_HOST}'
+    user: '${POSTGRES_USER}'
+    password: '${POSTGRES_PASSWORD}'
+    port: "${POSTGRES_PORT}"
     database: ''

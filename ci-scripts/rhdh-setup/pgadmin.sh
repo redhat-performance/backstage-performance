@@ -13,15 +13,25 @@ export RHDH_INSTALL_METHOD=${RHDH_INSTALL_METHOD:-helm}
 cli="oc"
 clin="$cli -n $RHDH_NAMESPACE"
 
-export RHDH_DB_HOST RHDH_DB_SECRET
-if [ "$RHDH_INSTALL_METHOD" == "helm" ]; then
-  RHDH_DB_HOST="${RHDH_HELM_RELEASE_NAME}-postgresql-primary"
-  RHDH_DB_SECRET="${RHDH_HELM_RELEASE_NAME}-postgresql"
-  RHDH_DB_SECRET_KEY=postgres-password
-elif [ "$RHDH_INSTALL_METHOD" == "olm" ]; then
-  RHDH_DB_HOST=backstage-psql-developer-hub
-  RHDH_DB_SECRET=backstage-psql-secret-developer-hub
-  RHDH_DB_SECRET_KEY=POSTGRES_PASSWORD
+export RHDH_DB_HOST RHDH_DB_SECRET RHDH_DB_USERNAME
+RHDH_DB_HOST="rhdh-postgresql-cluster-pgbouncer"
+
+RHDH_DB_PASSWORD_SECRET="rhdh-db-credentials"
+RHDH_DB_PASSWORD_KEY="POSTGRES_PASSWORD"
+RHDH_DB_USERNAME_SECRET="rhdh-db-credentials"
+RHDH_DB_USERNAME_KEY="POSTGRES_USER"
+
+RHDH_DB_SONATAFLOW_PASSWORD_SECRET="rhdh-db-sonataflow-credentials"
+RHDH_DB_SONATAFLOW_PASSWORD_KEY="POSTGRES_PASSWORD"
+RHDH_DB_SONATAFLOW_USERNAME_SECRET="rhdh-db-sonataflow-credentials"
+RHDH_DB_SONATAFLOW_USERNAME_KEY="POSTGRES_USER"
+
+RHDH_DB_PASSWORD=$($clin get secret "$RHDH_DB_PASSWORD_SECRET" -o yaml | yq ".data.$RHDH_DB_PASSWORD_KEY" | base64 -d)
+RHDH_DB_USERNAME=$($clin get secret "$RHDH_DB_USERNAME_SECRET" -o yaml | yq ".data.$RHDH_DB_USERNAME_KEY" | base64 -d)
+
+if [ -n "$ENABLE_ORCHESTRATOR" ]; then
+  RHDH_DB_SONATAFLOW_PASSWORD=$($clin get secret "$RHDH_DB_SONATAFLOW_PASSWORD_SECRET" -o yaml | yq ".data.$RHDH_DB_SONATAFLOW_PASSWORD_KEY" | base64 -d)
+  RHDH_DB_SONATAFLOW_USERNAME=$($clin get secret "$RHDH_DB_SONATAFLOW_USERNAME_SECRET" -o yaml | yq ".data.$RHDH_DB_SONATAFLOW_USERNAME_KEY" | base64 -d)
 fi
 
 uninstall() {
@@ -46,8 +56,13 @@ install() {
   echo "  Password: admin"
   echo
   echo "For DB use corresponding password:"
-  echo "  rhdh:     $($clin get secret "$RHDH_DB_SECRET" -o yaml | yq ".data.$RHDH_DB_SECRET_KEY" | base64 -d)"
-  echo "  keycloak: $($clin get secret keycloak-db-secret -o yaml | yq '.data.POSTGRES_PASSWORD' | base64 -d)"
+  echo "  rhdh:     $RHDH_DB_USERNAME / $RHDH_DB_PASSWORD"
+  if [ -n "$ENABLE_ORCHESTRATOR" ]; then
+    echo "  sonataflow: $RHDH_DB_SONATAFLOW_USERNAME / $RHDH_DB_SONATAFLOW_PASSWORD"
+  else
+    echo "  sonataflow: not available (Orchestrator not enabled)"
+  fi
+  echo "  keycloak: keycloak / $($clin get secret keycloak-postgresql -o yaml | yq '.data.password' | base64 -d)"
 }
 
 while getopts "di" flag; do

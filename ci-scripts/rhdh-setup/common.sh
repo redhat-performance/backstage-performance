@@ -6,7 +6,7 @@ mkdir -p "$TMP_DIR"
 cli="oc"
 
 log() {
-  echo "{\"level\":\"${2:-info}\",\"ts\":\"$(date -u -Ins)\",\"message\":\"$1\"}"
+  echo -e "\n{\"level\":\"${2:-info}\",\"ts\":\"$(date -u -Ins)\",\"message\":\"$1\"}"
 }
 
 log_info() {
@@ -76,4 +76,92 @@ wait_and_approve_install_plans() {
   fi
 }
 
-export -f log_info log_warn log_error log_token log_token_info log_token_err wait_and_approve_install_plans
+wait_to_exist() {
+    namespace=${1:-${RHDH_NAMESPACE}}
+    resource=${2:-deployment}
+    name=${3:-name}
+    initial_timeout=${4:-300}
+    rn=$resource/$name
+    description=${5:-"*$rn*"}
+    timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$initial_timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
+
+    interval=10s
+    while ! /bin/bash -c "$cli -n $namespace get $resource -o name | grep $name"; do
+        if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
+            log_error "Timeout waiting for $description to exist"
+            exit 1
+        else
+            log_info "Waiting $interval for $description to exist..."
+            sleep "$interval"
+        fi
+    done
+}
+
+wait_to_start_in_namespace() {
+    namespace=${1:-${RHDH_NAMESPACE}}
+    resource=${2:-deployment}
+    name=${3:-name}
+    initial_timeout=${4:-300}
+    wait_timeout=${5:-300}
+    rn=$resource/$name
+    description=${6:-$rn}
+    wait_to_exist "$namespace" "$resource" "$name" "$initial_timeout" "$description"
+    $cli -n "$namespace" rollout status "$rn" --timeout="${wait_timeout}s"
+    return $?
+}
+
+wait_for_crd() {
+    name=${1:-name}
+    initial_timeout=${2:-300}
+    rn=crd/$name
+    description=${3:-$rn}
+    timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$initial_timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
+    interval=10s
+    while ! /bin/bash -c "$cli get $rn"; do
+        if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
+            log_error "Timeout waiting for $description to exist"
+            exit 1
+        else
+            log_info "Waiting $interval for $description to exist..."
+            sleep "$interval"
+        fi
+    done
+}
+
+wait_to_start() {
+    wait_to_start_in_namespace "$RHDH_NAMESPACE" "$@"
+    return $?
+}
+
+label() {
+    namespace=$1
+    resource=$2
+    name=$3
+    label=$4
+    $cli -n "$namespace" label "$resource" "$name" "$label"
+}
+
+label_n() {
+    label "$RHDH_NAMESPACE" "$1" "$2" "$3"
+}
+
+annotate() {
+    namespace=$1
+    resource=$2
+    name=$3
+    annotation=$4
+    $cli -n "$namespace" annotate "$resource" "$name" "$annotation"
+}
+
+annotate_n() {
+    annotate "$RHDH_NAMESPACE" "$1" "$2" "$3"
+}
+
+mark_resource_for_rhdh() {
+    resource=$1
+    name=$2
+    annotate_n "$resource" "$name" "rhdh.redhat.com/backstage-name=developer-hub"
+    label_n "$resource" "$name" "rhdh.redhat.com/ext-config-sync=true"
+}
+
+export -f log_info log_warn log_error log_token log_token_info log_token_err wait_and_approve_install_plans wait_to_exist wait_to_start_in_namespace wait_for_crd wait_to_start label label_n annotate annotate_n mark_resource_for_rhdh

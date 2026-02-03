@@ -1,0 +1,84 @@
+apiVersion: postgres-operator.crunchydata.com/v1beta1
+kind: PostgresCluster
+metadata:
+  name: rhdh-postgresql-cluster
+spec:
+  postgresVersion: 16
+  users:
+    - name: ${POSTGRES_USER}
+      databases:
+        - ${POSTGRES_DATABASE_NAME}
+      options: "NOSUPERUSER CREATEDB"
+    - name: sonataflow
+      databases: []
+      options: "NOSUPERUSER CREATEDB"
+  patroni:
+    dynamicConfiguration:
+      postgresql:
+        parameters:
+          max_connections: "${RHDH_DB_MAX_CONNECTIONS}"
+        pg_hba:
+          - "host all all 0.0.0.0/0 md5"
+          - "host all all ::0/0 md5"
+  instances:
+    - name: primary
+      replicas: ${RHDH_DB_REPLICAS}
+      resources:
+        requests:
+          cpu: ${RHDH_DB_RESOURCES_CPU_REQUESTS}
+          memory: ${RHDH_DB_RESOURCES_MEMORY_REQUESTS}
+        limits:
+          cpu: ${RHDH_DB_RESOURCES_CPU_LIMITS}
+          memory: ${RHDH_DB_RESOURCES_MEMORY_LIMITS}
+      dataVolumeClaimSpec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: ${RHDH_DB_STORAGE}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    postgres-operator.crunchydata.com/cluster: rhdh-postgresql-cluster
+                    postgres-operator.crunchydata.com/instance-set: primary
+  backups:
+    pgbackrest:
+      repos:
+        - name: repo1
+          volume:
+            volumeClaimSpec:
+              accessModes:
+                - "ReadWriteOnce"
+              resources:
+                requests:
+                  storage: ${RHDH_DB_STORAGE}
+  proxy:
+    pgBouncer:
+      replicas: ${PGBOUNCER_REPLICAS}
+      config:
+        global:
+          pool_mode: "transaction"
+          max_prepared_statements: "100"
+          client_tls_sslmode: "allow"
+          max_client_conn: "${PGBOUNCER_MAX_CLIENT_CONNECTIONS}"
+          max_user_connections: "${PGBOUNCER_MAX_USER_CONNECTIONS}"
+          max_db_connections: "${PGBOUNCER_MAX_DB_CONNECTIONS}"
+          default_pool_size: "${PGBOUNCER_DEFAULT_POOL_SIZE}"
+          reserve_pool_size: "10"
+          reserve_pool_timeout: "5"
+          ignore_startup_parameters: "extra_float_digits,search_path"
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    postgres-operator.crunchydata.com/cluster: rhdh-postgresql-cluster
+                    postgres-operator.crunchydata.com/role: pgbouncer
