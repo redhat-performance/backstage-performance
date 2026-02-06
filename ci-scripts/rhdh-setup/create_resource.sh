@@ -124,7 +124,13 @@ create_per_grp() {
     for g in $(seq 1 "${GROUP_COUNT}"); do
       indx=$((1 + indx))
       [[ ${obj_count} -lt $indx ]] && break
-      $1 "$g" "$indx" "$shard_index"
+      g_indx="$g"
+      if [[ "$RBAC_POLICY" == "$RBAC_POLICY_NESTED_GROUPS" ]]; then
+        if [[ $g -gt 1 ]] && [[ $g -le "$RBAC_POLICY_SIZE" ]]; then
+          g_indx="$((g - 1))_1"
+        fi
+      fi
+      $1 "$g_indx" "$indx" "$shard_index"
       if [ "$(echo "(${indx}%${COMPONENT_SHARD_SIZE})" | bc)" == "0" ]; then
         shard_index=$((shard_index + 1))
       fi
@@ -466,7 +472,6 @@ create_users() {
 
 token_lockfile="$TMP_DIR/token.lockfile"
 
-
 keycloak_token() {
   curl -s -k "$(keycloak_url)/realms/master/protocol/openid-connect/token" \
     -d username=temp-admin \
@@ -499,7 +504,7 @@ rhdh_token() {
     --data-urlencode "redirect_uri=${REDIRECT_URL}" \
     --data-urlencode "scope=openid email profile" \
     --data-urlencode "response_type=code" \
-  "$(keycloak_url)/realms/$REALM/protocol/openid-connect/auth" 2>&1| tee "$TMP_DIR/auth_url.log" | grep -oE 'action="[^"]+"' | grep -oE '"[^"]+"' | tr -d '"')
+    "$(keycloak_url)/realms/$REALM/protocol/openid-connect/auth" 2>&1 | tee "$TMP_DIR/auth_url.log" | grep -oE 'action="[^"]+"' | grep -oE '"[^"]+"' | tr -d '"')
 
   execution=$(echo "$AUTH_URL" | grep -oE 'execution=[^&]+' | grep -oE '[^=]+$')
   tab_id=$(echo "$AUTH_URL" | grep -oE 'tab_id=[^&]+' | grep -oE '[^=]+$')
@@ -561,7 +566,7 @@ get_token() {
         log_token_err "Unable to get $token_type token, re-attempting"
       fi
     else
-      keycloak_pass=$(oc -n "${RHDH_NAMESPACE}" get secret rhdh-keycloak-initial-admin -o template --template='{{.data.password}}'| base64 -d)
+      keycloak_pass=$(oc -n "${RHDH_NAMESPACE}" get secret rhdh-keycloak-initial-admin -o template --template='{{.data.password}}' | base64 -d)
       if ! keycloak_token "$keycloak_pass" >"$token_file"; then
         log_token_err "Unable to get $token_type token, re-attempting"
       fi
