@@ -423,8 +423,9 @@ setup_rhdh_db() {
     _pgb_max_client=$(bc <<<"scale=0; $RHDH_DEPLOYMENT_REPLICAS * $CLIENT_CONNECTIONS_PER_RHDH_INSTANCE" | sed 's,\..*,,')
     PGBOUNCER_MAX_CLIENT_CONNECTIONS=$(bc <<<"if ($_pgb_max_client < $MIN_PGBOUNCER_MAX_CLIENT_CONNECTIONS) $MIN_PGBOUNCER_MAX_CLIENT_CONNECTIONS else $_pgb_max_client")
 
-    # Backend connections per instance - divided by PGBOUNCER_REPLICAS to ensure total doesn't exceed PostgreSQL max_connections
-    _pgb_max_db=$(bc <<<"scale=0; ($RHDH_DB_MAX_CONNECTIONS - $DB_CONNECTIONS_ADMIN_HEADROOM) / $PGBOUNCER_REPLICAS" | sed 's,\..*,,')
+    # Backend connections per instance - multiplied by RHDH_DB_REPLICAS (effective capacity) and divided by PGBOUNCER_REPLICAS
+    # to ensure total doesn't exceed combined PostgreSQL max_connections across all DB replicas
+    _pgb_max_db=$(bc <<<"scale=0; ($RHDH_DB_MAX_CONNECTIONS - $DB_CONNECTIONS_ADMIN_HEADROOM) * $RHDH_DB_REPLICAS/ $PGBOUNCER_REPLICAS" | sed 's,\..*,,')
     PGBOUNCER_MAX_DB_CONNECTIONS=$(bc <<<"if ($_pgb_max_db < $MIN_PGBOUNCER_MAX_DB_CONNECTIONS) $MIN_PGBOUNCER_MAX_DB_CONNECTIONS else $_pgb_max_db")
 
     # Pool size per database - ensures all databases can use their share without exceeding max_db_connections
@@ -438,7 +439,7 @@ setup_rhdh_db() {
     # as long as concurrent transactions don't exceed the limit simultaneously.
     # The reserve_pool provides additional burst capacity for ~30 plugins (reserve_pool_size=10, reserve_pool_timeout=5s).
 
-    log_info "Database connection sizing: RHDH_DB_MAX_CONNECTIONS=$RHDH_DB_MAX_CONNECTIONS, PGBOUNCER_MAX_CLIENT_CONNECTIONS=$PGBOUNCER_MAX_CLIENT_CONNECTIONS, PGBOUNCER_MAX_DB_CONNECTIONS=$PGBOUNCER_MAX_DB_CONNECTIONS, PGBOUNCER_DEFAULT_POOL_SIZE=$PGBOUNCER_DEFAULT_POOL_SIZE, PGBOUNCER_MAX_USER_CONNECTIONS=$PGBOUNCER_MAX_USER_CONNECTIONS"
+    log_info "Database connection sizing (RHDH_DEPLOYMENT_REPLICAS=$RHDH_DEPLOYMENT_REPLICAS, RHDH_DB_REPLICAS=$RHDH_DB_REPLICAS, PGBOUNCER_REPLICAS=$PGBOUNCER_REPLICAS): RHDH_DB_MAX_CONNECTIONS=$RHDH_DB_MAX_CONNECTIONS, PGBOUNCER_MAX_CLIENT_CONNECTIONS=$PGBOUNCER_MAX_CLIENT_CONNECTIONS, PGBOUNCER_MAX_DB_CONNECTIONS=$PGBOUNCER_MAX_DB_CONNECTIONS, PGBOUNCER_DEFAULT_POOL_SIZE=$PGBOUNCER_DEFAULT_POOL_SIZE, PGBOUNCER_MAX_USER_CONNECTIONS=$PGBOUNCER_MAX_USER_CONNECTIONS"
 
     export POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DATABASE_NAME POSTGRES_HOST POSTGRES_PORT
     POSTGRES_USER=rhdh
