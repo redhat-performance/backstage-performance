@@ -10,9 +10,6 @@ Iteration,\
 DeployStarted,\
 DeployEnded,\
 DeployDuration,\
-PopulateUsersGroupsStarted,\
-PopulateUsersGroupsEnded,\
-PopulateUsersGroupsDuration,\
 PopulateStarted,\
 PopulateEnded,\
 PopulateDuration,\
@@ -100,9 +97,6 @@ find "${1:-.}" -name benchmark.json -print0 | while IFS= read -r -d '' filename;
         .measurements.timings.deploy.started,
         .measurements.timings.deploy.ended,
         .measurements.timings.deploy.duration,
-        .measurements.timings.populate_users_groups.started,
-        .measurements.timings.populate_users_groups.ended,
-        .measurements.timings.populate_users_groups.duration,
         .measurements.timings.populate.started,
         .measurements.timings.populate.ended,
         .measurements.timings.populate.duration,

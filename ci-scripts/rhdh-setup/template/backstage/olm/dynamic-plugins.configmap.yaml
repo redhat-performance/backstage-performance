@@ -11,3 +11,5 @@ data:
         disabled: false
       - package: ./dynamic-plugins/dist/backstage-community-plugin-analytics-provider-segment
         disabled: true
+      - package: ./dynamic-plugins/dist/backstage-plugin-catalog-backend-module-ldap-dynamic
+        disabled: false
