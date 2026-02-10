@@ -4,14 +4,6 @@ metadata:
   name: rhdh-postgresql-cluster
 spec:
   postgresVersion: 16
-  users:
-    - name: ${POSTGRES_USER}
-      databases:
-        - ${POSTGRES_DATABASE_NAME}
-      options: "NOSUPERUSER CREATEDB"
-    - name: sonataflow
-      databases: []
-      options: "NOSUPERUSER CREATEDB"
   patroni:
     dynamicConfiguration:
       postgresql:

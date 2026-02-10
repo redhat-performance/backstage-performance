@@ -6,6 +6,10 @@ extraVolumeMounts:
     mountPath: /opt/app-root/src/rbac
   - name: techdocs-data
     mountPath: /opt/app-root/src/techdocs-data
+  - name: extensions-catalog
+    mountPath: /extensions
+  - name: temp
+    mountPath: /tmp
 extraVolumes:
   - name: dynamic-plugins-root
     ephemeral:
@@ -31,6 +35,17 @@ extraVolumes:
       defaultMode: 420
       optional: true
       secretName: dynamic-plugins-npmrc
+  - name: dynamic-plugins-registry-auth
+    secret:
+      defaultMode: 416
+      optional: true
+      secretName: '{{ printf "%s-dynamic-plugins-registry-auth" .Release.Name }}'
+  - name: npmcacache
+    emptyDir: {}
+  - name: extensions-catalog
+    emptyDir: {}
+  - name: temp
+    emptyDir: {}
   - name: techdocs-data
     persistentVolumeClaim:
       claimName: rhdh-techdocs
@@ -45,6 +60,10 @@ initContainers:
         value: /opt/app-root/src/.npmrc.dynamic-plugins
       - name: MAX_ENTRY_SIZE
         value: "30000000"
+      - name: CATALOG_INDEX_IMAGE
+        value: '{{ .Values.global.catalogIndex.image.registry }}/{{ .Values.global.catalogIndex.image.repository }}:{{ .Values.global.catalogIndex.image.tag }}'
+      - name: CATALOG_ENTITIES_EXTRACT_DIR
+        value: '/extensions'
     imagePullPolicy: Always
     volumeMounts:
       - mountPath: /dynamic-plugins-root
@@ -57,4 +76,13 @@ initContainers:
         name: dynamic-plugins-npmrc
         readOnly: true
         subPath: .npmrc
+      - mountPath: /opt/app-root/src/.config/containers
+        name: dynamic-plugins-registry-auth
+        readOnly: true
+      - mountPath: /opt/app-root/src/.npm/_cacache
+        name: npmcacache
+      - mountPath: /extensions
+        name: extensions-catalog
+      - mountPath: /tmp
+        name: temp
     workingDir: /opt/app-root/src
