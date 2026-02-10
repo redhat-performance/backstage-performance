@@ -10,24 +10,27 @@ integrations:
       #token: ${GITHUB_TOKEN}
 catalog:
   processingInterval:
-    minutes: 5
+    minutes: 60
   providers:
-    keycloakOrg:
+    ldapOrg:
       default:
-        baseUrl: ${KEYCLOAK_BASE_URL}
-        realm: ${KEYCLOAK_REALM}
-        loginRealm: ${KEYCLOAK_LOGIN_REALM}
-        clientId: ${CLIENT_ID}
-        clientSecret: ${CLIENT_SECRET}
-        userQuerySize: 1000
-        groupQuerySize: 1000
+        target: ${LDAP_TARGET_URL}
+        bind:
+          dn: ${LDAP_BIND_DN}
+          secret: ${LDAP_BIND_SECRET}
+        users:
+          - dn: ${LDAP_USERS_DN}
+            options:
+              filter: ${LDAP_USER_FILTER}
+              scope: sub
+        groups:
+          - dn: ${LDAP_GROUPS_DN}
+            options:
+              filter: ${LDAP_GROUP_FILTER}
+              scope: sub
         schedule:
-          frequency: 
-            hours: 2
-          timeout: 
-            minutes: 10
-          initialDelay: 
-            minutes: 1
+          frequency: PT60M
+          timeout: PT5M
 techdocs:
   builder: local
   generator:

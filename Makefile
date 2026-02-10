@@ -137,6 +137,14 @@ deploy-rhdh-db:
 undeploy-rhdh-db:
 	cd ./ci-scripts/rhdh-setup; ./deploy.sh -C
 
+## Deploy Keycloak
+deploy-keycloak:
+	cd ./ci-scripts/rhdh-setup; ./deploy.sh -k
+
+## Deploy LDAP
+deploy-ldap:
+	cd ./ci-scripts/rhdh-setup; ./deploy.sh -l
+
 ## Deploy RHDH with OLM
 .PHONY: deploy-rhdh-olm
 deploy-rhdh-olm: $(TMP_DIR) deploy-rhdh-db

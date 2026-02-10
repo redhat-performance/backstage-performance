@@ -1,0 +1,49 @@
+# Stage 1: Build the database
+FROM --platform=linux/amd64 docker.io/osixia/openldap:1.5.0 as builder
+
+COPY slapd.conf /etc/ldap/slapd.conf
+COPY seed.ldif /tmp/seed.ldif
+
+# Prepare directories and run slapadd to pre-populate the database
+RUN set -x && \
+    mkdir -p /var/lib/ldap /etc/ldap/slapd.d && \
+    echo "=== Starting slapadd (this may take 10-15 minutes for large datasets) ===" && \
+    slapadd -v -f /etc/ldap/slapd.conf -l /tmp/seed.ldif && \
+    echo "=== slapadd completed ===" && \
+    chown -R openldap:openldap /var/lib/ldap && \
+    chgrp -R 0 /var/lib/ldap && \
+    chmod -R g=u /var/lib/ldap
+
+# Convert slapd.conf to slapd.d (cn=config) format for runtime
+RUN slaptest -f /etc/ldap/slapd.conf -F /etc/ldap/slapd.d && \
+    chown -R openldap:openldap /etc/ldap/slapd.d && \
+    chgrp -R 0 /etc/ldap/slapd.d && \
+    chmod -R g=u /etc/ldap/slapd.d
+
+# Stage 2: Final Image
+FROM --platform=linux/amd64 docker.io/osixia/openldap:1.5.0
+
+# Copy the pre-populated database files AND cn=config directory
+COPY --from=builder /var/lib/ldap /var/lib/ldap
+COPY --from=builder /etc/ldap/slapd.d /etc/ldap/slapd.d
+
+# Set proper permissions for OpenShift (group 0 = root group)
+# This allows any UID in group 0 to access the files
+# /container is needed for the osixia service manager runtime dirs
+# /var/run/slapd is needed for the slapd PID file
+RUN chown -R openldap:openldap /var/lib/ldap /etc/ldap/slapd.d && \
+    chgrp -R 0 /var/lib/ldap /etc/ldap/slapd.d /container /var/run/slapd && \
+    chmod -R g=u /var/lib/ldap /etc/ldap/slapd.d /container /var/run/slapd
+
+# Critical: Prevent osixia bootstrap from reinitializing
+ENV LDAP_ORGANISATION="RHDH Performance Test" \
+    LDAP_DOMAIN="test.com" \
+    LDAP_ADMIN_PASSWORD="admin" \
+    LDAP_CONFIG_PASSWORD="config" \
+    LDAP_READONLY_USER="false" \
+    LDAP_BACKEND="mdb" \
+    LDAP_TLS="false" \
+    LDAP_REPLICATION="false" \
+    KEEP_EXISTING_CONFIG="true"
+
+EXPOSE 389 636
