@@ -23,6 +23,12 @@ spec:
             - --upstream=http://backstage-developer-hub:80
             - --http-address=0.0.0.0:4180
             - --skip-provider-button
+            - --session-store-type=redis
+            - --redis-connection-url=redis://oauth2-proxy-redis:6379
+            - --skip-oidc-discovery
+            - --login-url=https://keycloak-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}/realms/backstage/protocol/openid-connect/auth
+            - --redeem-url=http://rhdh-keycloak-service.${RHDH_NAMESPACE}.svc.cluster.local:8080/realms/backstage/protocol/openid-connect/token
+            - --oidc-jwks-url=http://rhdh-keycloak-service.${RHDH_NAMESPACE}.svc.cluster.local:8080/realms/backstage/protocol/openid-connect/certs
           env:
             - name: OAUTH2_PROXY_CLIENT_ID
               valueFrom:

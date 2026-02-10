@@ -192,7 +192,6 @@ RHDH_DB_Populate_Storage_Used \
 RHDH_DB_Test_Storage_Used \
 DeployDuration \
 PopulateDuration \
-PopulateUsersGroupsDuration \
 PopulateCatalogDuration \
 Duration \
 Orchestrator_Workflow_Overview_Response_Time_Avg \

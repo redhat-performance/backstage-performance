@@ -463,7 +463,7 @@ upload_rbac_policy_to_github() {
   log_info "RBAC policy uploaded to GitHub. URL: $RBAC_POLICY_FILE_URL"
 
   # Clean up local copy
-  rm -vf "$csv_file"
+  # rm -vf "$csv_file"
 }
 
 create_rbac_policy() {
@@ -629,7 +629,7 @@ rhdh_token() {
   fi
 
   LOGIN_URL=$(curl -I -k -sSL --dump-header "$TMP_DIR/login_url_headers.log" --cookie "$COOKIE" --cookie-jar "$COOKIE" "$REFRESH_URL")
-  state=$(echo "$LOGIN_URL" | grep -oE 'state=[^&]+' | grep -oE '[^=]+$' | sed 's/%2F/\//g;s/%3A/:/g')
+  state=$(echo "$LOGIN_URL" | tr -d '\r' | grep -oE 'state=[^&]+' | grep -oE '[^=]+$' | sed 's/%2F/\//g;s/%3A/:/g')
 
   AUTH_URL=$(curl -k -sSL --dump-header "$TMP_DIR/auth_url_headers.log" --get --cookie "$COOKIE" --cookie-jar "$COOKIE" \
     --data-urlencode "client_id=${CLIENTID}" \
