@@ -52,7 +52,7 @@ if [ -n "${SCALE_COMBINED:-}" ]; then
     echo
 else
     USE_COMBINED_MODE=false
-    ecjo
+    echo
     echo "////// RHDH scalability test (NESTED LOOPS MODE) //////"
     echo "Number of scalability matrix iterations: $((${#workers[*]} * ${#active_users_spawn_rate[*]} * ${#bs_users_groups[*]} * ${#catalog_apis_components[*]} * ${#rhdh_replicas[*]} * ${#db_storages[*]} * ${#cpu_requests_limits[*]} * ${#memory_requests_limits[*]} * ${#rbac_policy_size[*]}))"
     echo
@@ -97,12 +97,7 @@ wait_for_indexing() {
 
 run_test_iteration() {
     if [ "$ALWAYS_CLEANUP" != "false" ]; then
-        echo "Always cleanup is enabled, cleaning up and setting up again"
-        make clean-local undeploy-rhdh
-        setup_artifacts="$SCALABILITY_ARTIFACTS/$index/setup/${counter}"
-        mkdir -p "$setup_artifacts"
-        ARTIFACT_DIR=$setup_artifacts ./ci-scripts/setup.sh 2>&1 | tee "$setup_artifacts/setup.log"
-        wait_for_indexing 2>&1 | tee "$setup_artifacts/after-setup-search.log"
+        perform_cleanup
     fi
     echo
     echo "/// Running the scalability test ///"
@@ -149,13 +144,11 @@ env_setup() {
 }
 
 perform_cleanup() {
-    if [ "$ALWAYS_CLEANUP" == "false" ]; then
-        make clean-local undeploy-rhdh
-        setup_artifacts="$SCALABILITY_ARTIFACTS/$index/setup/${counter}"
-        mkdir -p "$setup_artifacts"
-        ARTIFACT_DIR=$setup_artifacts ./ci-scripts/setup.sh 2>&1 | tee "$setup_artifacts/setup.log"
-        wait_for_indexing 2>&1 | tee "$setup_artifacts/after-setup-search.log"
-    fi
+    make clean-local undeploy-rhdh
+    setup_artifacts="$SCALABILITY_ARTIFACTS/$index/setup/${counter}"
+    mkdir -p "$setup_artifacts"
+    ARTIFACT_DIR=$setup_artifacts ./ci-scripts/setup.sh 2>&1 | tee "$setup_artifacts/setup.log"
+    wait_for_indexing 2>&1 | tee "$setup_artifacts/after-setup-search.log"
 }
 
 standard_iteration() {
@@ -168,7 +161,9 @@ standard_iteration() {
             bu="${tokens[0]}"                                        # backstage users
             [[ "${#tokens[@]}" == 1 ]] && bg="" || bg="${tokens[1]}" # backstage groups
             env_setup
-            perform_cleanup
+            if [ "$ALWAYS_CLEANUP" == "false" ]; then
+                perform_cleanup
+            fi
             for au_sr in "${active_users_spawn_rate[@]}"; do
                 IFS=":" read -ra tokens <<<"${au_sr}"
                 au=${tokens[0]}                                          # active users
@@ -217,7 +212,9 @@ for w in "${workers[@]}"; do
                                 a="${tokens[4]}"   # apis
                                 c="${tokens[5]}"   # components
                                 env_setup
-                                perform_cleanup
+                                if [ "$ALWAYS_CLEANUP" == "false" ]; then
+                                    perform_cleanup
+                                fi
                                 run_test_iteration
                                 ((counter += 1))
                             done
