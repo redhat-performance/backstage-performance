@@ -676,10 +676,6 @@ install_rhdh_with_helm() {
         yq -i '.global.dynamic.plugins |= . + load("template/backstage/helm/rbac-plugin-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"
     fi
 
-    if [[ ${ENABLE_ORCHESTRATOR} == "true" ]]; then
-        yq -i '.global.dynamic.plugins |= . + load("template/backstage/helm/orchestrator-plugin-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"
-    fi 
-
     # Pod affinity for multiple replicas to schedule on same node
     if [ "${RHDH_DEPLOYMENT_REPLICAS}" -gt 1 ]; then
         log_info "Applying pod affinity for multiple replicas to schedule on same node"
