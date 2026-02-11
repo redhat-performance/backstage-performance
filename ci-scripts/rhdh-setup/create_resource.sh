@@ -333,6 +333,139 @@ export RBAC_POLICY_USER_IN_MULTIPLE_GROUPS="user_in_multiple_groups"
 export RBAC_POLICY_NESTED_GROUPS="nested_groups"
 export RBAC_POLICY_COMPLEX="complex"
 
+# Generate RBAC policy CSV file and upload to GitHub
+# Sets RBAC_POLICY_FILE_URL to the raw GitHub URL
+create_and_upload_rbac_policy_csv() {
+  policy="${1:-$RBAC_POLICY_ALL_GROUPS_ADMIN}"
+  log_info "Generating RBAC policy CSV file for policy: $policy"
+
+  csv_file="$TMP_DIR/rbac-policy.csv"
+
+  # Start with base policy rules
+  cat >"$csv_file" <<'EOF'
+p, role:default/a, kubernetes.proxy, use, allow
+p, role:default/a, catalog-entity, read, allow
+p, role:default/a, catalog.entity.create, create, allow
+p, role:default/a, catalog.location.create, create, allow
+p, role:default/a, catalog.location.read, read, allow
+g, user:default/guru, role:default/a
+g, user:development/guest, role:default/a
+EOF
+
+  # Add complex policy rules if needed
+  if [[ $policy == "$RBAC_POLICY_COMPLEX" ]]; then
+    sed 's/^    //' "$WORKDIR/template/backstage/complex-rbac-config.csv" >>"$csv_file"
+  fi
+
+  # Add orchestrator rules if needed
+  if [[ "$INSTALL_METHOD" == "helm" ]] && ${ENABLE_ORCHESTRATOR:-false}; then
+    sed 's/^    //' "$WORKDIR/template/backstage/helm/orchestrator-rbac-patch.csv" >>"$csv_file"
+    if [[ $policy == "$RBAC_POLICY_COMPLEX" ]]; then
+      sed 's/^    //' "$WORKDIR/template/backstage/helm/complex-orchestrator-rbac-patch.csv" >>"$csv_file"
+    fi
+  fi
+
+  # Add group/user-specific policy rules
+  case $policy in
+  "$RBAC_POLICY_ALL_GROUPS_ADMIN")
+    for i in $(seq 1 "$GROUP_COUNT"); do
+      echo "g, group:default/g${i}, role:default/a" >>"$csv_file"
+    done
+    ;;
+  "$RBAC_POLICY_USER_IN_MULTIPLE_GROUPS")
+    group_condition="group in ["
+    for g in $(seq 1 "${RBAC_POLICY_SIZE:-$GROUP_COUNT}"); do
+      if [ "$g" -gt 1 ]; then
+        group_condition="$group_condition,"
+      fi
+      group_condition="$group_condition'g$g'"
+    done
+    group_condition="$group_condition]"
+    for u in $(seq 1 "$BACKSTAGE_USER_COUNT"); do
+      if [ "$u" -eq 1 ]; then
+        echo "g, user:default/t${u}, role:default/a, $group_condition" >>"$csv_file"
+      else
+        echo "g, user:default/t${u}, role:default/a" >>"$csv_file"
+      fi
+    done
+    ;;
+  "$RBAC_POLICY_STATIC")
+    for i in $(seq 1 "${RBAC_POLICY_SIZE:-$GROUP_COUNT}"); do
+      echo "g, group:default/g${i}, role:default/a" >>"$csv_file"
+    done
+    ;;
+  "$RBAC_POLICY_NESTED_GROUPS")
+    N="${RBAC_POLICY_SIZE:-$GROUP_COUNT}"
+    [ "$N" -gt "$GROUP_COUNT" ] && N="$GROUP_COUNT"
+
+    for i in $(seq 1 "$N"); do
+      if [ "$i" -eq 1 ] || [ "$i" -gt "$RBAC_POLICY_SIZE" ]; then
+        echo "g, group:default/g1, role:default/a" >>"$csv_file"
+      else
+        echo "g, group:default/g$((i - 1))_1, role:default/a" >>"$csv_file"
+      fi
+    done
+    ;;
+  "$RBAC_POLICY_COMPLEX")
+    ROLES=("platform_admin" "engineering_lead" "senior_engineer" "backend_engineer" "frontend_engineer" "product_manager" "QA_engineer" "external_contractor" "compliance_security" "on_call_team")
+    ROLES_LEN=${#ROLES[@]}
+    for i in $(seq 1 "$GROUP_COUNT"); do
+      echo "g, group:default/g${i}, role:default/${ROLES[$(((i - 1) % ROLES_LEN))]}" >>"$csv_file"
+    done
+    ;;
+  *)
+    log_error "Invalid RBAC policy: ${policy}"
+    return 1
+    ;;
+  esac
+
+  log_info "RBAC policy CSV file generated: $csv_file"
+
+  # Upload to GitHub
+  upload_rbac_policy_to_github "$csv_file"
+}
+
+upload_rbac_policy_to_github() {
+  local csv_file="$1"
+  log_info "Uploading RBAC policy CSV to GitHub"
+
+  git_str="${GITHUB_USER}:${GITHUB_TOKEN}@github.com"
+  base_name=$(basename "$GITHUB_REPO")
+  git_dir=$TMP_DIR/${base_name}-rbac
+  git_repo=${GITHUB_REPO//github.com/${git_str}}
+
+  [[ -d "${git_dir}" ]] && rm -rf "${git_dir}"
+  git clone "$git_repo" "$git_dir"
+  pushd "$git_dir" || return 1
+
+  git config user.name "rhdh-performance-bot"
+  git config user.email rhdh-performance-bot@redhat.com
+
+  # Use a dedicated branch for RBAC policy
+  rbac_branch="rbac-policy-$(date +%Y%m%d%H%M%S)"
+  git checkout -b "$rbac_branch"
+
+  cp -vf "$csv_file" "rbac-policy.csv"
+  git add "rbac-policy.csv"
+  git commit -a -m "Upload RBAC policy CSV"
+  git push -f --set-upstream origin "$rbac_branch"
+
+  popd || return 1
+
+  sleep 5
+
+  # Set the raw GitHub URL for the RBAC policy file
+  # Convert https://github.com/user/repo to https://raw.githubusercontent.com/user/repo
+  raw_base_url="${GITHUB_REPO/github.com/raw.githubusercontent.com}"
+  raw_base_url="${raw_base_url%.git}"
+  export RBAC_POLICY_FILE_URL="${raw_base_url}/${rbac_branch}/rbac-policy.csv"
+
+  log_info "RBAC policy uploaded to GitHub. URL: $RBAC_POLICY_FILE_URL"
+
+  # Clean up local copy
+  rm -vf "$csv_file"
+}
+
 create_rbac_policy() {
   policy="${1:-$RBAC_POLICY_ALL_GROUPS_ADMIN}"
   log_info "Generating RBAC policy: $policy"
@@ -578,5 +711,5 @@ get_token() {
   rm -rf "$token_lockfile"
 }
 
-export -f keycloak_url backstage_url get_token keycloak_token rhdh_token create_rbac_policy create_group create_user log log_info log_warn log_error log_token log_token_info log_token_err get_group_id_by_name assign_parent_group get_group_path_by_name
+export -f keycloak_url backstage_url get_token keycloak_token rhdh_token create_rbac_policy create_and_upload_rbac_policy_csv upload_rbac_policy_to_github create_group create_user log log_info log_warn log_error log_token log_token_info log_token_err get_group_id_by_name assign_parent_group get_group_path_by_name
 export kc_lockfile bs_lockfile token_lockfile
