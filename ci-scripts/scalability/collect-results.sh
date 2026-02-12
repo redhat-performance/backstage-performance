@@ -48,22 +48,71 @@ csv_delim_quoted="\"$csv_delim\""
 echo "Collecting scalability data"
 counter=1
 rhdh_version=""
+header="CatalogSize${csv_delim}Apis${csv_delim}Components${csv_delim}MaxActiveUsers${csv_delim}AverageRPS${csv_delim}MaxRPS${csv_delim}AverageRT${csv_delim}MaxRT${csv_delim}Failures${csv_delim}FailRate${csv_delim}DBStorageUsed${csv_delim}DBStorageAvailable${csv_delim}DBStorageCapacity"
+
+if [ -n "${SCALE_COMBINED:-}" ]; then
+    read -ra combined_entries <<<"${SCALE_COMBINED}"
+    COMBINED_MODE=true
+    echo
+    echo "Collecting Metrics for combined scale run"
+    echo
+else
+    COMBINED_MODE=false
+    echo "Collecting Metrics for normal scale run"
+    echo
+fi
+
+collect_run_metric() {
+    echo "[$iteration] Looking for benchmark.json..."
+    benchmark_json="$(find "${ARTIFACT_DIR}" -name benchmark.json | grep "$iteration" || true)"
+    if [ -n "$benchmark_json" ]; then
+        benchmark_json="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$benchmark_json")"
+        echo "[$iteration] Gathering data from $benchmark_json"
+        jq_cmd="\"$((a + c))\" \
+        + $csv_delim_quoted + \"${a}\" \
+        + $csv_delim_quoted + \"${c}\" \
+        + $csv_delim_quoted + (.results.locust_users.max | tostring) \
+        + $csv_delim_quoted + (.results.Aggregated.locust_requests_current_rps.mean | tostring) \
+        + $csv_delim_quoted + (.results.Aggregated.locust_requests_current_rps.max | tostring) \
+        + $csv_delim_quoted + (.results.Aggregated.locust_requests_avg_response_time.mean | tostring) \
+        + $csv_delim_quoted + (.results.Aggregated.locust_requests_avg_response_time.max | tostring) \
+        + $csv_delim_quoted + (.results.Aggregated.locust_requests_num_failures.max | tostring) \
+        + $csv_delim_quoted + (.results.locust_requests_fail_ratio.mean | tostring) \
+        + $csv_delim_quoted + (.measurements.cluster.pv_stats.test.\"rhdh-postgresql\".used_bytes.max | tostring) \
+        + $csv_delim_quoted + (.measurements.cluster.pv_stats.test.\"rhdh-postgresql\".available_bytes.min | tostring) \
+        + $csv_delim_quoted + (.measurements.cluster.pv_stats.test.\"rhdh-postgresql\".capacity_bytes.max | tostring)"
+        sed -Ee 's/: ([0-9]+\.[0-9]*[X]+[0-9e\+-]*|[0-9]*X+[0-9]*\.[0-9e\+-]*|[0-9]*X+[0-9]*\.[0-9]*X+[0-9e\+-]+)/: "\1"/g' "$benchmark_json" | jq -rc "$jq_cmd" >>"$output"
+        if [ -z "$rhdh_version" ]; then
+            rhdh_version=$(jq -r '.metadata.image."konflux.additional-tags" | split(", ") | map(select(test("[0-9]\\.[0-9]-[0-9]+"))) | .[0]' "$benchmark_json" || true)
+        fi
+    else
+        echo "[$iteration] Unable to find benchmark.json"
+        for _ in $(seq 1 "$(echo "$header" | tr -cd "$csv_delim" | wc -c)"); do
+            echo -n ";" >>"$output"
+        done
+        echo >>"$output"
+    fi
+}
 for w in "${workers[@]}"; do
     for r_c in "${rhdh_replicas[@]}"; do
         IFS=":" read -ra tokens <<<"${r_c}"
         r="${tokens[0]}"
         [[ "${#tokens[@]}" == 1 ]] && dbr="" || dbr="${tokens[1]}"
-        for bu_bg in "${bs_users_groups[@]}"; do
-            IFS=":" read -ra tokens <<<"${bu_bg}"
-            bu="${tokens[0]}"                                        # backstage users
-            [[ "${#tokens[@]}" == 1 ]] && bg="" || bg="${tokens[1]}" # backstage groups
+        for s in "${db_storages[@]}"; do
             for rbs in "${rbac_policy_size[@]}"; do
-                for s in "${db_storages[@]}"; do
-                    for au_sr in "${active_users_spawn_rate[@]}"; do
-                        IFS=":" read -ra tokens <<<"${au_sr}"
-                        active_users=${tokens[0]}
+                if [ "$COMBINED_MODE" == "true" ]; then
+                    for combined_entry in "${combined_entries[@]}"; do
+                        IFS=":" read -ra tokens <<<"${combined_entry}"
+                        if [ "${#tokens[@]}" -lt 6 ]; then
+                            echo "ERROR: Invalid entry '$combined_entry'. Expected format: active_users:spawn_rate:backstage_users:groups:apis:components"
+                            exit 1
+                        fi
+                        active_users="${tokens[0]}"  # active users
+                        bu="${tokens[2]}"  # backstage users
+                        bg="${tokens[3]}"  # groups
+                        a="${tokens[4]}"   # apis
+                        c="${tokens[5]}"   # components
                         output="$ARTIFACT_DIR/scalability_c-${r}r-${dbr}dbr-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${active_users}u-${counter}.csv"
-                        header="CatalogSize${csv_delim}Apis${csv_delim}Components${csv_delim}MaxActiveUsers${csv_delim}AverageRPS${csv_delim}MaxRPS${csv_delim}AverageRT${csv_delim}MaxRT${csv_delim}Failures${csv_delim}FailRate${csv_delim}DBStorageUsed${csv_delim}DBStorageAvailable${csv_delim}DBStorageCapacity"
                         for cr_cl in "${cpu_requests_limits[@]}"; do
                             IFS=":" read -ra tokens <<<"${cr_cl}"
                             cr="${tokens[0]}"                                        # cpu requests
@@ -73,47 +122,45 @@ for w in "${workers[@]}"; do
                                 mr="${tokens[0]}"                                        # memory requests
                                 [[ "${#tokens[@]}" == 1 ]] && ml="" || ml="${tokens[1]}" # memory limits
                                 [[ -f "${output}" ]] || echo "$header" >"$output"
-                                for a_c in "${catalog_apis_components[@]}"; do
-                                    IFS=":" read -ra tokens <<<"${a_c}"
-                                    a="${tokens[0]}"                                       # apis
-                                    [[ "${#tokens[@]}" == 1 ]] && c="" || c="${tokens[1]}" # components
-                                    index="${r}r-${dbr}dbr-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c"
-                                    iteration="${index}/test/${counter}/${active_users}u"
-                                    (( counter += 1 ))
-                                    echo "[$iteration] Looking for benchmark.json..."
-                                    benchmark_json="$(find "${ARTIFACT_DIR}" -name benchmark.json | grep "$iteration" || true)"
-                                    if [ -n "$benchmark_json" ]; then
-                                        benchmark_json="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$benchmark_json")"
-                                        echo "[$iteration] Gathering data from $benchmark_json"
-                                        jq_cmd="\"$((a + c))\" \
-                                        + $csv_delim_quoted + \"${a}\" \
-                                        + $csv_delim_quoted + \"${c}\" \
-                                        + $csv_delim_quoted + (.results.locust_users.max | tostring) \
-                                        + $csv_delim_quoted + (.results.Aggregated.locust_requests_current_rps.mean | tostring) \
-                                        + $csv_delim_quoted + (.results.Aggregated.locust_requests_current_rps.max | tostring) \
-                                        + $csv_delim_quoted + (.results.Aggregated.locust_requests_avg_response_time.mean | tostring) \
-                                        + $csv_delim_quoted + (.results.Aggregated.locust_requests_avg_response_time.max | tostring) \
-                                        + $csv_delim_quoted + (.results.Aggregated.locust_requests_num_failures.max | tostring) \
-                                        + $csv_delim_quoted + (.results.locust_requests_fail_ratio.mean | tostring) \
-                                        + $csv_delim_quoted + (.measurements.cluster.pv_stats.test.\"rhdh-postgresql\".used_bytes.max | tostring) \
-                                        + $csv_delim_quoted + (.measurements.cluster.pv_stats.test.\"rhdh-postgresql\".available_bytes.min | tostring) \
-                                        + $csv_delim_quoted + (.measurements.cluster.pv_stats.test.\"rhdh-postgresql\".capacity_bytes.max | tostring)"
-                                        sed -Ee 's/: ([0-9]+\.[0-9]*[X]+[0-9e\+-]*|[0-9]*X+[0-9]*\.[0-9e\+-]*|[0-9]*X+[0-9]*\.[0-9]*X+[0-9e\+-]+)/: "\1"/g' "$benchmark_json" | jq -rc "$jq_cmd" >>"$output"
-                                        if [ -z "$rhdh_version" ]; then
-                                            rhdh_version=$(jq -r '.metadata.image."konflux.additional-tags" | split(", ") | map(select(test("[0-9]\\.[0-9]-[0-9]+"))) | .[0]' "$benchmark_json" || true)
-                                        fi
-                                    else
-                                        echo "[$iteration] Unable to find benchmark.json"
-                                        for _ in $(seq 1 "$(echo "$header" | tr -cd "$csv_delim" | wc -c)"); do
-                                            echo -n ";" >>"$output"
-                                        done
-                                        echo >>"$output"
-                                    fi
+                                index="${r}r-${dbr}dbr-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c"
+                                iteration="${index}/test/${counter}/${active_users}u"
+                                (( counter += 1 ))
+                                collect_run_metric
+                            done
+                        done
+                    done
+                else
+                    for bu_bg in "${bs_users_groups[@]}"; do
+                        IFS=":" read -ra tokens <<<"${bu_bg}"
+                        bu="${tokens[0]}"                                        # backstage users
+                        [[ "${#tokens[@]}" == 1 ]] && bg="" || bg="${tokens[1]}" # backstage groups
+                        for au_sr in "${active_users_spawn_rate[@]}"; do
+                            IFS=":" read -ra tokens <<<"${au_sr}"
+                            active_users=${tokens[0]}
+                            output="$ARTIFACT_DIR/scalability_c-${r}r-${dbr}dbr-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${active_users}u-${counter}.csv"
+                            for cr_cl in "${cpu_requests_limits[@]}"; do
+                                IFS=":" read -ra tokens <<<"${cr_cl}"
+                                cr="${tokens[0]}"                                        # cpu requests
+                                [[ "${#tokens[@]}" == 1 ]] && cl="" || cl="${tokens[1]}" # cpu limits
+                                for mr_ml in "${memory_requests_limits[@]}"; do
+                                    IFS=":" read -ra tokens <<<"${mr_ml}"
+                                    mr="${tokens[0]}"                                        # memory requests
+                                    [[ "${#tokens[@]}" == 1 ]] && ml="" || ml="${tokens[1]}" # memory limits
+                                    [[ -f "${output}" ]] || echo "$header" >"$output"
+                                    for a_c in "${catalog_apis_components[@]}"; do
+                                        IFS=":" read -ra tokens <<<"${a_c}"
+                                        a="${tokens[0]}"                                       # apis
+                                        [[ "${#tokens[@]}" == 1 ]] && c="" || c="${tokens[1]}" # components
+                                        index="${r}r-${dbr}dbr-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c"
+                                        iteration="${index}/test/${counter}/${active_users}u"
+                                        (( counter += 1 ))
+                                        collect_run_metric
+                                    done
                                 done
                             done
                         done
                     done
-                done
+                fi
             done
         done
     done
