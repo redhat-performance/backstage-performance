@@ -236,7 +236,8 @@ endif
 	@echo "Getting locust master log:"
 	kubectl logs --namespace $(LOCUST_NAMESPACE) -f -l performance-test-pod-name=$(SCENARIO)-test-master | tee load-test.log
 	date -u -Ins>$(TMP_DIR)/benchmark-after
-	oc -n $(RHDH_NAMESPACE) exec "$$(oc -n $(RHDH_NAMESPACE) get statefulset -o name | grep rhdh-postgresql-cluster-primary | sed 's/statefulset.apps\///')-0" -- sh -c 'cat /pgdata/pg16/log/postgresql*.log' > postgresql.log
+	mkdir -p $(TMP_DIR)/rhdh-db-logs
+	for ss in $$(oc -n $(RHDH_NAMESPACE) get statefulset -o name | grep rhdh-postgresql-cluster-primary | sed 's/statefulset.apps\///'); do oc -n $(RHDH_NAMESPACE) exec $${ss}-0 -- sh -c 'cat /pgdata/pg16/log/postgresql*.log' > $(TMP_DIR)/rhdh-db-logs/postgresql-$${ss}.log; done
 	@echo "All done!!!"
 
 ## Run the scalability test

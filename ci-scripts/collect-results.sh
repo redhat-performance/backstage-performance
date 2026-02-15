@@ -122,7 +122,7 @@ try_gather_file "${TMP_DIR}/rbac-config.yaml"
 try_gather_file "${TMP_DIR}/locust-k8s-operator.values.yaml"
 try_gather_file "${TMP_DIR}/postgres-cluster.yaml"
 try_gather_file load-test.log
-try_gather_file postgresql.log
+try_gather_dir "${TMP_DIR}/rhdh-db-logs"
 try_gather_dir "${TMP_DIR}/workflows"
 try_gather_file test.env
 

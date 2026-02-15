@@ -27,9 +27,8 @@ extraVolumes:
       name: '{{ printf "%s-dynamic-plugins" .Release.Name }}'
       optional: true
   - name: rbac-policy
-    configMap:
-      defaultMode: 420
-      name: rbac-policy
+    persistentVolumeClaim:
+      claimName: rbac-policy-pvc
   - name: dynamic-plugins-npmrc
     secret:
       defaultMode: 420

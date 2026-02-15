@@ -74,13 +74,17 @@ export ENABLE_ORCHESTRATOR="${ENABLE_ORCHESTRATOR:-false}"
 export FORCE_ORCHESTRATOR_INFRA_UNINSTALL="${FORCE_ORCHESTRATOR_INFRA_UNINSTALL:-false}"
 export ENABLE_PROFILING="${ENABLE_PROFILING:-false}"
 export RBAC_POLICY="${RBAC_POLICY:-all_groups_admin}"
+export RBAC_POLICY_FILE_URL="${RBAC_POLICY_FILE_URL:-}"
+export RBAC_POLICY_PVC_STORAGE="${RBAC_POLICY_PVC_STORAGE:-100Mi}"
+export RBAC_POLICY_UPLOAD_TO_GITHUB="${RBAC_POLICY_UPLOAD_TO_GITHUB:-true}"
 export RHDH_LOG_LEVEL="${RHDH_LOG_LEVEL:-warn}"
 export KEYCLOAK_LOG_LEVEL="${KEYCLOAK_LOG_LEVEL:-WARN}"
 
 export PSQL_LOG="${PSQL_LOG:-true}"
 export RHDH_METRIC="${RHDH_METRIC:-true}"
 export PSQL_EXPORT="${PSQL_EXPORT:-false}"
-export PGBOUNCER_REPLICAS="${PGBOUNCER_REPLICAS:-2}"
+export ENABLE_PGBOUNCER="${ENABLE_PGBOUNCER:-false}"
+export PGBOUNCER_REPLICAS="${PGBOUNCER_REPLICAS:-0}"
 export LOG_MIN_DURATION_STATEMENT="${LOG_MIN_DURATION_STATEMENT:-65}"
 export LOG_MIN_DURATION_SAMPLE="${LOG_MIN_DURATION_SAMPLE:-50}"
 export LOG_STATEMENT_SAMPLE_RATE="${LOG_STATEMENT_SAMPLE_RATE:-0.7}"
@@ -224,9 +228,14 @@ delete_orchestrator_infra() {
 }
 
 install_workflows() {
-    export POSTGRES_HOST POSTGRES_PORT
-    POSTGRES_HOST="$($clin get secret rhdh-db-sonataflow-credentials -o json | jq -r '.data.POSTGRES_HOST' | base64 -d)"
-    POSTGRES_PORT="$($clin get secret rhdh-db-sonataflow-credentials -o json | jq -r '.data.POSTGRES_PORT' | base64 -d)"
+    export POSTGRES_HOST POSTGRES_PORT SONATAFLOW_DB_SECRET
+    if [[ "${ENABLE_PGBOUNCER}" == "true" && "${PGBOUNCER_REPLICAS}" -gt 0 ]]; then
+        SONATAFLOW_DB_SECRET="rhdh-db-sonataflow-credentials"
+    else
+        SONATAFLOW_DB_SECRET="rhdh-db-credentials"
+    fi
+    POSTGRES_HOST="$($clin get secret "$SONATAFLOW_DB_SECRET" -o json | jq -r '.data.POSTGRES_HOST' | base64 -d)"
+    POSTGRES_PORT="$($clin get secret "$SONATAFLOW_DB_SECRET" -o json | jq -r '.data.POSTGRES_PORT' | base64 -d)"
     log_info "Installing Orchestrator workflows"
     mkdir -p "$TMP_DIR/workflows"
     while IFS= read -r -d '' i; do
@@ -390,7 +399,9 @@ get_catalog_entity_count() {
 wait_for_rhdh_db_to_start() {
     wait_to_exist "$RHDH_NAMESPACE" "statefulset" "rhdh-postgresql-cluster-primary" 300
     $clin wait --for=condition=Ready pod -l postgres-operator.crunchydata.com/instance-set=primary --timeout=300s
-    wait_to_start deployment "rhdh-postgresql-cluster-pgbouncer" 300 300
+    if [[ "${ENABLE_PGBOUNCER}" == "true" && "${PGBOUNCER_REPLICAS}" -gt 0 ]]; then
+        wait_to_start deployment "rhdh-postgresql-cluster-pgbouncer" 300 300
+    fi
 }
 
 setup_rhdh_db() {
@@ -401,50 +412,72 @@ setup_rhdh_db() {
     wait_to_start deployment pgo 300 300
     export RHDH_DB_MAX_CONNECTIONS PGBOUNCER_MAX_CLIENT_CONNECTIONS PGBOUNCER_DEFAULT_POOL_SIZE PGBOUNCER_MAX_DB_CONNECTIONS PGBOUNCER_MAX_USER_CONNECTIONS
 
-    # Connection sizing parameters
-    CLIENT_CONNECTIONS_PER_RHDH_INSTANCE=50     # Expected DB connections per RHDH replica
-    DB_CONNECTIONS_HEADROOM_PER_RHDH_INSTANCE=5 # Extra headroom per RHDH replica
-    DB_CONNECTIONS_ADMIN_HEADROOM=20            # Reserved for admin/monitoring connections
-    RHDH_DATABASE_COUNT=30                      # Approximate number of RHDH plugin databases (~20 current + ~10 future)
+    # PgBouncer is optional: disabled when ENABLE_PGBOUNCER is false or PGBOUNCER_REPLICAS is 0
+    if [[ "${ENABLE_PGBOUNCER}" != "true" || "${PGBOUNCER_REPLICAS}" -eq 0 ]]; then
+        log_info "PgBouncer disabled (ENABLE_PGBOUNCER=${ENABLE_PGBOUNCER}, PGBOUNCER_REPLICAS=${PGBOUNCER_REPLICAS}); using primary instance directly"
+        PGBOUNCER_REPLICAS=0
+        PGBOUNCER_MAX_CLIENT_CONNECTIONS=1
+        PGBOUNCER_DEFAULT_POOL_SIZE=1
+        PGBOUNCER_MAX_DB_CONNECTIONS=1
+        PGBOUNCER_MAX_USER_CONNECTIONS=1
+        CLIENT_CONNECTIONS_PER_RHDH_INSTANCE=50
+        DB_CONNECTIONS_HEADROOM_PER_RHDH_INSTANCE=5
+        MIN_RHDH_DB_MAX_CONNECTIONS=150
+        _rhdh_db_max_conn=$(bc <<<"$RHDH_DEPLOYMENT_REPLICAS * ($CLIENT_CONNECTIONS_PER_RHDH_INSTANCE + $DB_CONNECTIONS_HEADROOM_PER_RHDH_INSTANCE)")
+        RHDH_DB_MAX_CONNECTIONS=$(bc <<<"if ($_rhdh_db_max_conn < $MIN_RHDH_DB_MAX_CONNECTIONS) $MIN_RHDH_DB_MAX_CONNECTIONS else $_rhdh_db_max_conn")
+    else
+        # Connection sizing parameters (PgBouncer enabled)
+        CLIENT_CONNECTIONS_PER_RHDH_INSTANCE=50     # Expected DB connections per RHDH replica
+        DB_CONNECTIONS_HEADROOM_PER_RHDH_INSTANCE=5 # Extra headroom per RHDH replica
+        DB_CONNECTIONS_ADMIN_HEADROOM=20            # Reserved for admin/monitoring connections
+        RHDH_DATABASE_COUNT=30                      # Approximate number of RHDH plugin databases (~20 current + ~10 future)
 
-    # Minimum values to handle Backstage startup burst (concurrent plugin initialization)
-    # During startup, ~30 plugins create schemas concurrently regardless of replica count
-    MIN_RHDH_DB_MAX_CONNECTIONS=150
-    MIN_PGBOUNCER_MAX_CLIENT_CONNECTIONS=120
-    MIN_PGBOUNCER_MAX_DB_CONNECTIONS=60
-    # Pool size minimum equals database count to ensure each plugin can connect during startup burst
-    MIN_PGBOUNCER_DEFAULT_POOL_SIZE=$RHDH_DATABASE_COUNT
+        # Minimum values to handle Backstage startup burst (concurrent plugin initialization)
+        # During startup, ~30 plugins create schemas concurrently regardless of replica count
+        MIN_RHDH_DB_MAX_CONNECTIONS=150
+        MIN_PGBOUNCER_MAX_CLIENT_CONNECTIONS=120
+        MIN_PGBOUNCER_MAX_DB_CONNECTIONS=60
+        # Pool size minimum equals database count to ensure each plugin can connect during startup burst
+        MIN_PGBOUNCER_DEFAULT_POOL_SIZE=$RHDH_DATABASE_COUNT
 
-    # Calculate based on replicas
-    _rhdh_db_max_conn=$(bc <<<"$RHDH_DEPLOYMENT_REPLICAS * ($CLIENT_CONNECTIONS_PER_RHDH_INSTANCE + $DB_CONNECTIONS_HEADROOM_PER_RHDH_INSTANCE)")
-    RHDH_DB_MAX_CONNECTIONS=$(bc <<<"if ($_rhdh_db_max_conn < $MIN_RHDH_DB_MAX_CONNECTIONS) $MIN_RHDH_DB_MAX_CONNECTIONS else $_rhdh_db_max_conn")
+        # Calculate based on replicas
+        _rhdh_db_max_conn=$(bc <<<"$RHDH_DEPLOYMENT_REPLICAS * ($CLIENT_CONNECTIONS_PER_RHDH_INSTANCE + $DB_CONNECTIONS_HEADROOM_PER_RHDH_INSTANCE)")
+        RHDH_DB_MAX_CONNECTIONS=$(bc <<<"if ($_rhdh_db_max_conn < $MIN_RHDH_DB_MAX_CONNECTIONS) $MIN_RHDH_DB_MAX_CONNECTIONS else $_rhdh_db_max_conn")
 
-    # Each PgBouncer instance is sized to handle ALL client connections (for HA/failover)
-    _pgb_max_client=$(bc <<<"scale=0; $RHDH_DEPLOYMENT_REPLICAS * $CLIENT_CONNECTIONS_PER_RHDH_INSTANCE" | sed 's,\..*,,')
-    PGBOUNCER_MAX_CLIENT_CONNECTIONS=$(bc <<<"if ($_pgb_max_client < $MIN_PGBOUNCER_MAX_CLIENT_CONNECTIONS) $MIN_PGBOUNCER_MAX_CLIENT_CONNECTIONS else $_pgb_max_client")
+        # Each PgBouncer instance is sized to handle ALL client connections (for HA/failover)
+        _pgb_max_client=$(bc <<<"scale=0; $RHDH_DEPLOYMENT_REPLICAS * $CLIENT_CONNECTIONS_PER_RHDH_INSTANCE" | sed 's,\..*,,')
+        PGBOUNCER_MAX_CLIENT_CONNECTIONS=$(bc <<<"if ($_pgb_max_client < $MIN_PGBOUNCER_MAX_CLIENT_CONNECTIONS) $MIN_PGBOUNCER_MAX_CLIENT_CONNECTIONS else $_pgb_max_client")
 
-    # Backend connections per instance - multiplied by RHDH_DB_REPLICAS (effective capacity) and divided by PGBOUNCER_REPLICAS
-    # to ensure total doesn't exceed combined PostgreSQL max_connections across all DB replicas
-    _pgb_max_db=$(bc <<<"scale=0; ($RHDH_DB_MAX_CONNECTIONS - $DB_CONNECTIONS_ADMIN_HEADROOM) * $RHDH_DB_REPLICAS/ $PGBOUNCER_REPLICAS" | sed 's,\..*,,')
-    PGBOUNCER_MAX_DB_CONNECTIONS=$(bc <<<"if ($_pgb_max_db < $MIN_PGBOUNCER_MAX_DB_CONNECTIONS) $MIN_PGBOUNCER_MAX_DB_CONNECTIONS else $_pgb_max_db")
+        # Backend connections per PgBouncer instance - divided by PGBOUNCER_REPLICAS
+        # to ensure total across all PgBouncer instances doesn't exceed the primary's max_connections.
+        # Note: PgBouncer connects only to the primary instance; DB replicas are standby for HA failover.
+        _pgb_max_db=$(bc <<<"scale=0; ($RHDH_DB_MAX_CONNECTIONS - $DB_CONNECTIONS_ADMIN_HEADROOM) / $PGBOUNCER_REPLICAS" | sed 's,\..*,,')
+        PGBOUNCER_MAX_DB_CONNECTIONS=$(bc <<<"if ($_pgb_max_db < $MIN_PGBOUNCER_MAX_DB_CONNECTIONS) $MIN_PGBOUNCER_MAX_DB_CONNECTIONS else $_pgb_max_db")
 
-    # Pool size per database - ensures all databases can use their share without exceeding max_db_connections
-    _pgb_pool_size=$(bc <<<"scale=0; $PGBOUNCER_MAX_DB_CONNECTIONS / $RHDH_DATABASE_COUNT" | sed 's,\..*,,')
-    PGBOUNCER_DEFAULT_POOL_SIZE=$(bc <<<"if ($_pgb_pool_size < $MIN_PGBOUNCER_DEFAULT_POOL_SIZE) $MIN_PGBOUNCER_DEFAULT_POOL_SIZE else $_pgb_pool_size")
+        # Pool size per database - ensures all databases can use their share without exceeding max_db_connections
+        _pgb_pool_size=$(bc <<<"scale=0; $PGBOUNCER_MAX_DB_CONNECTIONS / $RHDH_DATABASE_COUNT" | sed 's,\..*,,')
+        PGBOUNCER_DEFAULT_POOL_SIZE=$(bc <<<"if ($_pgb_pool_size < $MIN_PGBOUNCER_DEFAULT_POOL_SIZE) $MIN_PGBOUNCER_DEFAULT_POOL_SIZE else $_pgb_pool_size")
 
-    PGBOUNCER_MAX_USER_CONNECTIONS=$(bc <<<"scale=0; $PGBOUNCER_MAX_DB_CONNECTIONS * 1.2" | sed 's,\..*,,')
+        PGBOUNCER_MAX_USER_CONNECTIONS=$(bc <<<"scale=0; $PGBOUNCER_MAX_DB_CONNECTIONS * 1.2" | sed 's,\..*,,')
 
-    # Note: With pool_mode=transaction, connections are quickly returned to the pool after each transaction.
-    # This allows efficient sharing even when pool_size * databases > max_db_connections,
-    # as long as concurrent transactions don't exceed the limit simultaneously.
-    # The reserve_pool provides additional burst capacity for ~30 plugins (reserve_pool_size=10, reserve_pool_timeout=5s).
+        # Note: With pool_mode=transaction, connections are quickly returned to the pool after each transaction.
+        # This allows efficient sharing even when pool_size * databases > max_db_connections,
+        # as long as concurrent transactions don't exceed the limit simultaneously.
+        # The reserve_pool provides additional burst capacity for ~30 plugins (reserve_pool_size=10, reserve_pool_timeout=5s).
 
-    log_info "Database connection sizing (RHDH_DEPLOYMENT_REPLICAS=$RHDH_DEPLOYMENT_REPLICAS, RHDH_DB_REPLICAS=$RHDH_DB_REPLICAS, PGBOUNCER_REPLICAS=$PGBOUNCER_REPLICAS): RHDH_DB_MAX_CONNECTIONS=$RHDH_DB_MAX_CONNECTIONS, PGBOUNCER_MAX_CLIENT_CONNECTIONS=$PGBOUNCER_MAX_CLIENT_CONNECTIONS, PGBOUNCER_MAX_DB_CONNECTIONS=$PGBOUNCER_MAX_DB_CONNECTIONS, PGBOUNCER_DEFAULT_POOL_SIZE=$PGBOUNCER_DEFAULT_POOL_SIZE, PGBOUNCER_MAX_USER_CONNECTIONS=$PGBOUNCER_MAX_USER_CONNECTIONS"
+        log_info "Database connection sizing (RHDH_DEPLOYMENT_REPLICAS=$RHDH_DEPLOYMENT_REPLICAS, RHDH_DB_REPLICAS=$RHDH_DB_REPLICAS, PGBOUNCER_REPLICAS=$PGBOUNCER_REPLICAS): RHDH_DB_MAX_CONNECTIONS=$RHDH_DB_MAX_CONNECTIONS, PGBOUNCER_MAX_CLIENT_CONNECTIONS=$PGBOUNCER_MAX_CLIENT_CONNECTIONS, PGBOUNCER_MAX_DB_CONNECTIONS=$PGBOUNCER_MAX_DB_CONNECTIONS, PGBOUNCER_DEFAULT_POOL_SIZE=$PGBOUNCER_DEFAULT_POOL_SIZE, PGBOUNCER_MAX_USER_CONNECTIONS=$PGBOUNCER_MAX_USER_CONNECTIONS"
+    fi
 
     export POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DATABASE_NAME POSTGRES_HOST POSTGRES_PORT
-    POSTGRES_USER=rhdh
+
+    if [[ "${ENABLE_PGBOUNCER}" == "true" && "${PGBOUNCER_REPLICAS}" -gt 0 ]]; then
+        POSTGRES_HOST="rhdh-postgresql-cluster-pgbouncer"
+        POSTGRES_USER=rhdh
+    else
+        POSTGRES_HOST="rhdh-postgresql-cluster-primary"
+        POSTGRES_USER="rhdh-postgresql-cluster"
+    fi
     POSTGRES_DATABASE_NAME="${POSTGRES_USER}"
-    POSTGRES_HOST="rhdh-postgresql-cluster-pgbouncer"
     POSTGRES_PORT=5432
 
     # Create ConfigMap with SQL to grant permissions to rhdh user on public schema
@@ -467,6 +500,13 @@ setup_rhdh_db() {
         yq -i '.spec.patroni.dynamicConfiguration.postgresql.parameters |= . + {"track_functions": "all"}' "$TMP_DIR/postgres-cluster.yaml"
         yq -i '.spec.patroni.dynamicConfiguration.postgresql.parameters |= . + {"stats_fetch_consistency": "cache"}' "$TMP_DIR/postgres-cluster.yaml"
         yq -i '.spec.patroni.dynamicConfiguration.postgresql.parameters |= . + {"shared_preload_libraries": "pgaudit,auto_explain,pg_stat_statements"}' "$TMP_DIR/postgres-cluster.yaml"
+    fi
+
+    if [[ "${ENABLE_PGBOUNCER}" == "true" && "${PGBOUNCER_REPLICAS}" -gt 0 ]]; then
+        yq -i '.spec.users |= . + [{"name": "'"$POSTGRES_USER"'", "databases": ["'"$POSTGRES_DATABASE_NAME"'"], "options": "NOSUPERUSER CREATEDB"}]' "$TMP_DIR/postgres-cluster.yaml"
+        yq -i '.spec.users |= . + [{"name": "sonataflow", "databases": [], "options": "NOSUPERUSER CREATEDB"}]' "$TMP_DIR/postgres-cluster.yaml"
+    else
+        yq -i '.spec.users |= . + [{"name": "'"$POSTGRES_USER"'", "databases": ["'"$POSTGRES_DATABASE_NAME"'"], "options": "SUPERUSER"}]' "$TMP_DIR/postgres-cluster.yaml"
     fi
 
     $clin apply -f "$TMP_DIR/postgres-cluster.yaml"
@@ -543,6 +583,45 @@ psql_debug() {
 # Section 6: RHDH Deployment
 ###############################################################################
 
+setup_rbac_policy_from_url() {
+    log_info "Setting up RBAC policy from URL: $RBAC_POLICY_FILE_URL"
+
+    # Create PVC for RBAC policy
+    log_info "Creating PVC for RBAC policy"
+    envsubst <template/backstage/helm/rbac-policy-pvc.yaml | $clin apply -f -
+
+    # Wait for PVC to be bound
+    log_info "Waiting for RBAC policy PVC to be bound"
+    $clin wait --for=jsonpath='{.status.phase}'=Bound pvc/rbac-policy-pvc --timeout=120s || {
+        log_warn "PVC not bound yet, checking status..."
+        $clin get pvc rbac-policy-pvc -o yaml
+    }
+
+    # Delete previous job if exists
+    $clin delete job rbac-policy-download --ignore-not-found=true --wait
+
+    # Create and run the download job
+    log_info "Creating RBAC policy download job"
+    envsubst <template/backstage/helm/rbac-policy-download-job.yaml | $clin apply -f -
+
+    # Wait for the job to complete
+    log_info "Waiting for RBAC policy download job to complete"
+    $clin wait --for=condition=complete job/rbac-policy-download --timeout=300s || {
+        log_error "RBAC policy download job failed"
+        $clin logs job/rbac-policy-download
+        return 1
+    }
+
+    log_info "RBAC policy download job completed successfully"
+    $clin logs job/rbac-policy-download
+}
+
+delete_rbac_policy_pvc() {
+    log_info "Deleting RBAC policy PVC and related resources"
+    $clin delete job rbac-policy-download --ignore-not-found=true --wait
+    $clin delete pvc rbac-policy-pvc --ignore-not-found=true --wait
+}
+
 restart_rhdh_deployment() {
     replica_count=${1:-1}
     if [ "$INSTALL_METHOD" == "helm" ]; then
@@ -588,7 +667,12 @@ install_rhdh_with_helm() {
     # RBAC
     if ${ENABLE_RBAC}; then
         log_info "Setting up RBAC"
-        yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.x.yaml")' "$TMP_DIR/chart-values.temp.yaml"
+        if ${RBAC_POLICY_UPLOAD_TO_GITHUB} || [ -n "${RBAC_POLICY_FILE_URL}" ]; then
+            log_info "Using RBAC policy from URL with PVC mount"
+            yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-rbac-pvc.yaml")' "$TMP_DIR/chart-values.temp.yaml"
+        else
+            yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.x.yaml")' "$TMP_DIR/chart-values.temp.yaml"
+        fi
         yq -i '.global.dynamic.plugins |= . + load("template/backstage/helm/rbac-plugin-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"
     fi
 
@@ -623,7 +707,11 @@ install_rhdh_with_helm() {
         yq -i '.orchestrator.enabled = true' "$TMP_DIR/chart-values.yaml"
         yq -i ".orchestrator.sonataflowPlatform.externalDBHost=\"${POSTGRES_HOST}\"" "$TMP_DIR/chart-values.yaml"
         yq -i ".orchestrator.sonataflowPlatform.externalDBPort=\"${POSTGRES_PORT}\"" "$TMP_DIR/chart-values.yaml"
-        yq -i '.orchestrator.sonataflowPlatform.externalDBsecretRef="rhdh-db-sonataflow-credentials"' "$TMP_DIR/chart-values.yaml"
+        if [[ "${ENABLE_PGBOUNCER}" == "true" && "${PGBOUNCER_REPLICAS}" -gt 0 ]]; then
+            yq -i '.orchestrator.sonataflowPlatform.externalDBsecretRef="rhdh-db-sonataflow-credentials"' "$TMP_DIR/chart-values.yaml"
+        else
+            yq -i '.orchestrator.sonataflowPlatform.externalDBsecretRef="rhdh-db-credentials"' "$TMP_DIR/chart-values.yaml"
+        fi
         yq -i '.orchestrator.sonataflowPlatform.externalDBName="postgres"' "$TMP_DIR/chart-values.yaml"
     fi
 
@@ -656,13 +744,19 @@ install_rhdh_with_helm() {
     #shellcheck disable=SC2086
     helm upgrade "${RHDH_HELM_RELEASE_NAME}" -i "${RHDH_HELM_REPO}" ${version_arg} -n "${RHDH_NAMESPACE}" --values "$TMP_DIR/chart-values.yaml"
 
+    if ${ENABLE_ORCHESTRATOR}; then
+        wait_to_start deployment "sonataflow-platform-data-index-service" 300 300
+        wait_to_start deployment "sonataflow-platform-jobs-service" 300 300
+        install_workflows
+    fi
+
     wait_to_exist "${RHDH_NAMESPACE}" "deployment" "${RHDH_HELM_RELEASE_NAME}-developer-hub" 300
 
     # Patch deployment strategy to start replicas one by one
     log_info "Patching RHDH deployment strategy for sequential replica startup"
     $clin patch deployment "${RHDH_HELM_RELEASE_NAME}-developer-hub" --type='merge' -p '{"spec":{"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxUnavailable":0,"maxSurge":1}}}}'
 
-    if ${ENABLE_ORCHESTRATOR}; then
+    if [[ ${ENABLE_ORCHESTRATOR} == "true" && "${ENABLE_PGBOUNCER}" == "true" && "${PGBOUNCER_REPLICAS}" -gt 0 ]]; then
         patch_sonataflow_flyway
     fi
     restart_rhdh_deployment 1
@@ -725,19 +819,29 @@ backstage_install() {
     fi
     until $clin create configmap app-config-rhdh --from-file "app-config.rhdh.yaml=$TMP_DIR/app-config.yaml"; do $clin delete configmap app-config-rhdh --ignore-not-found=true; done
     if ${ENABLE_RBAC}; then
-        cp template/backstage/rbac-config.yaml "${TMP_DIR}/rbac-config.yaml"
-        if [[ $RBAC_POLICY == "$RBAC_POLICY_COMPLEX" ]]; then
-            cat template/backstage/complex-rbac-config.yaml >>"${TMP_DIR}/rbac-config.yaml"
-        fi
-        create_rbac_policy "$RBAC_POLICY"
-        cat "$TMP_DIR/group-rbac.yaml" >>"$TMP_DIR/rbac-config.yaml"
-        if [[ "$INSTALL_METHOD" == "helm" ]] && ${ENABLE_ORCHESTRATOR}; then
-            cat template/backstage/helm/orchestrator-rbac-patch.yaml >>"$TMP_DIR/rbac-config.yaml"
+        if ${RBAC_POLICY_UPLOAD_TO_GITHUB}; then
+            log_info "RBAC policy will be generated and uploaded to GitHub"
+            create_and_upload_rbac_policy_csv "$RBAC_POLICY"
+            log_info "RBAC policy uploaded to GitHub. URL: $RBAC_POLICY_FILE_URL"
+            setup_rbac_policy_from_url
+        elif [ -n "${RBAC_POLICY_FILE_URL}" ]; then
+            log_info "RBAC policy will be downloaded from URL: $RBAC_POLICY_FILE_URL"
+            setup_rbac_policy_from_url
+        else
+            cp template/backstage/rbac-config.yaml "${TMP_DIR}/rbac-config.yaml"
             if [[ $RBAC_POLICY == "$RBAC_POLICY_COMPLEX" ]]; then
-                cat template/backstage/helm/complex-orchestrator-rbac-patch.yaml >>"${TMP_DIR}/rbac-config.yaml"
+                cat template/backstage/complex-rbac-config.csv >>"${TMP_DIR}/rbac-config.yaml"
             fi
+            create_rbac_policy "$RBAC_POLICY"
+            cat "$TMP_DIR/group-rbac.yaml" >>"$TMP_DIR/rbac-config.yaml"
+            if [[ "$INSTALL_METHOD" == "helm" ]] && ${ENABLE_ORCHESTRATOR}; then
+                cat template/backstage/helm/orchestrator-rbac-patch.yaml >>"$TMP_DIR/rbac-config.yaml"
+                if [[ $RBAC_POLICY == "$RBAC_POLICY_COMPLEX" ]]; then
+                    cat template/backstage/helm/complex-orchestrator-rbac-patch.yaml >>"${TMP_DIR}/rbac-config.yaml"
+                fi
+            fi
+            until $clin create -f "$TMP_DIR/rbac-config.yaml"; do $clin delete configmap rbac-policy --ignore-not-found=true; done
         fi
-        until $clin create -f "$TMP_DIR/rbac-config.yaml"; do $clin delete configmap rbac-policy --ignore-not-found=true; done
     fi
     envsubst <template/backstage/plugin-secrets.yaml | $clin apply -f -
     until $clin create -f "template/backstage/techdocs-pvc.yaml"; do $clin delete pvc rhdh-techdocs --ignore-not-found=true; done
@@ -904,6 +1008,8 @@ delete() {
         log_info "Uninstalling RHDH Helm release"
         helm uninstall "${RHDH_HELM_RELEASE_NAME}" --namespace "${RHDH_NAMESPACE}"
         $clin delete pvc "data-${RHDH_HELM_RELEASE_NAME}-postgresql-0" --ignore-not-found=true
+        # Clean up RBAC policy PVC if it exists
+        delete_rbac_policy_pvc
         envsubst <template/backstage/rhdh-db/postgres-cluster.yaml | $clin delete -f - --ignore-not-found=true --wait
         envsubst <template/backstage/rhdh-db/crunchy-postgres-op.yaml | $clin delete -f - --ignore-not-found=true --wait
         $cli delete ns "${RHDH_NAMESPACE}" --ignore-not-found=true --wait
@@ -947,9 +1053,6 @@ install() {
         return "$exit_code"
     fi
 
-    if ${ENABLE_ORCHESTRATOR}; then
-        install_workflows
-    fi
     psql_debug
 
     log_info "Scaling RHDH deployment to $RHDH_DEPLOYMENT_REPLICAS replicas"
