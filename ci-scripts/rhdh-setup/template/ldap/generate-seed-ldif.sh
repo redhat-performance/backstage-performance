@@ -9,8 +9,9 @@
 #   KEYCLOAK_USER_PASS  - Password for all generated users (required)
 #   GROUP_COUNT         - Number of groups to create (default: 1)
 #   RBAC_POLICY         - RBAC policy type (default: all_groups_admin)
-#                         Supported: all_groups_admin, static, complex,
-#                                    nested_groups, user_in_multiple_groups
+#                         Supported: all_groups_admin, all_groups_admin_inherited,
+#                                    static, complex, nested_groups,
+#                                    user_in_multiple_groups
 #   RBAC_POLICY_SIZE    - Policy-specific size parameter (default: GROUP_COUNT)
 #
 # The generated LDIF matches the LDAP schema from slapd.conf and produces
@@ -34,13 +35,13 @@ BACKSTAGE_USER_COUNT="${BACKSTAGE_USER_COUNT:-100}"
 GROUP_COUNT="${GROUP_COUNT:-100}"
 KEYCLOAK_USER_PASS="${KEYCLOAK_USER_PASS:-changeme}"
 
-
 # RBAC policy constants (must match create_resource.sh)
 RBAC_POLICY_ALL_GROUPS_ADMIN="all_groups_admin"
 RBAC_POLICY_STATIC="static"
 RBAC_POLICY_COMPLEX="complex"
 RBAC_POLICY_NESTED_GROUPS="nested_groups"
 RBAC_POLICY_USER_IN_MULTIPLE_GROUPS="user_in_multiple_groups"
+RBAC_POLICY_ALL_GROUPS_ADMIN_INHERITED="all_groups_admin_inherited"
 
 RBAC_POLICY="${RBAC_POLICY:-$RBAC_POLICY_ALL_GROUPS_ADMIN}"
 RBAC_POLICY_SIZE="${RBAC_POLICY_SIZE:-$GROUP_COUNT}"
@@ -66,11 +67,11 @@ generate_password_hash() {
 # Output: space-separated list of group CNs (e.g. "g1" or "g1 g2 g3")
 get_user_groups() {
     local user_index="$1"
-    local grp=$(( user_index % GROUP_COUNT ))
+    local grp=$((user_index % GROUP_COUNT))
     [[ $grp -eq 0 ]] && grp=${GROUP_COUNT}
 
     case "$RBAC_POLICY" in
-    "$RBAC_POLICY_ALL_GROUPS_ADMIN" | "$RBAC_POLICY_STATIC" | "$RBAC_POLICY_COMPLEX")
+    "$RBAC_POLICY_ALL_GROUPS_ADMIN" | "$RBAC_POLICY_STATIC" | "$RBAC_POLICY_COMPLEX" | "$RBAC_POLICY_ALL_GROUPS_ADMIN_INHERITED")
         if [[ $GROUP_COUNT -le $BACKSTAGE_USER_COUNT ]]; then
             # More users than (or equal) groups: each user maps to one group
             echo "g${grp}"
@@ -81,7 +82,7 @@ get_user_groups() {
             local g=$user_index
             while [[ $g -le $GROUP_COUNT ]]; do
                 groups="${groups:+$groups }g${g}"
-                g=$(( g + BACKSTAGE_USER_COUNT ))
+                g=$((g + BACKSTAGE_USER_COUNT))
             done
             echo "$groups"
         fi
@@ -93,7 +94,7 @@ get_user_groups() {
         elif [[ $grp -gt $RBAC_POLICY_SIZE ]]; then
             echo "g${grp}"
         else
-            echo "g$(( RBAC_POLICY_SIZE - grp ))_1"
+            echo "g$((RBAC_POLICY_SIZE - grp))_1"
         fi
         ;;
     "$RBAC_POLICY_USER_IN_MULTIPLE_GROUPS")
@@ -128,14 +129,21 @@ get_all_group_names() {
         echo "g1"
         # Nested chain: g1_1, g2_1, ..., g(N-2)_1
         for idx in $(seq 2 "$N"); do
-            echo "g$(( idx - 1 ))_1"
+            echo "g$((idx - 1))_1"
         done
         # Additional top-level groups beyond the nested chain
         if [[ $GROUP_COUNT -gt $N ]]; then
-            for idx in $(seq $(( N + 1 )) "$GROUP_COUNT"); do
+            for idx in $(seq $((N + 1)) "$GROUP_COUNT"); do
                 echo "g${idx}"
             done
         fi
+        ;;
+    "$RBAC_POLICY_ALL_GROUPS_ADMIN_INHERITED")
+        # Parent group first, then all child groups
+        echo "admin_parent"
+        for idx in $(seq 1 "$GROUP_COUNT"); do
+            echo "g${idx}"
+        done
         ;;
     *)
         # Simple flat groups: g1, g2, ..., gGROUP_COUNT
@@ -158,10 +166,16 @@ get_parent_group() {
         elif [[ "$group_name" =~ ^g([0-9]+)_1$ ]]; then
             local idx="${BASH_REMATCH[1]}"
             if [[ $idx -gt 1 ]]; then
-                echo "g$(( idx - 1 ))_1"
+                echo "g$((idx - 1))_1"
             fi
         fi
         # Top-level groups (g1, gN+1, gN+2, ...) have no parent
+        ;;
+    "$RBAC_POLICY_ALL_GROUPS_ADMIN_INHERITED")
+        # All g1-gN groups are children of admin_parent
+        if [[ "$group_name" =~ ^g[0-9]+$ ]]; then
+            echo "admin_parent"
+        fi
         ;;
     esac
 }
@@ -181,9 +195,31 @@ declare -A GROUP_MEMBERS
 for i in $(seq 1 "${BACKSTAGE_USER_COUNT}"); do
     user_dn="uid=t_${i},${USERS_OU}"
     for grp_name in $(get_user_groups "$i"); do
-        GROUP_MEMBERS["$grp_name"]="${GROUP_MEMBERS[$grp_name]:-}${GROUP_MEMBERS[$grp_name]:+ }${user_dn}"
+        GROUP_MEMBERS["$grp_name"]+=" ${user_dn}"
     done
 done
+
+# Pre-compute parent->children mapping in a single O(n) pass so we avoid
+# an O(n^2) inner loop when emitting group entries.
+echo "Pre-computing parent->children mapping"
+declare -A GROUP_CHILDREN
+if [[ "$RBAC_POLICY" == "$RBAC_POLICY_ALL_GROUPS_ADMIN_INHERITED" ]]; then
+    # All g1-gN groups are children of admin_parent; the hierarchy is known
+    # upfront so we skip the per-group get_parent_group call entirely.
+    for idx in $(seq 1 "$GROUP_COUNT"); do
+        GROUP_CHILDREN["admin_parent"]+=" cn=g${idx},${GROUPS_OU}"
+    done
+elif [[ "$RBAC_POLICY" == "$RBAC_POLICY_NESTED_GROUPS" ]]; then
+    for candidate in "${ALL_GROUPS[@]}"; do
+        echo -n "Getting parent for $candidate: "
+        candidate_parent=$(get_parent_group "$candidate")
+        echo "$candidate_parent"
+        if [[ -n "$candidate_parent" ]]; then
+            GROUP_CHILDREN["$candidate_parent"]+=" cn=${candidate},${GROUPS_OU}"
+        fi
+    done
+fi
+echo "Generating entries"
 
 {
     # Root entry
@@ -258,47 +294,42 @@ EOF
     # one member).  This happens when GROUP_COUNT > BACKSTAGE_USER_COUNT.
     skipped_groups=0
     for grp_name in "${ALL_GROUPS[@]}"; do
-        member_lines=()
+        member_buf=""
 
-        # For nested_groups, add child groups as members of this group
-        if [[ "$RBAC_POLICY" == "$RBAC_POLICY_NESTED_GROUPS" ]]; then
-            for candidate in "${ALL_GROUPS[@]}"; do
-                candidate_parent=$(get_parent_group "$candidate")
-                if [[ "$candidate_parent" == "$grp_name" ]]; then
-                    member_lines+=("member: cn=${candidate},${GROUPS_OU}")
-                fi
+        # For nested/inherited policies, add child groups (pre-computed)
+        if [[ -n "${GROUP_CHILDREN[$grp_name]:-}" ]]; then
+            for child_dn in ${GROUP_CHILDREN[$grp_name]}; do
+                member_buf+="member: ${child_dn}"$'\n'
             done
         fi
 
-        # Add user members
+        # For all_groups_admin_inherited, add guru as member of admin_parent
+        # if [[ "$RBAC_POLICY" == "$RBAC_POLICY_ALL_GROUPS_ADMIN_INHERITED" && "$grp_name" == "admin_parent" ]]; then
+        #     member_buf+="member: uid=guru,${USERS_OU}"$'\n'
+        # fi
+
+        # Add user members (pre-computed)
         if [[ -n "${GROUP_MEMBERS[$grp_name]:-}" ]]; then
             for member_dn in ${GROUP_MEMBERS[$grp_name]}; do
-                member_lines+=("member: ${member_dn}")
+                member_buf+="member: ${member_dn}"$'\n'
             done
         fi
 
         # groupOfNames requires at least one member; skip empty groups
-        if [[ ${#member_lines[@]} -eq 0 ]]; then
+        if [[ -z "$member_buf" ]]; then
             skipped_groups=$((skipped_groups + 1))
             continue
         fi
 
-        echo "dn: cn=${grp_name},${GROUPS_OU}"
-        echo "objectClass: top"
-        echo "objectClass: groupOfNames"
-        echo "cn: ${grp_name}"
-        for ml in "${member_lines[@]}"; do
-            echo "$ml"
-        done
-
-        echo ""
+        printf 'dn: cn=%s,%s\nobjectClass: top\nobjectClass: groupOfNames\ncn: %s\n%s\n' \
+            "$grp_name" "$GROUPS_OU" "$grp_name" "$member_buf"
     done
     if [[ $skipped_groups -gt 0 ]]; then
         echo "WARNING: Skipped ${skipped_groups} empty group(s) (GROUP_COUNT > BACKSTAGE_USER_COUNT)." >&2
     fi
 } >"${OUTPUT_FILE}"
 
-emitted_groups=$(( ${#ALL_GROUPS[@]} - skipped_groups ))
+emitted_groups=$((${#ALL_GROUPS[@]} - skipped_groups))
 echo "Generated ${OUTPUT_FILE} with ${BACKSTAGE_USER_COUNT} users and ${emitted_groups} groups (${skipped_groups} empty group(s) skipped out of ${#ALL_GROUPS[@]})."
 echo "Base DN: ${BASE_DN}"
 echo "User DN pattern: uid=t_<index>,${USERS_OU}"

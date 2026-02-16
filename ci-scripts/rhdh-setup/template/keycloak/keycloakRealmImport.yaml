@@ -133,7 +133,7 @@ spec:
             vendor:
               - "other"
             connectionUrl:
-              - "ldap://rhdh-ldap.${RHDH_NAMESPACE}:389"
+              - "ldap://rhdh-ldap:389"
             bindDn:
               - "cn=admin,dc=test,dc=com"
             bindCredential:
