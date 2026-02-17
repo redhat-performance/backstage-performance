@@ -73,7 +73,7 @@ export ENABLE_RBAC="${ENABLE_RBAC:-false}"
 export ENABLE_ORCHESTRATOR="${ENABLE_ORCHESTRATOR:-false}"
 export FORCE_ORCHESTRATOR_INFRA_UNINSTALL="${FORCE_ORCHESTRATOR_INFRA_UNINSTALL:-false}"
 export ENABLE_PROFILING="${ENABLE_PROFILING:-false}"
-export RBAC_POLICY="${RBAC_POLICY:-all_groups_admin}"
+export RBAC_POLICY="${RBAC_POLICY:-all_groups_admin_inherited}"
 export RBAC_POLICY_FILE_URL="${RBAC_POLICY_FILE_URL:-}"
 export RBAC_POLICY_PVC_STORAGE="${RBAC_POLICY_PVC_STORAGE:-100Mi}"
 export RBAC_POLICY_UPLOAD_TO_GITHUB="${RBAC_POLICY_UPLOAD_TO_GITHUB:-true}"
@@ -314,6 +314,11 @@ assign_roles_to_client() {
     done <<<"$ROLE_NAMES"
 }
 
+ldap_install() {
+    envsubst <template/ldap/ldap-deployment.yaml | $clin apply -f -
+    wait_to_start deployment rhdh-ldap 300 300
+}
+
 keycloak_install() {
     export KEYCLOAK_CLIENT_SECRET
     export COOKIE_SECRET
@@ -356,23 +361,35 @@ keycloak_install() {
         fi
     fi
     # shellcheck disable=SC2016
-    envsubst '${KEYCLOAK_CLIENT_SECRET} ${OAUTH2_REDIRECT_URI} ${KEYCLOAK_USER_PASS}' <template/keycloak/keycloakRealmImport.yaml | $clin apply -f -
+    envsubst '${KEYCLOAK_CLIENT_SECRET} ${OAUTH2_REDIRECT_URI} ${KEYCLOAK_USER_PASS} ${RHDH_NAMESPACE}' <template/keycloak/keycloakRealmImport.yaml | $clin apply -f -
     $clin create secret generic keycloak-client-secret-backstage --from-literal=CLIENT_ID=backstage --from-literal=CLIENT_SECRET="$KEYCLOAK_CLIENT_SECRET" --dry-run=client -o yaml | oc apply -f -
     # Wait up to 1 minute for completion realm generation
     $clin wait --for=condition=Done keycloakrealmimport/backstage-realm-import --timeout=60s
     assign_roles_to_client
+
+    # Print Keycloak temp-admin (initial admin) credentials
+    {
+        echo "==============================================="
+        echo " Keycloak Admin Console Credentials"
+        echo "==============================================="
+        echo "Username: $($clin get secret rhdh-keycloak-initial-admin -o json | jq -r '.data.username' | base64 -d)"
+        echo "Password: $($clin get secret rhdh-keycloak-initial-admin -o json | jq -r '.data.password' | base64 -d)"
+        echo "Login at: https://$($clin get route keycloak -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')/admin/"
+        echo
+    } | tee "${TMP_DIR}/keycloak_admin_credentials.log" # Print guru user credentials
+    {
+        echo "==============================================="
+        echo " 'guru' Backstage/Keycloak Test User"
+        echo "Username: guru"
+        echo "Password: ${KEYCLOAK_USER_PASS}"
+        echo "Login via Backstage (Keycloak auth) or Keycloak portal."
+        echo
+    } | tee "${TMP_DIR}/keycloak_guru_credentials.log"
 }
 
 ###############################################################################
 # Section 4: Catalog Population
 ###############################################################################
-
-create_users_groups() {
-    date -u -Ins >"${TMP_DIR}/populate-users-groups-before"
-    create_groups
-    create_users
-    date -u -Ins >"${TMP_DIR}/populate-users-groups-after"
-}
 
 create_objs() {
     if [[ ${GITHUB_USER} ]] && [[ ${GITHUB_REPO} ]]; then
@@ -590,19 +607,19 @@ setup_rbac_policy_from_url() {
     log_info "Creating PVC for RBAC policy"
     envsubst <template/backstage/helm/rbac-policy-pvc.yaml | $clin apply -f -
 
-    # Wait for PVC to be bound
-    log_info "Waiting for RBAC policy PVC to be bound"
-    $clin wait --for=jsonpath='{.status.phase}'=Bound pvc/rbac-policy-pvc --timeout=120s || {
-        log_warn "PVC not bound yet, checking status..."
-        $clin get pvc rbac-policy-pvc -o yaml
-    }
-
     # Delete previous job if exists
     $clin delete job rbac-policy-download --ignore-not-found=true --wait
 
     # Create and run the download job
     log_info "Creating RBAC policy download job"
     envsubst <template/backstage/helm/rbac-policy-download-job.yaml | $clin apply -f -
+
+    # Wait for PVC to be bound (happens once the job pod is scheduled)
+    log_info "Waiting for RBAC policy PVC to be bound"
+    $clin wait --for=jsonpath='{.status.phase}'=Bound pvc/rbac-policy-pvc --timeout=120s || {
+        log_warn "PVC not bound yet, checking status..."
+        $clin get pvc rbac-policy-pvc -o yaml
+    }
 
     # Wait for the job to complete
     log_info "Waiting for RBAC policy download job to complete"
@@ -629,17 +646,15 @@ restart_rhdh_deployment() {
     elif [ "$INSTALL_METHOD" == "olm" ]; then
         rhdh_deployment="backstage-developer-hub"
     fi
-    # Check if the RHDH deployment exists before trying to scale or operate on it
-    if ! $clin get deployment "$rhdh_deployment" &>/dev/null; then
-        log_error "Deployment $rhdh_deployment does not exist. Skipping RHDH restart."
-        return 1
-    fi
+    wait_to_exist "${RHDH_NAMESPACE}" "deployment" "${rhdh_deployment}" 300
     $clin scale deployment "$rhdh_deployment" --replicas=0
     for ((replicas = 1; replicas <= replica_count; replicas++)); do
         log_info "Scaling developer-hub deployment to $replicas/$replica_count replicas"
         $clin scale deployment "$rhdh_deployment" --replicas=$replicas
-        wait_to_start deployment "$rhdh_deployment" 300 300
+        sleep 1m
     done
+    wait_timeout=$((600 * replica_count))
+    wait_to_start deployment "$rhdh_deployment" 300 "$wait_timeout"
 }
 
 # shellcheck disable=SC2016,SC1004
@@ -726,13 +741,12 @@ install_rhdh_with_helm() {
     if ${ENABLE_PROFILING}; then
         log_info "Setting up NodeJS Profiling"
         yq -i '.upstream.backstage.command |= ["node", "--prof", "--heapsnapshot-signal=SIGUSR2", "packages/backend"]' "$TMP_DIR/chart-values.yaml"
-        # Collecting the heap snapshot freezes the RHDH while getting and writting the heap snapshot to a file
-        # which makes the out-of-the-box liveness/readiness probes (set to 10s period) unhappy
-        # and makes the scheduler to restart the Pod(s).
-        # The following patch prolongs the period to 5 minutes to avoid that to happen.
-        yq -i '.upstream.backstage.readinessProbe |= {"httpGet":{"path":"/healthcheck","port":7007,"scheme":"HTTP"},"initialDelaySeconds":30,"timeoutSeconds":2,"periodSeconds":300,"successThreshold":1,"failureThreshold":3}' "$TMP_DIR/chart-values.yaml"
-        yq -i '.upstream.backstage.livenessProbe |= {"httpGet":{"path":"/healthcheck","port":7007,"scheme":"HTTP"},"initialDelaySeconds":30,"timeoutSeconds":2,"periodSeconds":300,"successThreshold":1,"failureThreshold":3}' "$TMP_DIR/chart-values.yaml"
     fi
+
+    log_info "Setting up relaxed liveness/readiness probes for large LDAP sync tolerance"
+    failureThreshold=$(bc -l <<<"scale=0; ($API_COUNT + $COMPONENT_COUNT + $BACKSTAGE_USER_COUNT + $GROUP_COUNT) / 3000")
+    yq -i '.upstream.backstage.readinessProbe |= {"httpGet":{"path":"/healthcheck","port":7007,"scheme":"HTTP"},"initialDelaySeconds":60,"timeoutSeconds":5,"periodSeconds":60,"successThreshold":1,"failureThreshold":'"$failureThreshold"'}' "$TMP_DIR/chart-values.yaml"
+    yq -i '.upstream.backstage.livenessProbe |= {"httpGet":{"path":"/healthcheck","port":7007,"scheme":"HTTP"},"initialDelaySeconds":60,"timeoutSeconds":5,"periodSeconds":60,"successThreshold":1,"failureThreshold":'"$failureThreshold"'}' "$TMP_DIR/chart-values.yaml"
 
     # RHDH database connection
     yq -i '.upstream.backstage.appConfig.database.connection.host = "'"${POSTGRES_HOST}"'"' "$TMP_DIR/chart-values.yaml"
@@ -759,7 +773,7 @@ install_rhdh_with_helm() {
     if [[ ${ENABLE_ORCHESTRATOR} == "true" && "${ENABLE_PGBOUNCER}" == "true" && "${PGBOUNCER_REPLICAS}" -gt 0 ]]; then
         patch_sonataflow_flyway
     fi
-    restart_rhdh_deployment 1
+    restart_rhdh_deployment "$RHDH_DEPLOYMENT_REPLICAS"
 
     return $?
 }
@@ -847,6 +861,13 @@ backstage_install() {
     until $clin create -f "template/backstage/techdocs-pvc.yaml"; do $clin delete pvc rhdh-techdocs --ignore-not-found=true; done
 
     setup_rhdh_db
+
+    # Deploy Redis for OAuth2 Proxy session storage
+    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then
+        log_info "Deploying Redis for OAuth2 Proxy session storage"
+        $clin apply -f template/backstage/oauth2-proxy-redis.yaml
+        wait_to_start deployment oauth2-proxy-redis 300 300
+    fi
 
     if [ "$INSTALL_METHOD" == "helm" ]; then
         install_rhdh_with_helm
@@ -1039,12 +1060,9 @@ install() {
     appurl=$(oc whoami --show-console)
     export OPENSHIFT_APP_DOMAIN=${appurl#*.}
 
-    keycloak_install 2>&1 | tee "${TMP_DIR}/keycloak_install.log"
+    ldap_install 2>&1 | tee "${TMP_DIR}/ldap_install.log"
 
-    if $PRE_LOAD_DB; then
-        log_info "Creating users and groups in Keycloak in background"
-        create_users_groups 2>&1 | tee -a "${TMP_DIR}/create-users-groups.log"
-    fi
+    keycloak_install 2>&1 | tee "${TMP_DIR}/keycloak_install.log"
 
     backstage_install 2>&1 | tee -a "${TMP_DIR}/backstage-install.log"
     exit_code=${PIPESTATUS[0]}
@@ -1055,15 +1073,15 @@ install() {
 
     psql_debug
 
-    log_info "Scaling RHDH deployment to $RHDH_DEPLOYMENT_REPLICAS replicas"
-    restart_rhdh_deployment "$RHDH_DEPLOYMENT_REPLICAS"
+    #log_info "Scaling RHDH deployment to $RHDH_DEPLOYMENT_REPLICAS replicas"
+    #restart_rhdh_deployment "$RHDH_DEPLOYMENT_REPLICAS"
 }
 
 ###############################################################################
 # Section 10: CLI Parsing
 ###############################################################################
 
-while getopts "oi:mrdwcWCeE" flag; do
+while getopts "oi:mrdwcWCeEkl" flag; do
     case "${flag}" in
     o)
         export INSTALL_METHOD=olm
@@ -1107,6 +1125,17 @@ while getopts "oi:mrdwcWCeE" flag; do
         ;;
     E)
         psql_debug_cleanup
+        ;;
+    k)
+        setup_rhdh_namespace
+        setup_operator_group
+        appurl=$(oc whoami --show-console)
+        export OPENSHIFT_APP_DOMAIN=${appurl#*.}
+        keycloak_install
+        ;;
+    l)
+        setup_rhdh_namespace
+        ldap_install
         ;;
     \?)
         log_warn "Invalid option: ${flag} - defaulting to -i (install)"

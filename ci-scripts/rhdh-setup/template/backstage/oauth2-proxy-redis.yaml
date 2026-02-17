@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-proxy-redis
+  labels:
+    app.kubernetes.io/component: oauth2-proxy-redis
+    app.kubernetes.io/instance: rhdh
+    app.kubernetes.io/name: developer-hub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: oauth2-proxy-redis
+      app.kubernetes.io/instance: rhdh
+      app.kubernetes.io/name: developer-hub
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: oauth2-proxy-redis
+        app.kubernetes.io/instance: rhdh
+        app.kubernetes.io/name: developer-hub
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          args:
+            - "--save"
+            - ""
+            - "--appendonly"
+            - "no"
+          ports:
+            - containerPort: 6379
+              name: redis
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oauth2-proxy-redis
+  labels:
+    app.kubernetes.io/component: oauth2-proxy-redis
+    app.kubernetes.io/instance: rhdh
+    app.kubernetes.io/name: developer-hub
+spec:
+  ports:
+    - name: redis
+      port: 6379
+      protocol: TCP
+      targetPort: redis
+  selector:
+    app.kubernetes.io/component: oauth2-proxy-redis
+    app.kubernetes.io/instance: rhdh
+    app.kubernetes.io/name: developer-hub
+  type: ClusterIP

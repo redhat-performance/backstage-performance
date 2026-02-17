@@ -1,0 +1,3 @@
+---
+- package: ./dynamic-plugins/dist/backstage-plugin-catalog-backend-module-ldap-dynamic
+  disabled: false

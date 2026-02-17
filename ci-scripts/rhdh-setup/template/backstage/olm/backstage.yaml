@@ -27,6 +27,20 @@ spec:
           value: "${RHDH_LOG_LEVEL}"
         - name: NODE_TLS_REJECT_UNAUTHORIZED
           value: "0"
+        - name: LDAP_TARGET_URL
+          value: "ldap://rhdh-ldap:389"
+        - name: LDAP_BIND_DN
+          value: "cn=admin,dc=test,dc=com"
+        - name: LDAP_BIND_SECRET
+          value: "admin"
+        - name: LDAP_USERS_DN
+          value: "ou=users,dc=test,dc=com"
+        - name: LDAP_USER_FILTER
+          value: "(&(objectClass=inetOrgPerson)(uid=*))"
+        - name: LDAP_GROUPS_DN
+          value: "ou=groups,dc=test,dc=com"
+        - name: LDAP_GROUP_FILTER
+          value: "(&(objectClass=groupOfNames)(cn=*))"
       secrets:
         - key: CLIENT_ID
           name: keycloak-client-secret-backstage

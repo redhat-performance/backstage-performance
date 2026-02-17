@@ -35,3 +35,132 @@ spec:
         clientRoles:
           realm-management:
             - realm-admin
+    components:
+      org.keycloak.storage.UserStorageProvider:
+        - name: ldap
+          providerId: ldap
+          subComponents:
+            org.keycloak.storage.ldap.mappers.LDAPStorageMapper:
+              - name: "username"
+                providerId: "user-attribute-ldap-mapper"
+                config:
+                  ldap.attribute:
+                    - "uid"
+                  user.model.attribute:
+                    - "username"
+                  is.mandatory.in.ldap:
+                    - "true"
+                  read.only:
+                    - "true"
+                  always.read.value.from.ldap:
+                    - "false"
+              - name: "first name"
+                providerId: "user-attribute-ldap-mapper"
+                config:
+                  ldap.attribute:
+                    - "givenName"
+                  user.model.attribute:
+                    - "firstName"
+                  is.mandatory.in.ldap:
+                    - "true"
+                  read.only:
+                    - "true"
+                  always.read.value.from.ldap:
+                    - "true"
+              - name: "last name"
+                providerId: "user-attribute-ldap-mapper"
+                config:
+                  ldap.attribute:
+                    - "sn"
+                  user.model.attribute:
+                    - "lastName"
+                  is.mandatory.in.ldap:
+                    - "true"
+                  read.only:
+                    - "true"
+                  always.read.value.from.ldap:
+                    - "true"
+              - name: "email"
+                providerId: "user-attribute-ldap-mapper"
+                config:
+                  ldap.attribute:
+                    - "mail"
+                  user.model.attribute:
+                    - "email"
+                  is.mandatory.in.ldap:
+                    - "false"
+                  read.only:
+                    - "true"
+                  always.read.value.from.ldap:
+                    - "false"
+              - name: "creation date"
+                providerId: "user-attribute-ldap-mapper"
+                config:
+                  ldap.attribute:
+                    - "createTimestamp"
+                  user.model.attribute:
+                    - "createTimestamp"
+                  is.mandatory.in.ldap:
+                    - "false"
+                  read.only:
+                    - "true"
+                  always.read.value.from.ldap:
+                    - "true"
+              - name: "modify date"
+                providerId: "user-attribute-ldap-mapper"
+                config:
+                  ldap.attribute:
+                    - "modifyTimestamp"
+                  user.model.attribute:
+                    - "modifyTimestamp"
+                  is.mandatory.in.ldap:
+                    - "false"
+                  read.only:
+                    - "true"
+                  always.read.value.from.ldap:
+                    - "true"
+          config:
+            enabled:
+              - "true"
+            priority:
+              - "0"
+            editMode:
+              - "READ_ONLY"
+            importEnabled:
+              - "true"
+            syncRegistrations:
+              - "true"
+            vendor:
+              - "other"
+            connectionUrl:
+              - "ldap://rhdh-ldap:389"
+            bindDn:
+              - "cn=admin,dc=test,dc=com"
+            bindCredential:
+              - "admin"
+            usersDn:
+              - "ou=users,dc=test,dc=com"
+            usernameLDAPAttribute:
+              - "uid"
+            rdnLDAPAttribute:
+              - "uid"
+            uuidLDAPAttribute:
+              - "entryUUID"
+            userObjectClasses:
+              - "inetOrgPerson"
+            searchScope:
+              - "2"
+            pagination:
+              - "true"
+            batchSizeForSync:
+              - "1000"
+            fullSyncPeriod:
+              - "-1"
+            changedSyncPeriod:
+              - "-1"
+            connectionPooling:
+              - "true"
+            authType:
+              - "simple"
+            trustEmail:
+              - "true"
