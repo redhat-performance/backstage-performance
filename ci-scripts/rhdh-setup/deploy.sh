@@ -65,6 +65,7 @@ export RHDH_OLM_OPERATOR_RESOURCES_EPHEMERAL_STORAGE_REQUESTS=${RHDH_OLM_OPERATO
 
 export PRE_LOAD_DB="${PRE_LOAD_DB:-true}"
 export ENSURE_CATALOG_POPULATION_TIMEOUT=${ENSURE_CATALOG_POPULATION_TIMEOUT:-3600}
+export CATALOG_REFRESH_INTERVAL=${CATALOG_REFRESH_INTERVAL_MINUTES:-50}
 export BACKSTAGE_USER_COUNT="${BACKSTAGE_USER_COUNT:-1}"
 export GROUP_COUNT="${GROUP_COUNT:-1}"
 export API_COUNT="${API_COUNT:-1}"
@@ -659,7 +660,7 @@ restart_rhdh_deployment() {
         $clin scale deployment "$rhdh_deployment" --replicas=$replicas
         sleep 1m
     done
-    wait_timeout=$((600 * replica_count))
+    wait_timeout=${RHDH_STARTUP_TIMEOUT_SECONDS:-$((600 * replica_count))}
     wait_to_start deployment "$rhdh_deployment" 300 "$wait_timeout"
 }
 
@@ -837,6 +838,12 @@ backstage_install() {
         echo "locations: []" >"$TMP_DIR/locations.yaml"
         create_objs
         yq -i '.catalog.locations |= . + load("'"$TMP_DIR/locations.yaml"'").locations' "$TMP_DIR/app-config.yaml"
+    fi
+    if [ -n "${CATALOG_REFRESH_INTERVAL_MINUTES}" ]; then
+        yq -i '.catalog.processingInterval.hours = 0' "$TMP_DIR/app-config.yaml"
+        yq -i '.catalog.processingInterval.minutes = '"${CATALOG_REFRESH_INTERVAL_MINUTES}"'' "$TMP_DIR/app-config.yaml"
+        yq -i '.catalog.providers.ldapOrg.default.schedule.frequency.hours = 0' "$TMP_DIR/app-config.yaml"
+        yq -i '.catalog.providers.ldapOrg.default.schedule.frequency.minutes = '"${CATALOG_REFRESH_INTERVAL_MINUTES}"'' "$TMP_DIR/app-config.yaml"
     fi
     until $clin create configmap app-config-rhdh --from-file "app-config.rhdh.yaml=$TMP_DIR/app-config.yaml"; do $clin delete configmap app-config-rhdh --ignore-not-found=true; done
     if ${ENABLE_RBAC}; then

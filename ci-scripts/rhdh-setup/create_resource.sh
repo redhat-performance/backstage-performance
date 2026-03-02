@@ -645,6 +645,7 @@ get_token() {
   #shellcheck disable=SC2064
   trap "rm -rf $token_lockfile; exit" INT TERM EXIT HUP
 
+  log_token_info "Attempting to get '$token_type' token for up to '$token_timeout' seconds"
   local timeout_timestamp
   timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$token_timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
   while [ ! -f "$token_file" ] || [ ! -s "$token_file" ] || [ -z "$(jq -rc '.expires_in_timestamp' "$token_file")" ] || [ "$(date +%s)" -gt "$(jq -rc '.expires_in_timestamp' "$token_file")" ] || [ "$(jq -rc "$token_field" "$token_file")" == "null" ]; do

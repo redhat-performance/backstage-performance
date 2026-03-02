@@ -36,12 +36,13 @@ catalog:
                 pagePause: true
         schedule:
           initialDelay: PT1M
-          frequency: PT50M
+          frequency:
+            minutes: 50
           timeout: PT50M
 techdocs:
   builder: local
   generator:
-      runIn: local
+    runIn: local
   publisher:
     type: local
     local:
