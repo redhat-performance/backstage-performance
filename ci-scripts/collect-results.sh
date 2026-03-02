@@ -103,15 +103,11 @@ try_gather_file "${TMP_DIR}/deploy-before"
 try_gather_file "${TMP_DIR}/deploy-after"
 try_gather_file "${TMP_DIR}/populate-before"
 try_gather_file "${TMP_DIR}/populate-after"
-try_gather_file "${TMP_DIR}/populate-users-groups-before"
-try_gather_file "${TMP_DIR}/populate-users-groups-after"
 try_gather_file "${TMP_DIR}/populate-catalog-before"
 try_gather_file "${TMP_DIR}/populate-catalog-after"
 try_gather_file "${TMP_DIR}/benchmark-before"
 try_gather_file "${TMP_DIR}/benchmark-after"
 try_gather_file "${TMP_DIR}/benchmark-scenario"
-try_gather_file "${TMP_DIR}/create_group.log"
-try_gather_file "${TMP_DIR}/create_user.log"
 try_gather_file "${TMP_DIR}/get_token.log"
 try_gather_file "${TMP_DIR}/get_rhdh_token.log"
 try_gather_file "${TMP_DIR}/get_user_count.log"
@@ -186,10 +182,6 @@ if [[ "${PRE_LOAD_DB:-}" == "true" ]]; then
     populate_ended=$(cat "${ARTIFACT_DIR}/populate-after")
     populate_duration="$(timestamp_diff "$populate_started" "$populate_ended")"
 
-    populate_users_groups_started=$(cat "${ARTIFACT_DIR}/populate-users-groups-before")
-    populate_users_groups_ended=$(cat "${ARTIFACT_DIR}/populate-users-groups-after")
-    populate_users_groups_duration="$(timestamp_diff "$populate_users_groups_started" "$populate_users_groups_ended")"
-
     populate_catalog_started=$(cat "${ARTIFACT_DIR}/populate-catalog-before")
     populate_catalog_ended=$(cat "${ARTIFACT_DIR}/populate-catalog-after")
     populate_catalog_duration="$(timestamp_diff "$populate_catalog_started" "$populate_catalog_ended")"
@@ -203,9 +195,6 @@ if [[ "${PRE_LOAD_DB:-}" == "true" ]]; then
         measurements.timings.populate.started="$populate_started" \
         measurements.timings.populate.ended="$populate_ended" \
         measurements.timings.populate.duration="$populate_duration" \
-        measurements.timings.populate_users_groups.started="$populate_users_groups_started" \
-        measurements.timings.populate_users_groups.ended="$populate_users_groups_ended" \
-        measurements.timings.populate_users_groups.duration="$populate_users_groups_duration" \
         measurements.timings.populate_catalog.started="$populate_catalog_started" \
         measurements.timings.populate_catalog.ended="$populate_catalog_ended" \
         measurements.timings.populate_catalog.duration="$populate_catalog_duration" \

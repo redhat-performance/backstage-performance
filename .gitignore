@@ -11,3 +11,4 @@ shellcheck
 .artifacts*
 *.local
 **/.DS_Store
+**/*.ldif

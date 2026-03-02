@@ -57,6 +57,7 @@ export RHDH_RESOURCES_CPU_REQUESTS ?=
 export RHDH_RESOURCES_CPU_LIMITS ?=
 export RHDH_RESOURCES_MEMORY_REQUESTS ?=
 export RHDH_RESOURCES_MEMORY_LIMITS ?=
+export RHDH_NODEJS_MAX_HEAP_SIZE ?=
 export RHDH_DB_RESOURCES_CPU_REQUESTS ?=
 export RHDH_DB_RESOURCES_CPU_LIMITS ?=
 export RHDH_DB_RESOURCES_MEMORY_REQUESTS ?=
@@ -76,6 +77,9 @@ export TMP_DIR ?= $(shell python3 -c 'import os, sys; print(os.path.realpath(sys
 
 # Local directory to store artifacts
 export ARTIFACT_DIR ?= $(shell python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' .artifacts)
+
+# Timeout to ensure catalog population
+export ENSURE_CATALOG_POPULATION_TIMEOUT ?= 3600
 
 export PROJ_ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
@@ -139,6 +143,14 @@ deploy-rhdh-db:
 .PHONY: undeploy-rhdh-db
 undeploy-rhdh-db:
 	cd ./ci-scripts/rhdh-setup; ./deploy.sh -C
+
+## Deploy Keycloak
+deploy-keycloak:
+	cd ./ci-scripts/rhdh-setup; ./deploy.sh -k
+
+## Deploy LDAP
+deploy-ldap:
+	cd ./ci-scripts/rhdh-setup; ./deploy.sh -l
 
 ## Deploy RHDH with OLM
 .PHONY: deploy-rhdh-olm
@@ -344,6 +356,11 @@ psql-debug:
 .PHONY: psql-debug-cleanup
 psql-debug-cleanup:
 	cd ci-scripts/rhdh-setup; ./deploy.sh -E
+
+## Ensure catalog population
+.PHONY: ensure-catalog-population
+ensure-catalog-population:
+	cd ci-scripts/rhdh-setup; ./deploy.sh -p
 
 ##	=== Help ===
 
