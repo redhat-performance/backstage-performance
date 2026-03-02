@@ -31,6 +31,7 @@ export RHDH_RESOURCES_CPU_REQUESTS=${RHDH_RESOURCES_CPU_REQUESTS:-}
 export RHDH_RESOURCES_CPU_LIMITS=${RHDH_RESOURCES_CPU_LIMITS:-}
 export RHDH_RESOURCES_MEMORY_REQUESTS=${RHDH_RESOURCES_MEMORY_REQUESTS:-}
 export RHDH_RESOURCES_MEMORY_LIMITS=${RHDH_RESOURCES_MEMORY_LIMITS:-}
+export RHDH_NODEJS_MAX_HEAP_SIZE=${RHDH_NODEJS_MAX_HEAP_SIZE:-}
 export RHDH_DB_RESOURCES_CPU_REQUESTS=${RHDH_DB_RESOURCES_CPU_REQUESTS:-}
 export RHDH_DB_RESOURCES_CPU_LIMITS=${RHDH_DB_RESOURCES_CPU_LIMITS:-}
 export RHDH_DB_RESOURCES_MEMORY_REQUESTS=${RHDH_DB_RESOURCES_MEMORY_REQUESTS:-}
@@ -63,6 +64,7 @@ export RHDH_OLM_OPERATOR_RESOURCES_MEMORY_LIMITS=${RHDH_OLM_OPERATOR_RESOURCES_M
 export RHDH_OLM_OPERATOR_RESOURCES_EPHEMERAL_STORAGE_REQUESTS=${RHDH_OLM_OPERATOR_RESOURCES_EPHEMERAL_STORAGE_REQUESTS:-}
 
 export PRE_LOAD_DB="${PRE_LOAD_DB:-true}"
+export ENSURE_CATALOG_POPULATION_TIMEOUT=${ENSURE_CATALOG_POPULATION_TIMEOUT:-3600}
 export BACKSTAGE_USER_COUNT="${BACKSTAGE_USER_COUNT:-1}"
 export GROUP_COUNT="${GROUP_COUNT:-1}"
 export API_COUNT="${API_COUNT:-1}"
@@ -73,7 +75,7 @@ export ENABLE_RBAC="${ENABLE_RBAC:-false}"
 export ENABLE_ORCHESTRATOR="${ENABLE_ORCHESTRATOR:-false}"
 export FORCE_ORCHESTRATOR_INFRA_UNINSTALL="${FORCE_ORCHESTRATOR_INFRA_UNINSTALL:-false}"
 export ENABLE_PROFILING="${ENABLE_PROFILING:-false}"
-export RBAC_POLICY="${RBAC_POLICY:-all_groups_admin}"
+export RBAC_POLICY="${RBAC_POLICY:-all_groups_admin_inherited}"
 export RBAC_POLICY_FILE_URL="${RBAC_POLICY_FILE_URL:-}"
 export RBAC_POLICY_PVC_STORAGE="${RBAC_POLICY_PVC_STORAGE:-100Mi}"
 export RBAC_POLICY_UPLOAD_TO_GITHUB="${RBAC_POLICY_UPLOAD_TO_GITHUB:-true}"
@@ -314,6 +316,11 @@ assign_roles_to_client() {
     done <<<"$ROLE_NAMES"
 }
 
+ldap_install() {
+    envsubst <template/ldap/ldap-deployment.yaml | $clin apply -f -
+    wait_to_start deployment rhdh-ldap 300 300
+}
+
 keycloak_install() {
     export KEYCLOAK_CLIENT_SECRET
     export COOKIE_SECRET
@@ -356,23 +363,35 @@ keycloak_install() {
         fi
     fi
     # shellcheck disable=SC2016
-    envsubst '${KEYCLOAK_CLIENT_SECRET} ${OAUTH2_REDIRECT_URI} ${KEYCLOAK_USER_PASS}' <template/keycloak/keycloakRealmImport.yaml | $clin apply -f -
+    envsubst '${KEYCLOAK_CLIENT_SECRET} ${OAUTH2_REDIRECT_URI} ${KEYCLOAK_USER_PASS} ${RHDH_NAMESPACE}' <template/keycloak/keycloakRealmImport.yaml | $clin apply -f -
     $clin create secret generic keycloak-client-secret-backstage --from-literal=CLIENT_ID=backstage --from-literal=CLIENT_SECRET="$KEYCLOAK_CLIENT_SECRET" --dry-run=client -o yaml | oc apply -f -
     # Wait up to 1 minute for completion realm generation
     $clin wait --for=condition=Done keycloakrealmimport/backstage-realm-import --timeout=60s
     assign_roles_to_client
+
+    # Print Keycloak temp-admin (initial admin) credentials
+    {
+        echo "==============================================="
+        echo " Keycloak Admin Console Credentials"
+        echo "==============================================="
+        echo "Username: $($clin get secret rhdh-keycloak-initial-admin -o json | jq -r '.data.username' | base64 -d)"
+        echo "Password: $($clin get secret rhdh-keycloak-initial-admin -o json | jq -r '.data.password' | base64 -d)"
+        echo "Login at: https://$($clin get route keycloak -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')/admin/"
+        echo
+    } | tee "${TMP_DIR}/keycloak_admin_credentials.log" # Print guru user credentials
+    {
+        echo "==============================================="
+        echo " 'guru' Backstage/Keycloak Test User"
+        echo "Username: guru"
+        echo "Password: ${KEYCLOAK_USER_PASS}"
+        echo "Login via Backstage (Keycloak auth) or Keycloak portal."
+        echo
+    } | tee "${TMP_DIR}/keycloak_guru_credentials.log"
 }
 
 ###############################################################################
 # Section 4: Catalog Population
 ###############################################################################
-
-create_users_groups() {
-    date -u -Ins >"${TMP_DIR}/populate-users-groups-before"
-    create_groups
-    create_users
-    date -u -Ins >"${TMP_DIR}/populate-users-groups-after"
-}
 
 create_objs() {
     if [[ ${GITHUB_USER} ]] && [[ ${GITHUB_REPO} ]]; then
@@ -386,10 +405,14 @@ create_objs() {
     fi
 }
 
+rhdh_token_timeout=$(bc -l <<<"scale=0; v = (${BACKSTAGE_USER_COUNT} + ${GROUP_COUNT}) / 20; if (v < 3600) 3600 else v")
+
 get_catalog_entity_count() {
     entity_type=$1
-    ACCESS_TOKEN=$(get_token "rhdh")
-    curl -s -k "$(backstage_url)/api/catalog/entities/by-query?limit=0&filter=kind%3D${entity_type}" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$ACCESS_TOKEN" | tee -a "$TMP_DIR/get_$(echo "$entity_type" | tr '[:upper:]' '[:lower:]')_count.log" | jq -r '.totalItems'
+    ACCESS_TOKEN=$(get_token "rhdh" "$rhdh_token_timeout")
+    log_file="$TMP_DIR/get_$(echo "$entity_type" | tr '[:upper:]' '[:lower:]')_count.log"
+    curl -s -k "$(backstage_url)/api/catalog/entities/by-query?limit=0&filter=kind%3D${entity_type}" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$ACCESS_TOKEN" | tee -a "$log_file" | jq -r '.totalItems'
+    echo "" >>"$log_file"
 }
 
 ###############################################################################
@@ -420,21 +443,21 @@ setup_rhdh_db() {
         PGBOUNCER_DEFAULT_POOL_SIZE=1
         PGBOUNCER_MAX_DB_CONNECTIONS=1
         PGBOUNCER_MAX_USER_CONNECTIONS=1
-        CLIENT_CONNECTIONS_PER_RHDH_INSTANCE=50
+        CLIENT_CONNECTIONS_PER_RHDH_INSTANCE=80
         DB_CONNECTIONS_HEADROOM_PER_RHDH_INSTANCE=5
-        MIN_RHDH_DB_MAX_CONNECTIONS=150
+        MIN_RHDH_DB_MAX_CONNECTIONS=180
         _rhdh_db_max_conn=$(bc <<<"$RHDH_DEPLOYMENT_REPLICAS * ($CLIENT_CONNECTIONS_PER_RHDH_INSTANCE + $DB_CONNECTIONS_HEADROOM_PER_RHDH_INSTANCE)")
         RHDH_DB_MAX_CONNECTIONS=$(bc <<<"if ($_rhdh_db_max_conn < $MIN_RHDH_DB_MAX_CONNECTIONS) $MIN_RHDH_DB_MAX_CONNECTIONS else $_rhdh_db_max_conn")
     else
         # Connection sizing parameters (PgBouncer enabled)
-        CLIENT_CONNECTIONS_PER_RHDH_INSTANCE=50     # Expected DB connections per RHDH replica
+        CLIENT_CONNECTIONS_PER_RHDH_INSTANCE=80     # Expected DB connections per RHDH replica
         DB_CONNECTIONS_HEADROOM_PER_RHDH_INSTANCE=5 # Extra headroom per RHDH replica
         DB_CONNECTIONS_ADMIN_HEADROOM=20            # Reserved for admin/monitoring connections
-        RHDH_DATABASE_COUNT=30                      # Approximate number of RHDH plugin databases (~20 current + ~10 future)
+        RHDH_DATABASE_COUNT=50                      # Approximate number of RHDH plugin databases (~20 current + ~10 future)
 
         # Minimum values to handle Backstage startup burst (concurrent plugin initialization)
         # During startup, ~30 plugins create schemas concurrently regardless of replica count
-        MIN_RHDH_DB_MAX_CONNECTIONS=150
+        MIN_RHDH_DB_MAX_CONNECTIONS=180
         MIN_PGBOUNCER_MAX_CLIENT_CONNECTIONS=120
         MIN_PGBOUNCER_MAX_DB_CONNECTIONS=60
         # Pool size minimum equals database count to ensure each plugin can connect during startup burst
@@ -590,19 +613,19 @@ setup_rbac_policy_from_url() {
     log_info "Creating PVC for RBAC policy"
     envsubst <template/backstage/helm/rbac-policy-pvc.yaml | $clin apply -f -
 
-    # Wait for PVC to be bound
-    log_info "Waiting for RBAC policy PVC to be bound"
-    $clin wait --for=jsonpath='{.status.phase}'=Bound pvc/rbac-policy-pvc --timeout=120s || {
-        log_warn "PVC not bound yet, checking status..."
-        $clin get pvc rbac-policy-pvc -o yaml
-    }
-
     # Delete previous job if exists
     $clin delete job rbac-policy-download --ignore-not-found=true --wait
 
     # Create and run the download job
     log_info "Creating RBAC policy download job"
     envsubst <template/backstage/helm/rbac-policy-download-job.yaml | $clin apply -f -
+
+    # Wait for PVC to be bound (happens once the job pod is scheduled)
+    log_info "Waiting for RBAC policy PVC to be bound"
+    $clin wait --for=jsonpath='{.status.phase}'=Bound pvc/rbac-policy-pvc --timeout=120s || {
+        log_warn "PVC not bound yet, checking status..."
+        $clin get pvc rbac-policy-pvc -o yaml
+    }
 
     # Wait for the job to complete
     log_info "Waiting for RBAC policy download job to complete"
@@ -629,17 +652,15 @@ restart_rhdh_deployment() {
     elif [ "$INSTALL_METHOD" == "olm" ]; then
         rhdh_deployment="backstage-developer-hub"
     fi
-    # Check if the RHDH deployment exists before trying to scale or operate on it
-    if ! $clin get deployment "$rhdh_deployment" &>/dev/null; then
-        log_error "Deployment $rhdh_deployment does not exist. Skipping RHDH restart."
-        return 1
-    fi
+    wait_to_exist "${RHDH_NAMESPACE}" "deployment" "${rhdh_deployment}" 300
     $clin scale deployment "$rhdh_deployment" --replicas=0
     for ((replicas = 1; replicas <= replica_count; replicas++)); do
         log_info "Scaling developer-hub deployment to $replicas/$replica_count replicas"
         $clin scale deployment "$rhdh_deployment" --replicas=$replicas
-        wait_to_start deployment "$rhdh_deployment" 300 300
+        sleep 1m
     done
+    wait_timeout=$((600 * replica_count))
+    wait_to_start deployment "$rhdh_deployment" 300 "$wait_timeout"
 }
 
 # shellcheck disable=SC2016,SC1004
@@ -721,18 +742,18 @@ install_rhdh_with_helm() {
     if [ -n "${RHDH_RESOURCES_CPU_LIMITS}" ]; then yq -i '.upstream.backstage.resources.limits.cpu = "'"${RHDH_RESOURCES_CPU_LIMITS}"'"' "$TMP_DIR/chart-values.yaml"; fi
     if [ -n "${RHDH_RESOURCES_MEMORY_REQUESTS}" ]; then yq -i '.upstream.backstage.resources.requests.memory = "'"${RHDH_RESOURCES_MEMORY_REQUESTS}"'"' "$TMP_DIR/chart-values.yaml"; fi
     if [ -n "${RHDH_RESOURCES_MEMORY_LIMITS}" ]; then yq -i '.upstream.backstage.resources.limits.memory = "'"${RHDH_RESOURCES_MEMORY_LIMITS}"'"' "$TMP_DIR/chart-values.yaml"; fi
+    if [ -n "${RHDH_NODEJS_MAX_HEAP_SIZE}" ]; then yq -i '.upstream.backstage.extraEnvVars |= . + [{"name": "NODE_OPTIONS", "value": "--max-old-space-size='"${RHDH_NODEJS_MAX_HEAP_SIZE}"'"}]' "$TMP_DIR/chart-values.yaml"; fi
 
     # NodeJS Profiling
     if ${ENABLE_PROFILING}; then
         log_info "Setting up NodeJS Profiling"
         yq -i '.upstream.backstage.command |= ["node", "--prof", "--heapsnapshot-signal=SIGUSR2", "packages/backend"]' "$TMP_DIR/chart-values.yaml"
-        # Collecting the heap snapshot freezes the RHDH while getting and writting the heap snapshot to a file
-        # which makes the out-of-the-box liveness/readiness probes (set to 10s period) unhappy
-        # and makes the scheduler to restart the Pod(s).
-        # The following patch prolongs the period to 5 minutes to avoid that to happen.
-        yq -i '.upstream.backstage.readinessProbe |= {"httpGet":{"path":"/healthcheck","port":7007,"scheme":"HTTP"},"initialDelaySeconds":30,"timeoutSeconds":2,"periodSeconds":300,"successThreshold":1,"failureThreshold":3}' "$TMP_DIR/chart-values.yaml"
-        yq -i '.upstream.backstage.livenessProbe |= {"httpGet":{"path":"/healthcheck","port":7007,"scheme":"HTTP"},"initialDelaySeconds":30,"timeoutSeconds":2,"periodSeconds":300,"successThreshold":1,"failureThreshold":3}' "$TMP_DIR/chart-values.yaml"
     fi
+
+    log_info "Setting up relaxed liveness/readiness probes for large LDAP sync tolerance"
+    failureThreshold=$(bc -l <<<"scale=0; ($API_COUNT + $COMPONENT_COUNT + $BACKSTAGE_USER_COUNT + $GROUP_COUNT) / 2000")
+    yq -i '.upstream.backstage.readinessProbe |= {"httpGet":{"path":"/healthcheck","port":7007,"scheme":"HTTP"},"initialDelaySeconds":60,"timeoutSeconds":5,"periodSeconds":60,"successThreshold":1,"failureThreshold":'"$failureThreshold"'}' "$TMP_DIR/chart-values.yaml"
+    yq -i '.upstream.backstage.livenessProbe |= {"httpGet":{"path":"/healthcheck","port":7007,"scheme":"HTTP"},"initialDelaySeconds":60,"timeoutSeconds":5,"periodSeconds":60,"successThreshold":1,"failureThreshold":'"$failureThreshold"'}' "$TMP_DIR/chart-values.yaml"
 
     # RHDH database connection
     yq -i '.upstream.backstage.appConfig.database.connection.host = "'"${POSTGRES_HOST}"'"' "$TMP_DIR/chart-values.yaml"
@@ -759,7 +780,7 @@ install_rhdh_with_helm() {
     if [[ ${ENABLE_ORCHESTRATOR} == "true" && "${ENABLE_PGBOUNCER}" == "true" && "${PGBOUNCER_REPLICAS}" -gt 0 ]]; then
         patch_sonataflow_flyway
     fi
-    restart_rhdh_deployment 1
+    restart_rhdh_deployment "$RHDH_DEPLOYMENT_REPLICAS"
 
     return $?
 }
@@ -848,6 +869,13 @@ backstage_install() {
 
     setup_rhdh_db
 
+    # Deploy Redis for OAuth2 Proxy session storage
+    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then
+        log_info "Deploying Redis for OAuth2 Proxy session storage"
+        $clin apply -f template/backstage/oauth2-proxy-redis.yaml
+        wait_to_start deployment oauth2-proxy-redis 300 300
+    fi
+
     if [ "$INSTALL_METHOD" == "helm" ]; then
         install_rhdh_with_helm
         install_exit_code=$?
@@ -874,39 +902,43 @@ backstage_install() {
         return $install_exit_code
     fi
     log_info "RHDH Installed, waiting for the catalog to be populated"
-    timeout=600
-    timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
+
+    ensure_catalog_population
+}
+
+ensure_catalog_population() {
+    ensure_entity_count "User" "$((BACKSTAGE_USER_COUNT + 1))" "$ENSURE_CATALOG_POPULATION_TIMEOUT" &
+    ensure_entity_count "Group" "$GROUP_COUNT" "$ENSURE_CATALOG_POPULATION_TIMEOUT" &
+    ensure_entity_count "Component" "$COMPONENT_COUNT" "$ENSURE_CATALOG_POPULATION_TIMEOUT" &
+    ensure_entity_count "API" "$API_COUNT" "$ENSURE_CATALOG_POPULATION_TIMEOUT" &
+    wait
+}
+
+ensure_entity_count() {
+    entity_type=$1
+    e_count=$2
+    timeout=$3
+
     last_count=-1
-    for entity_type in User Group Component API; do
-        while true; do
-            if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
-                log_error "Timeout waiting on '$entity_type' count"
-                exit 1
-            else
-                b_count=$(get_catalog_entity_count "$entity_type")
-                if [[ 'User' == "$entity_type" ]]; then
-                    # Add 1 to account for the "guru" user that's always present
-                    e_count=$((BACKSTAGE_USER_COUNT + 1))
-                elif [[ 'Group' == "$entity_type" ]]; then
-                    e_count=$GROUP_COUNT
-                elif [[ 'Component' == "$entity_type" ]]; then
-                    e_count=$COMPONENT_COUNT
-                elif [[ 'API' == "$entity_type" ]]; then
-                    e_count=$API_COUNT
-                fi
-                if [[ "$last_count" != "$b_count" ]]; then # reset the timeout if current count changes
-                    log_info "The current '$entity_type' count changed, resetting waiting timeout to $timeout seconds"
-                    timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
-                    last_count=$b_count
-                fi
-                if [[ $b_count -ge $e_count ]]; then
-                    log_info "The '$entity_type' count reached expected value ($b_count)"
-                    break
-                fi
+    timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
+    while true; do
+        b_count=$(get_catalog_entity_count "$entity_type")
+        if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
+            log_error "Timeout waiting on '$entity_type' count"
+            exit 1
+        else
+            if [[ "$last_count" != "$b_count" ]]; then # reset the timeout if current count changes
+                log_info "The current '$entity_type' count changed, resetting waiting timeout to $timeout seconds"
+                timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
+                last_count=$b_count
             fi
-            log_info "Waiting for the '$entity_type' count to be ${e_count} (current: ${b_count})"
-            sleep 10s
-        done
+            if [[ $b_count -ge $e_count ]]; then
+                log_info "The '$entity_type' count reached expected value ($b_count)"
+                break
+            fi
+        fi
+        log_info "Waiting for the '$entity_type' count to be ${e_count} (current: ${b_count})"
+        sleep 10s
     done
 }
 
@@ -1039,12 +1071,9 @@ install() {
     appurl=$(oc whoami --show-console)
     export OPENSHIFT_APP_DOMAIN=${appurl#*.}
 
-    keycloak_install 2>&1 | tee "${TMP_DIR}/keycloak_install.log"
+    ldap_install 2>&1 | tee "${TMP_DIR}/ldap_install.log"
 
-    if $PRE_LOAD_DB; then
-        log_info "Creating users and groups in Keycloak in background"
-        create_users_groups 2>&1 | tee -a "${TMP_DIR}/create-users-groups.log"
-    fi
+    keycloak_install 2>&1 | tee "${TMP_DIR}/keycloak_install.log"
 
     backstage_install 2>&1 | tee -a "${TMP_DIR}/backstage-install.log"
     exit_code=${PIPESTATUS[0]}
@@ -1055,15 +1084,15 @@ install() {
 
     psql_debug
 
-    log_info "Scaling RHDH deployment to $RHDH_DEPLOYMENT_REPLICAS replicas"
-    restart_rhdh_deployment "$RHDH_DEPLOYMENT_REPLICAS"
+    #log_info "Scaling RHDH deployment to $RHDH_DEPLOYMENT_REPLICAS replicas"
+    #restart_rhdh_deployment "$RHDH_DEPLOYMENT_REPLICAS"
 }
 
 ###############################################################################
 # Section 10: CLI Parsing
 ###############################################################################
 
-while getopts "oi:mrdwcWCeE" flag; do
+while getopts "oi:mrdwcWCeEklp" flag; do
     case "${flag}" in
     o)
         export INSTALL_METHOD=olm
@@ -1107,6 +1136,21 @@ while getopts "oi:mrdwcWCeE" flag; do
         ;;
     E)
         psql_debug_cleanup
+        ;;
+    k)
+        setup_rhdh_namespace
+        setup_operator_group
+        appurl=$(oc whoami --show-console)
+        export OPENSHIFT_APP_DOMAIN=${appurl#*.}
+        keycloak_install
+        ;;
+    p)
+        #shellchekc disable=SC2119
+        ensure_catalog_population
+        ;;
+    l)
+        setup_rhdh_namespace
+        ldap_install
         ;;
     \?)
         log_warn "Invalid option: ${flag} - defaulting to -i (install)"

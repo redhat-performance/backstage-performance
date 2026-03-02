@@ -15,6 +15,8 @@ global:
         disabled: false
       - package: ./dynamic-plugins/dist/backstage-plugin-techdocs-backend-dynamic
         disabled: false
+      - package: ./dynamic-plugins/dist/backstage-community-plugin-catalog-backend-module-ldap-dynamic
+        disabled: false
 orchestrator:
   enabled: false
 upstream:
@@ -33,6 +35,11 @@ upstream:
             port: "${POSTGRES_PORT}"
             user: "${POSTGRES_USER}"
             password: "${POSTGRES_PASSWORD}"
+          knexConfig:
+            pool:
+              min: 10
+              max: 50
+              acquireTimeoutMillis: 60000
     containerPorts:
       backend: 7007
     extraAppConfig:

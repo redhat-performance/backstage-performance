@@ -121,11 +121,6 @@ metrics:
     label: "Duration"
     units: "s"
 
-  PopulateUsersGroupsDuration:
-    title: "Populate Users and Groups Duration"
-    label: "Duration"
-    units: "s"
-
   PopulateCatalogDuration:
     title: "Populate Catalog Duration"
     label: "Duration"
