@@ -88,6 +88,9 @@ LOCUST_OPERATOR_REPO=locust-k8s-operator
 # Helm chart of locust operator
 LOCUST_OPERATOR=locust-operator
 
+# Locust operator chart version (pinned to 1.1.1 for v1 API compatibility)
+LOCUST_OPERATOR_CHART_VERSION ?= 1.1.1
+
 .DEFAULT_GOAL := help
 
 ##	=== Setup Environment ===
@@ -171,7 +174,7 @@ deploy-locust: namespace
 	fi
 	@if ! helm list --namespace $(LOCUST_NAMESPACE) | grep -q "$(LOCUST_OPERATOR)"; then \
 		envsubst<./config/locust-k8s-operator.values.yaml > $(TMP_DIR)/locust-k8s-operator.values.yaml; \
-		helm install $(LOCUST_OPERATOR) locust-k8s-operator/locust-k8s-operator --namespace $(LOCUST_NAMESPACE) --values $(TMP_DIR)/locust-k8s-operator.values.yaml; \
+		helm install $(LOCUST_OPERATOR) locust-k8s-operator/locust-k8s-operator --version $(LOCUST_OPERATOR_CHART_VERSION) --namespace $(LOCUST_NAMESPACE) --values $(TMP_DIR)/locust-k8s-operator.values.yaml; \
 	else \
 		echo "Helm release \"$(LOCUST_OPERATOR)\" already exists"; \
 	fi
