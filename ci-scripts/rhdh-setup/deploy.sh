@@ -65,6 +65,7 @@ export RHDH_OLM_OPERATOR_RESOURCES_EPHEMERAL_STORAGE_REQUESTS=${RHDH_OLM_OPERATO
 
 export PRE_LOAD_DB="${PRE_LOAD_DB:-true}"
 export ENSURE_CATALOG_POPULATION_TIMEOUT=${ENSURE_CATALOG_POPULATION_TIMEOUT:-3600}
+export CATALOG_REFRESH_INTERVAL=${CATALOG_REFRESH_INTERVAL_MINUTES:-50}
 export BACKSTAGE_USER_COUNT="${BACKSTAGE_USER_COUNT:-1}"
 export GROUP_COUNT="${GROUP_COUNT:-1}"
 export API_COUNT="${API_COUNT:-1}"
@@ -443,23 +444,24 @@ setup_rhdh_db() {
         PGBOUNCER_DEFAULT_POOL_SIZE=1
         PGBOUNCER_MAX_DB_CONNECTIONS=1
         PGBOUNCER_MAX_USER_CONNECTIONS=1
-        CLIENT_CONNECTIONS_PER_RHDH_INSTANCE=80
-        DB_CONNECTIONS_HEADROOM_PER_RHDH_INSTANCE=5
-        MIN_RHDH_DB_MAX_CONNECTIONS=180
+        # Sizing: Backstage uses knex pool (e.g. max 50) + many plugin DB connections; allow headroom for startup burst (~30 plugins)
+        CLIENT_CONNECTIONS_PER_RHDH_INSTANCE=100
+        DB_CONNECTIONS_HEADROOM_PER_RHDH_INSTANCE=30
+        MIN_RHDH_DB_MAX_CONNECTIONS=300
         _rhdh_db_max_conn=$(bc <<<"$RHDH_DEPLOYMENT_REPLICAS * ($CLIENT_CONNECTIONS_PER_RHDH_INSTANCE + $DB_CONNECTIONS_HEADROOM_PER_RHDH_INSTANCE)")
         RHDH_DB_MAX_CONNECTIONS=$(bc <<<"if ($_rhdh_db_max_conn < $MIN_RHDH_DB_MAX_CONNECTIONS) $MIN_RHDH_DB_MAX_CONNECTIONS else $_rhdh_db_max_conn")
     else
         # Connection sizing parameters (PgBouncer enabled)
-        CLIENT_CONNECTIONS_PER_RHDH_INSTANCE=80     # Expected DB connections per RHDH replica
-        DB_CONNECTIONS_HEADROOM_PER_RHDH_INSTANCE=5 # Extra headroom per RHDH replica
-        DB_CONNECTIONS_ADMIN_HEADROOM=20            # Reserved for admin/monitoring connections
+        CLIENT_CONNECTIONS_PER_RHDH_INSTANCE=100    # Expected DB connections per RHDH replica (knex pool + plugin DBs)
+        DB_CONNECTIONS_HEADROOM_PER_RHDH_INSTANCE=30 # Extra headroom per RHDH replica (startup burst)
+        DB_CONNECTIONS_ADMIN_HEADROOM=30            # Reserved for admin/monitoring connections
         RHDH_DATABASE_COUNT=50                      # Approximate number of RHDH plugin databases (~20 current + ~10 future)
 
         # Minimum values to handle Backstage startup burst (concurrent plugin initialization)
         # During startup, ~30 plugins create schemas concurrently regardless of replica count
-        MIN_RHDH_DB_MAX_CONNECTIONS=180
-        MIN_PGBOUNCER_MAX_CLIENT_CONNECTIONS=120
-        MIN_PGBOUNCER_MAX_DB_CONNECTIONS=60
+        MIN_RHDH_DB_MAX_CONNECTIONS=300
+        MIN_PGBOUNCER_MAX_CLIENT_CONNECTIONS=150
+        MIN_PGBOUNCER_MAX_DB_CONNECTIONS=80
         # Pool size minimum equals database count to ensure each plugin can connect during startup burst
         MIN_PGBOUNCER_DEFAULT_POOL_SIZE=$RHDH_DATABASE_COUNT
 
@@ -659,7 +661,7 @@ restart_rhdh_deployment() {
         $clin scale deployment "$rhdh_deployment" --replicas=$replicas
         sleep 1m
     done
-    wait_timeout=$((600 * replica_count))
+    wait_timeout=${RHDH_STARTUP_TIMEOUT_SECONDS:-$((600 * replica_count))}
     wait_to_start deployment "$rhdh_deployment" 300 "$wait_timeout"
 }
 
@@ -837,6 +839,12 @@ backstage_install() {
         echo "locations: []" >"$TMP_DIR/locations.yaml"
         create_objs
         yq -i '.catalog.locations |= . + load("'"$TMP_DIR/locations.yaml"'").locations' "$TMP_DIR/app-config.yaml"
+    fi
+    if [ -n "${CATALOG_REFRESH_INTERVAL_MINUTES}" ]; then
+        yq -i '.catalog.processingInterval.hours = 0' "$TMP_DIR/app-config.yaml"
+        yq -i '.catalog.processingInterval.minutes = '"${CATALOG_REFRESH_INTERVAL_MINUTES}"'' "$TMP_DIR/app-config.yaml"
+        yq -i '.catalog.providers.ldapOrg.default.schedule.frequency.hours = 0' "$TMP_DIR/app-config.yaml"
+        yq -i '.catalog.providers.ldapOrg.default.schedule.frequency.minutes = '"${CATALOG_REFRESH_INTERVAL_MINUTES}"'' "$TMP_DIR/app-config.yaml"
     fi
     until $clin create configmap app-config-rhdh --from-file "app-config.rhdh.yaml=$TMP_DIR/app-config.yaml"; do $clin delete configmap app-config-rhdh --ignore-not-found=true; done
     if ${ENABLE_RBAC}; then
