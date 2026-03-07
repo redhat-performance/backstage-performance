@@ -81,6 +81,9 @@ export ARTIFACT_DIR ?= $(shell python3 -c 'import os, sys; print(os.path.realpat
 # Timeout to ensure catalog population
 export ENSURE_CATALOG_POPULATION_TIMEOUT ?= 3600
 
+# Catalog refresh interval in minutes
+export CATALOG_REFRESH_INTERVAL_MINUTES ?= 50
+
 export PROJ_ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
 # Name of the namespace to install locust operator as well as to run Pods of master and workers.
