@@ -121,6 +121,7 @@ try_gather_file load-test.log
 try_gather_dir "${TMP_DIR}/rhdh-db-logs"
 try_gather_dir "${TMP_DIR}/workflows"
 try_gather_file test.env
+try_gather_dir "$TMP_DIR/catalog-entity-counts"
 
 # Metrics
 PYTHON_VENV_DIR=.venv
