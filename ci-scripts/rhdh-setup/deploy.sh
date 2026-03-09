@@ -452,10 +452,10 @@ setup_rhdh_db() {
         RHDH_DB_MAX_CONNECTIONS=$(bc <<<"if ($_rhdh_db_max_conn < $MIN_RHDH_DB_MAX_CONNECTIONS) $MIN_RHDH_DB_MAX_CONNECTIONS else $_rhdh_db_max_conn")
     else
         # Connection sizing parameters (PgBouncer enabled)
-        CLIENT_CONNECTIONS_PER_RHDH_INSTANCE=100    # Expected DB connections per RHDH replica (knex pool + plugin DBs)
+        CLIENT_CONNECTIONS_PER_RHDH_INSTANCE=100     # Expected DB connections per RHDH replica (knex pool + plugin DBs)
         DB_CONNECTIONS_HEADROOM_PER_RHDH_INSTANCE=30 # Extra headroom per RHDH replica (startup burst)
-        DB_CONNECTIONS_ADMIN_HEADROOM=30            # Reserved for admin/monitoring connections
-        RHDH_DATABASE_COUNT=50                      # Approximate number of RHDH plugin databases (~20 current + ~10 future)
+        DB_CONNECTIONS_ADMIN_HEADROOM=30             # Reserved for admin/monitoring connections
+        RHDH_DATABASE_COUNT=50                       # Approximate number of RHDH plugin databases (~20 current + ~10 future)
 
         # Minimum values to handle Backstage startup burst (concurrent plugin initialization)
         # During startup, ~30 plugins create schemas concurrently regardless of replica count
@@ -922,6 +922,20 @@ ensure_catalog_population() {
     wait
 }
 
+log_entity_count() {
+    entity_type=$1
+    e_count=$2
+    b_count=$3
+    timeout=$4
+
+    mkdir -p "$TMP_DIR/catalog-entity-counts"
+    out="$TMP_DIR/catalog-entity-counts/entity-count.$entity_type.csv"
+    if [ ! -f "$out" ]; then
+        echo "Timestamp;Entity_Type;Expected_Count;Current_Count;Timeout" >"$out"
+    fi
+    echo "$(date -u -Ins);$entity_type;$e_count;$b_count;$timeout" >>"$out"
+}
+
 ensure_entity_count() {
     entity_type=$1
     e_count=$2
@@ -935,6 +949,7 @@ ensure_entity_count() {
             log_error "Timeout waiting on '$entity_type' count"
             exit 1
         else
+            log_entity_count "$entity_type" "$e_count" "$b_count" "$timeout"
             if [[ "$last_count" != "$b_count" ]]; then # reset the timeout if current count changes
                 log_info "The current '$entity_type' count changed, resetting waiting timeout to $timeout seconds"
                 timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
