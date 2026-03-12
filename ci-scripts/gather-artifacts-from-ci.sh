@@ -9,13 +9,13 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ARTIFACT_DIR=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "${ARTIFACT_DIR:-.artifacts}")
 mkdir -p "${ARTIFACT_DIR}"
 
-PRS="${PRS:-279 280 281 282 283 284 285 286 287 288 289 290 292 293 294 295 307 308 309 310}"
-BRANCHES="${BRANCHES:-rhdh-v1.7.x main}"
+PRS="${PRS:-}"
+BRANCHES="${BRANCHES:-rhdh-v1.8.x main}"
 
-CURRENT_VERSION=${CURRENT_VERSION:-1.8-164}
-PREVIOUS_VERSION=${PREVIOUS_VERSION:-1.7.2}
-CURRENT_BASE_VERSION=1.8
-PREVIOUS_BASE_VERSION=1.7
+CURRENT_VERSION=${CURRENT_VERSION:-1.9-200-CI}
+PREVIOUS_VERSION=${PREVIOUS_VERSION:-1.8.2}
+CURRENT_BASE_VERSION=1.9
+PREVIOUS_BASE_VERSION=1.8
 
 gather_artifacts_from_ci() {
     for PR_NUMBER in ${PRS}; do
@@ -97,6 +97,15 @@ Orchestrator_Workflow_Instance_by_Id_Response_Time_Avg \
 Orchestrator_Workflow_Instance_by_Id_Response_Time_Max \
 Orchestrator_Workflow_All_Instances_Response_Time_Avg \
 Orchestrator_Workflow_All_Instances_Response_Time_Max \
+Catalog_Allow_Response_Time_Avg \
+Catalog_Deny_Response_Time_Avg \
+RBAC_Allow_Response_Time_Avg \
+RBAC_Deny_Response_Time_Avg \
+Scaffolder_Allow_Response_Time_Avg \
+Scaffolder_Deny_Response_Time_Avg \
+Orchestrator_Allow_Response_Time_Avg \
+Orchestrator_Deny_Response_Time_Avg \
+Auth_Policy_Response_Time_Avg \
 DeployDuration \
 PopulateDuration \
 PopulateUsersGroupsDuration \
@@ -136,7 +145,7 @@ Duration"
 
 generate_rhdh_perf_charts_for_scenarios() {
     # Comparing current version with previous version for each scenario
-    for s in max_concurrency max_concurrency_with_orchestrator max_concurrency_ha_2 max_concurrency_ha_3 rbac rbac_groups rbac_nested orchestrator orchestrator_ha_2 orchestrator_ha_3  ; do
+    for s in mvp-compare mvp-memory-scale mvp-replicas-scale orchestrator-compare orchestrator-memory-scale orchestrator-replicas-scale complex-rbac-compare complex-rbac-memory-scale complex-rbac-replicas-scale; do
 
         export CURRENT_DIR="${ARTIFACT_DIR}/.artifacts.test-${CURRENT_BASE_VERSION}-${s}-${CURRENT_BASE_VERSION}"
         export PREVIOUS_DIR="${ARTIFACT_DIR}/.artifacts.test-${CURRENT_BASE_VERSION}-${s}-${PREVIOUS_BASE_VERSION}"
@@ -151,78 +160,6 @@ generate_rhdh_perf_charts_for_scenarios() {
         generate_rhdh_perf_charts || continue
     done
 
-    # Comparing orchestrator overhead
-    export CURRENT_DIR="${ARTIFACT_DIR}/.artifacts.test-${CURRENT_BASE_VERSION}-max_concurrency_with_orchestrator-${CURRENT_BASE_VERSION}"
-    export PREVIOUS_DIR="${ARTIFACT_DIR}/.artifacts.test-${CURRENT_BASE_VERSION}-max_concurrency-${CURRENT_BASE_VERSION}"
-
-    export SCENARIO=max_concurrency_with_orchestrator_overhead
-    export OUTPUT_DIR="${ARTIFACT_DIR}/.backstage-perf-charts/${SCENARIO}"
-    export CURRENT_VERSION PREVIOUS_VERSION
-    CURRENT_VERSION="Orchestrator<br>($(cat "${CURRENT_DIR}/rhdh-version.txt"))" || true
-    PREVIOUS_VERSION="No orchestrator<br>($(cat "${PREVIOUS_DIR}/rhdh-version.txt"))" || true
-    generate_rhdh_perf_charts || true
-
-    # Comparing Orchestrator HA
-    export CURRENT_DIR="${ARTIFACT_DIR}/.artifacts.test-${CURRENT_BASE_VERSION}-orchestrator_ha_2-${CURRENT_BASE_VERSION}"
-    export PREVIOUS_DIR="${ARTIFACT_DIR}/.artifacts.test-${CURRENT_BASE_VERSION}-orchestrator-${CURRENT_BASE_VERSION}"
-
-    export SCENARIO=orchestrator_ha_2_vs_1
-    export OUTPUT_DIR="${ARTIFACT_DIR}/.backstage-perf-charts/${SCENARIO}"
-    export CURRENT_VERSION PREVIOUS_VERSION
-    CURRENT_VERSION="2 Replicas<br>($(cat "${CURRENT_DIR}/rhdh-version.txt"))" || true
-    PREVIOUS_VERSION="1 Replica<br>($(cat "${PREVIOUS_DIR}/rhdh-version.txt"))" || true
-    generate_rhdh_perf_charts || true
-
-    export CURRENT_DIR="${ARTIFACT_DIR}/.artifacts.test-${CURRENT_BASE_VERSION}-orchestrator_ha_3-${CURRENT_BASE_VERSION}"
-    export PREVIOUS_DIR="${ARTIFACT_DIR}/.artifacts.test-${CURRENT_BASE_VERSION}-orchestrator_ha_2-${CURRENT_BASE_VERSION}"
-
-    export SCENARIO=orchestrator_ha_3_vs_2
-    export OUTPUT_DIR="${ARTIFACT_DIR}/.backstage-perf-charts/${SCENARIO}"
-    export CURRENT_VERSION PREVIOUS_VERSION
-    CURRENT_VERSION="3 Replicas<br>($(cat "${CURRENT_DIR}/rhdh-version.txt"))" || true
-    PREVIOUS_VERSION="2 Replicas<br>($(cat "${PREVIOUS_DIR}/rhdh-version.txt"))" || true
-    generate_rhdh_perf_charts || true
-
-    export CURRENT_DIR="${ARTIFACT_DIR}/.artifacts.test-${CURRENT_BASE_VERSION}-orchestrator_ha_3-${CURRENT_BASE_VERSION}"
-    export PREVIOUS_DIR="${ARTIFACT_DIR}/.artifacts.test-${CURRENT_BASE_VERSION}-orchestrator-${CURRENT_BASE_VERSION}"
-
-    export SCENARIO=orchestrator_ha_3_vs_1
-    export OUTPUT_DIR="${ARTIFACT_DIR}/.backstage-perf-charts/${SCENARIO}"
-    export CURRENT_VERSION PREVIOUS_VERSION
-    CURRENT_VERSION="3 Replicas<br>($(cat "${CURRENT_DIR}/rhdh-version.txt"))" || true
-    PREVIOUS_VERSION="1 Replica<br>($(cat "${PREVIOUS_DIR}/rhdh-version.txt"))" || true
-    generate_rhdh_perf_charts || true
-
-    # Comparing Max Concurrency HA
-    export CURRENT_DIR="${ARTIFACT_DIR}/.artifacts.test-${CURRENT_BASE_VERSION}-max_concurrency_ha_2-${CURRENT_BASE_VERSION}"
-    export PREVIOUS_DIR="${ARTIFACT_DIR}/.artifacts.test-${CURRENT_BASE_VERSION}-max_concurrency-${CURRENT_BASE_VERSION}"
-
-    export SCENARIO=max_concurrency_ha_2_vs_1
-    export OUTPUT_DIR="${ARTIFACT_DIR}/.backstage-perf-charts/${SCENARIO}"
-    export CURRENT_VERSION PREVIOUS_VERSION
-    CURRENT_VERSION="2 Replicas<br>($(cat "${CURRENT_DIR}/rhdh-version.txt"))" || true
-    PREVIOUS_VERSION="1 Replica<br>($(cat "${PREVIOUS_DIR}/rhdh-version.txt"))" || true
-    generate_rhdh_perf_charts || true
-
-    export CURRENT_DIR="${ARTIFACT_DIR}/.artifacts.test-${CURRENT_BASE_VERSION}-max_concurrency_ha_3-${CURRENT_BASE_VERSION}"
-    export PREVIOUS_DIR="${ARTIFACT_DIR}/.artifacts.test-${CURRENT_BASE_VERSION}-max_concurrency_ha_2-${CURRENT_BASE_VERSION}"
-
-    export SCENARIO=max_concurrency_ha_3_vs_2
-    export OUTPUT_DIR="${ARTIFACT_DIR}/.backstage-perf-charts/${SCENARIO}"
-    export CURRENT_VERSION PREVIOUS_VERSION
-    CURRENT_VERSION="3 Replicas<br>($(cat "${CURRENT_DIR}/rhdh-version.txt"))" || true
-    PREVIOUS_VERSION="2 Replicas<br>($(cat "${PREVIOUS_DIR}/rhdh-version.txt"))" || true
-    generate_rhdh_perf_charts || true
-
-    export CURRENT_DIR="${ARTIFACT_DIR}/.artifacts.test-${CURRENT_BASE_VERSION}-max_concurrency_ha_3-${CURRENT_BASE_VERSION}"
-    export PREVIOUS_DIR="${ARTIFACT_DIR}/.artifacts.test-${CURRENT_BASE_VERSION}-max_concurrency-${CURRENT_BASE_VERSION}"
-
-    export SCENARIO=max_concurrency_ha_3_vs_1
-    export OUTPUT_DIR="${ARTIFACT_DIR}/.backstage-perf-charts/${SCENARIO}"
-    export CURRENT_VERSION PREVIOUS_VERSION
-    CURRENT_VERSION="3 Replicas<br>($(cat "${CURRENT_DIR}/rhdh-version.txt"))" || true
-    PREVIOUS_VERSION="1 Replica<br>($(cat "${PREVIOUS_DIR}/rhdh-version.txt"))" || true
-    generate_rhdh_perf_charts || true
 }
 
 all() {
