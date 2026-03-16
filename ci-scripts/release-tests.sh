@@ -60,6 +60,7 @@ export AUTH_PROVIDER=${AUTH_PROVIDER:-keycloak}
 export ENABLE_ORCHESTRATOR=${ENABLE_ORCHESTRATOR:-true}
 export RHDH_HELM_CHART_VERSION=${RHDH_HELM_CHART_VERSION:-}
 export ALWAYS_CLEANUP=${ALWAYS_CLEANUP:-false}
+export SCALE_COMBINED='${SCALE_COMBINED:-}'
 export ENSURE_CATALOG_POPULATION_TIMEOUT=7200
 export CATALOG_REFRESH_INTERVAL_MINUTES=720
 export RHDH_STARTUP_TIMEOUT_SECONDS=7200
@@ -142,137 +143,6 @@ function _test() {
     export RHDH_HELM_CHART_VERSION="$RHDH_HELM_CHART_VERSION_NEW"
     export SOURCE_BRANCH="$SOURCE_BRANCH_NEW"
     configure_run "$ticket" "$branch_new" "$name"
-}
-
-function compare_previous_test() {
-    name="Compare to previous release"
-    nick="compare"
-    ticket="$1" # Jira story
-
-    export DURATION="15m"
-    export SCALE_BS_USERS_GROUPS="1000:250 1000:250 1000:250 1000:250 1000:250"
-    export SCALE_CATALOG_SIZES="2500:2500"
-    export SCALE_DB_STORAGES="1Gi"
-
-    _test "$name" "$nick" "$ticket"
-}
-
-function entity_burden_test() {
-    name="Entity burden test"
-    nick="entity"
-    ticket="$1" # Jira story
-
-    export DURATION="15m"
-    export SCALE_BS_USERS_GROUPS="100:20"
-    export SCALE_CATALOG_SIZES="1:1 5000:5000 10000:10000 15000:15000 20000:20000 25000:25000 30000:30000"
-    export SCALE_DB_STORAGES="20Gi"
-
-    _test "$name" "$nick" "$ticket"
-}
-
-function storage_limit_test() {
-    name="Storage limit test"
-    nick="storage"
-    ticket="$1" # Jira story
-
-    export DURATION="15m"
-    export SCALE_BS_USERS_GROUPS="100:20"
-    export SCALE_CATALOG_SIZES="1:1 3000:3000 4000:4000 5000:5000 6000:6000 7000:7000 8000:8000 9000:9000 10000:10000"
-    export SCALE_DB_STORAGES="1Gi"
-
-    _test "$name" "$nick" "$ticket"
-}
-
-function max_concurrency_test() {
-    name="Max Concurrency test"
-    nick="max_concurrency"
-    ticket="$1" # Jira story
-
-    export DURATION="10m"
-    export RHDH_LOG_LEVEL=debug
-    export SCALE_WORKERS=100
-    export RBAC_POLICY=all_groups_admin_inherited
-    export ENABLE_ORCHESTRATOR=false
-
-    export SCALE_ACTIVE_USERS_SPAWN_RATES="1:1 10:2 25:5 50:10 100:20 150:30 200:40 250:50 300:60 350:70 400:80 500:100"
-    export SCALE_BS_USERS_GROUPS="1000:250"
-    export SCALE_RBAC_POLICY_SIZE="1000"
-    export SCALE_CATALOG_SIZES="2500:2500"
-    export SCALE_REPLICAS="1:1"
-    export SCALE_DB_STORAGES="2Gi"
-    export SCALE_CPU_REQUESTS_LIMITS=":"
-    export SCALE_MEMORY_REQUESTS_LIMITS=":"
-
-    _test "$name" "$nick" "$ticket"
-}
-
-function max_concurrency_ha_2_test() {
-    name="Max Concurrency test HA (2 nodes)"
-    nick="max_concurrency_ha_2"
-    ticket="$1" # Jira story
-
-    export DURATION="10m"
-    export RHDH_LOG_LEVEL=debug
-    export SCALE_WORKERS=100
-    export RBAC_POLICY=all_groups_admin_inherited
-    export ENABLE_ORCHESTRATOR=false
-
-    export SCALE_ACTIVE_USERS_SPAWN_RATES="1:1 10:2 25:5 50:10 100:20 150:30 200:40 250:50 300:60 350:70 400:80 500:100"
-    export SCALE_BS_USERS_GROUPS="1000:250"
-    export SCALE_RBAC_POLICY_SIZE="1000"
-    export SCALE_CATALOG_SIZES="2500:2500"
-    export SCALE_REPLICAS="2:2"
-    export SCALE_DB_STORAGES="2Gi"
-    export SCALE_CPU_REQUESTS_LIMITS=":"
-    export SCALE_MEMORY_REQUESTS_LIMITS=":"
-
-    _test "$name" "$nick" "$ticket"
-}
-
-function max_concurrency_ha_3_test() {
-    name="Max Concurrency test HA (3 nodes)"
-    nick="max_concurrency_ha_3"
-    ticket="$1" # Jira story
-
-    export DURATION="10m"
-    export RHDH_LOG_LEVEL=debug
-    export SCALE_WORKERS=100
-    export RBAC_POLICY=all_groups_admin_inherited
-    export ENABLE_ORCHESTRATOR=false
-
-    export SCALE_ACTIVE_USERS_SPAWN_RATES="1:1 10:2 25:5 50:10 100:20 150:30 200:40 250:50 300:60 350:70 400:80 500:100"
-    export SCALE_BS_USERS_GROUPS="1000:250"
-    export SCALE_RBAC_POLICY_SIZE="1000"
-    export SCALE_CATALOG_SIZES="2500:2500"
-    export SCALE_REPLICAS="3:3"
-    export SCALE_DB_STORAGES="2Gi"
-    export SCALE_CPU_REQUESTS_LIMITS=":"
-    export SCALE_MEMORY_REQUESTS_LIMITS=":"
-
-    _test "$name" "$nick" "$ticket"
-}
-
-function max_concurrency_with_orchestrator_test() {
-    name="Max Concurrency with Orchestrator test"
-    nick="max_concurrency_with_orchestrator"
-    ticket="$1" # Jira story
-
-    export DURATION="10m"
-    export RHDH_LOG_LEVEL=debug
-    export SCALE_WORKERS=100
-    export RBAC_POLICY=all_groups_admin_inherited
-    export ENABLE_ORCHESTRATOR=true
-
-    export SCALE_ACTIVE_USERS_SPAWN_RATES="1:1 10:2 25:5 50:10 100:20 150:30 200:40 250:50 300:60 350:70 400:80 500:100"
-    export SCALE_BS_USERS_GROUPS="1000:250"
-    export SCALE_RBAC_POLICY_SIZE="1000"
-    export SCALE_CATALOG_SIZES="2500:2500"
-    export SCALE_REPLICAS="1:1"
-    export SCALE_DB_STORAGES="2Gi"
-    export SCALE_CPU_REQUESTS_LIMITS=":"
-    export SCALE_MEMORY_REQUESTS_LIMITS=":"
-
-    _test "$name" "$nick" "$ticket"
 }
 
 function mvp_compare_test() {
@@ -433,7 +303,7 @@ function rbac_groups_test() {
     export SCENARIO=mvp
     export ALWAYS_CLEANUP=true
 
-    export SCALE_RBAC_POLICY_SIZE="1000"
+    export SCALE_RBAC_POLICY_SIZE="10000"
     export SCALE_REPLICAS="1:1"
     export SCALE_DB_STORAGES="20Gi"
     export SCALE_CPU_REQUESTS_LIMITS=":"
@@ -537,11 +407,11 @@ function complex_rbac_replicas_scale_test() {
 }
 
 # !!! Configure here !!!
-VERSION_OLD="1.7"
-VERSION_NEW="1.8"
-RHDH_HELM_CHART_VERSION_OLD=1.7.2
-RHDH_HELM_CHART_VERSION_NEW=1.8-164-CI
-SOURCE_BRANCH_OLD=rhdh-v1.7.x
+VERSION_OLD="1.8"
+VERSION_NEW="1.9"
+RHDH_HELM_CHART_VERSION_OLD=1.8.2
+RHDH_HELM_CHART_VERSION_NEW=1.9-200-CI
+SOURCE_BRANCH_OLD=rhdh-v1.8.x
 SOURCE_BRANCH_NEW=main
 
 run_mvp_compare() {
@@ -555,20 +425,20 @@ run_mvp_replicas_scale() {
 }
 
 run_orchestrator_compare() {
-    orchestrator_compare_test "RHIDP-9708" "$@"
+    orchestrator_compare_test "RHIDP-XXXX" "$@"
 }
 run_orchestrator_memory_scale() {
-    orchestrator_memory_scale_test "RHIDP-9708" "$@"
+    orchestrator_memory_scale_test "RHIDP-XXXX" "$@"
 }
 run_orchestrator_replicas_scale() {
-    orchestrator_replicas_scale_test "RHIDP-9708" "$@"
+    orchestrator_replicas_scale_test "RHIDP-XXXX" "$@"
 }
 
 run_rbac_groups_test() {
-    rbac_groups_test "RHIDP-9171"
+    rbac_groups_test "RHIDP-XXXX"
 }
 run_rbac_nested_test() {
-    rbac_nested_test "RHIDP-9173"
+    rbac_nested_test "RHIDP-XXXX"
 }
 
 # Compare test: 5 iterations, 1 replica. Optional: memory e.g. "1Gi:2Gi"
