@@ -95,9 +95,6 @@ LOCUST_OPERATOR_REPO=locust-k8s-operator
 # Helm chart of locust operator
 LOCUST_OPERATOR=locust-operator
 
-# Locust operator chart version (pinned to 1.1.1 for v1 API compatibility)
-LOCUST_OPERATOR_CHART_VERSION ?= 1.1.1
-
 .DEFAULT_GOAL := help
 
 ##	=== Setup Environment ===
@@ -182,14 +179,11 @@ uninstall-workflows:
 ## Deploy and install locust operator helm chart
 .PHONY: deploy-locust
 deploy-locust: namespace
-	@if ! helm repo list --namespace $(LOCUST_NAMESPACE) | grep -q "$(LOCUST_OPERATOR_REPO)"; then \
-		helm repo add $(LOCUST_OPERATOR_REPO) https://abdelrhmanhamouda.github.io/locust-k8s-operator/ --namespace $(LOCUST_NAMESPACE); \
-	else \
-		echo "Helm repo \"$(LOCUST_OPERATOR_REPO)\" already exists"; \
-	fi
+	helm repo add $(LOCUST_OPERATOR_REPO) https://abdelrhmanhamouda.github.io/locust-k8s-operator/ --force-update --namespace $(LOCUST_NAMESPACE)
+
 	@if ! helm list --namespace $(LOCUST_NAMESPACE) | grep -q "$(LOCUST_OPERATOR)"; then \
 		envsubst<./config/locust-k8s-operator.values.yaml > $(TMP_DIR)/locust-k8s-operator.values.yaml; \
-		helm install $(LOCUST_OPERATOR) locust-k8s-operator/locust-k8s-operator --version $(LOCUST_OPERATOR_CHART_VERSION) --namespace $(LOCUST_NAMESPACE) --values $(TMP_DIR)/locust-k8s-operator.values.yaml; \
+		helm install $(LOCUST_OPERATOR) locust-k8s-operator/locust-k8s-operator --namespace $(LOCUST_NAMESPACE) --values $(TMP_DIR)/locust-k8s-operator.values.yaml; \
 	else \
 		echo "Helm release \"$(LOCUST_OPERATOR)\" already exists"; \
 	fi
@@ -198,10 +192,11 @@ deploy-locust: namespace
 ## Uninstall locust operator helm chart
 .PHONY: undeploy-locust
 undeploy-locust: clean
+	@kubectl delete crd locusttests.locust.io --wait --ignore-not-found=true
 	@kubectl delete namespace $(LOCUST_NAMESPACE) --wait --ignore-not-found=true
 	@kubectl delete clusterrolebinding $(LOCUST_NAMESPACE)-locust-k8s-operator --wait --ignore-not-found=true
 	@kubectl delete clusterrole $(LOCUST_NAMESPACE)-locust-k8s-operator --wait --ignore-not-found=true
-	@helm repo remove $(LOCUST_OPERATOR_REPO)
+	@helm repo remove $(LOCUST_OPERATOR_REPO) || true
 
 ##	=== Testing ===
 
@@ -306,17 +301,17 @@ endif
 .PHONY: backup-locust-images
 backup-locust-images:
 	$(eval BACKUP_TIMESTAMP := $(shell date +%Y%m%d-%H%M%S --utc))
-	skopeo copy --src-no-creds docker://quay.io/backstage-performance/locust:latest docker://quay.io/backstage-performance/locust:backup-$(BACKUP_TIMESTAMP)
-	skopeo copy --src-no-creds docker://quay.io/backstage-performance/locust_exporter:latest docker://quay.io/backstage-performance/locust_exporter:backup-$(BACKUP_TIMESTAMP)
-	skopeo copy --src-no-creds docker://quay.io/backstage-performance/locust-k8s-operator:latest docker://quay.io/backstage-performance/locust-k8s-operator:backup-$(BACKUP_TIMESTAMP)
+	skopeo copy --all --src-no-creds docker://quay.io/backstage-performance/locust:latest-2.x docker://quay.io/backstage-performance/locust:backup-$(BACKUP_TIMESTAMP)
+	skopeo copy --all --src-no-creds docker://quay.io/backstage-performance/locust_exporter:latest-2.x docker://quay.io/backstage-performance/locust_exporter:backup-$(BACKUP_TIMESTAMP)
+	skopeo copy --all --src-no-creds docker://quay.io/backstage-performance/locust-k8s-operator:latest-2.x docker://quay.io/backstage-performance/locust-k8s-operator:backup-$(BACKUP_TIMESTAMP)
 
 ## Make the locust images in quay.io up to date with docker.io
 ## Requires write permissions to quay.io/backstage-performance organization or individual repos
 .PHONY: update-locust-images
 update-locust-images: backup-locust-images
-	skopeo copy --src-no-creds docker://docker.io/locustio/locust:latest docker://quay.io/backstage-performance/locust:latest
-	skopeo copy --src-no-creds docker://docker.io/containersol/locust_exporter:latest docker://quay.io/backstage-performance/locust_exporter:latest
-	skopeo copy --src-no-creds docker://docker.io/lotest/locust-k8s-operator:latest docker://quay.io/backstage-performance/locust-k8s-operator:latest
+	skopeo copy --all --src-no-creds docker://docker.io/locustio/locust:latest docker://quay.io/backstage-performance/locust:latest-2.x
+	skopeo copy --all --src-no-creds docker://docker.io/containersol/locust_exporter:latest docker://quay.io/backstage-performance/locust_exporter:latest-2.x
+	skopeo copy --all --src-no-creds docker://docker.io/lotest/locust-k8s-operator:latest docker://quay.io/backstage-performance/locust-k8s-operator:latest-2.x
 
 ## Undeploy RHDH
 .PHONY: undeploy-rhdh
