@@ -1,0 +1,14 @@
+# Page ${PAGE_N} dynamic plugin
+# Note: images build from https://github.com/pmacik/rhdh-loadtests/tree/backstage-performance
+- package: oci://quay.io/backstage-performance/rhdh-loadtest-plugins:bs_${DYNAMIC_PLUGIN_BS_VERSION}_page-${PAGE_N}!internal-backstage-plugin-page-${PAGE_N}
+  disabled: false
+  pluginConfig:
+    dynamicPlugins:
+      frontend:
+        internal.backstage-plugin-page-${PAGE_N}:
+          dynamicRoutes:
+            - path: /page-${PAGE_N}
+              importName: Page
+              menuItem:
+                icon: dashboard
+                text: Page ${PAGE_N}
