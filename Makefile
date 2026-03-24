@@ -10,7 +10,6 @@ export SCENARIO ?= mvp
 # If unsed or empty, the value is determined automatically from RHDH route
 export BASE_HOST ?=
 
-export KEYCLOAK_USER_PASS ?= $(shell mktemp -u XXXXXXXXXX)
 # Used to set --users option of locust CLI (Peak number of concurrent Locust users.). See https://docs.locust.io/en/stable/configuration.html#command-line-options for details
 export USERS ?= 100
 
@@ -64,7 +63,12 @@ export RHDH_DB_RESOURCES_MEMORY_REQUESTS ?=
 export RHDH_DB_RESOURCES_MEMORY_LIMITS ?=
 export RHDH_KEYCLOAK_REPLICAS ?= 1
 export LOCUST_EXTRA_CMD ?=
+export LOCUST_EXTRA_CMD := $(subst ",,$(subst ',,$(LOCUST_EXTRA_CMD)))
 export AUTH_PROVIDER ?= keycloak
+export KEYCLOAK_USER_PASS ?= changeme
+
+export PAGE_N_COUNT ?= 0
+export CATALOG_TAB_N_COUNT ?= 0
 
 # RHDH install method - one of 'helm' or 'olm'
 export RHDH_INSTALL_METHOD ?= helm
@@ -207,11 +211,14 @@ clean:
 	kubectl delete --namespace $(LOCUST_NAMESPACE) cm locust.$(SCENARIO) --ignore-not-found --wait
 	kubectl delete --namespace $(LOCUST_NAMESPACE) locusttests.locust.io $(SCENARIO).test --ignore-not-found --wait || true
 
-## Deploy and run the locust test
-## Run `make test SCENARIO=...` to run a specific scenario
-.PHONY: test
-test: $(TMP_DIR) $(ARTIFACT_DIR)
-	echo $(SCENARIO)>$(TMP_DIR)/benchmark-scenario
+.PHONY: test-local
+test-local: setup-venv
+ifeq ($(shell test "$(PAGE_N_COUNT)" -gt 0 2>/dev/null && echo 1 || echo 0),1)
+	$(eval LOCUST_EXTRA_CMD := $(LOCUST_EXTRA_CMD) --page-n-count $(PAGE_N_COUNT))
+endif
+ifeq ($(shell test "$(CATALOG_TAB_N_COUNT)" -gt 0 2>/dev/null && echo 1 || echo 0),1)
+	$(eval LOCUST_EXTRA_CMD := $(LOCUST_EXTRA_CMD) --catalog-tab-n-count $(CATALOG_TAB_N_COUNT))
+endif
 ifneq ($(shell test '$(AUTH_PROVIDER)' == 'keycloak' && echo 1 || echo 0),0)
 	$(eval key_pass := $(shell oc -n $(RHDH_NAMESPACE) get secret perf-test-secrets -o template --template='{{.data.keycloak_user_pass}}' | base64 -d))
 	$(eval key_host := $(shell oc -n $(RHDH_NAMESPACE) get routes/keycloak -o template --template='{{.spec.host}}' ))
@@ -241,7 +248,51 @@ endif
 		fi; \
 	  BASE_HOST="https://$$(oc get routes "$$rhdh_route" -n "$$RHDH_NAMESPACE" -o jsonpath='{.spec.host}')"; \
 	fi; \
-	cat locust-test-template.yaml | envsubst | kubectl apply --namespace $(LOCUST_NAMESPACE) -f -
+	$(PYTHON_VENV)/bin/locust --host "$$BASE_HOST" --headless --users $$USERS --spawn-rate $$SPAWN_RATE --run-time $$DURATION --print-stats --page-n-count=$$PAGE_N_COUNT --catalog-tab-n-count=$$CATALOG_TAB_N_COUNT $$LOCUST_EXTRA_CMD -f ./scenarios/$$SCENARIO.py
+	@echo "All done!!!"
+
+
+## Deploy and run the locust test
+## Run `make test SCENARIO=...` to run a specific scenario
+.PHONY: test
+test: $(TMP_DIR) $(ARTIFACT_DIR)
+	echo $(SCENARIO)>$(TMP_DIR)/benchmark-scenario
+ifeq ($(shell test "$(PAGE_N_COUNT)" -gt 0 2>/dev/null && echo 1 || echo 0),1)
+	$(eval LOCUST_EXTRA_CMD := $(LOCUST_EXTRA_CMD) --page-n-count $(PAGE_N_COUNT))
+endif
+ifeq ($(shell test "$(CATALOG_TAB_N_COUNT)" -gt 0 2>/dev/null && echo 1 || echo 0),1)
+	$(eval LOCUST_EXTRA_CMD := $(LOCUST_EXTRA_CMD) --catalog-tab-n-count $(CATALOG_TAB_N_COUNT))
+endif
+ifneq ($(shell test '$(AUTH_PROVIDER)' == 'keycloak' && echo 1 || echo 0),0)
+	$(eval key_pass := $(shell oc -n $(RHDH_NAMESPACE) get secret perf-test-secrets -o template --template='{{.data.keycloak_user_pass}}' | base64 -d))
+	$(eval key_host := $(shell oc -n $(RHDH_NAMESPACE) get routes/keycloak -o template --template='{{.spec.host}}' ))
+	$(eval LOCUST_EXTRA_CMD := $(LOCUST_EXTRA_CMD) --keycloak-host $(key_host) --keycloak-password $(key_pass))
+ifeq ($(ENABLE_ORCHESTRATOR),true)
+ifeq ($(SCENARIO),complex-rbac)
+	$(eval LOCUST_EXTRA_CMD := $(LOCUST_EXTRA_CMD) --enable-orchestrator true)
+endif
+endif
+ifneq ($(shell test $(USERS) -gt $(WORKERS) && echo 1 || echo 0),0)
+	@echo "users greater than  workers "
+else
+	$(eval WORKERS := $(USERS))
+endif
+else
+	@echo "no changes"
+endif
+	@ if [ -z "$$BASE_HOST" ]; then \
+	    if [ "$$RHDH_INSTALL_METHOD" == "olm" ]; then \
+				if [ "$$AUTH_PROVIDER" == "keycloak" ]; then \
+						rhdh_route="rhdh"; \
+				else \
+						rhdh_route="backstage-developer-hub"; \
+				fi; \
+		elif [ "$$RHDH_INSTALL_METHOD" == "helm" ]; then \
+				rhdh_route="$$(oc -n "$$RHDH_NAMESPACE" get routes -l app.kubernetes.io/instance="$${RHDH_HELM_RELEASE_NAME}" -o jsonpath='{.items[0].metadata.name}')"; \
+		fi; \
+	  BASE_HOST="https://$$(oc get routes "$$rhdh_route" -n "$$RHDH_NAMESPACE" -o jsonpath='{.spec.host}')"; \
+	fi; \
+	envsubst < locust-test-template.yaml | tee $(TMP_DIR)/locust-test.yaml | kubectl apply --namespace $(LOCUST_NAMESPACE) -f -
 	kubectl create --namespace $(LOCUST_NAMESPACE) configmap locust.$(SCENARIO) --from-file scenarios/$(SCENARIO).py --dry-run=client -o yaml | kubectl apply --namespace $(LOCUST_NAMESPACE) -f -
 	date -u -Ins>$(TMP_DIR)/benchmark-before
 	timeout=$$(python3 -c "from datetime import datetime, timedelta;t_add=int('680'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))"); while [ -z "$$(kubectl get --namespace $(LOCUST_NAMESPACE) pod -l performance-test-pod-name=$(SCENARIO)-test-master -o name)" ]; do if [ "$$(date "+%s")" -gt "$$timeout" ]; then echo "ERROR: Timeout waiting for locust master pod to start"; exit 1; else echo "Waiting for locust master pod to start..."; sleep 5s; fi; done
@@ -308,10 +359,17 @@ backup-locust-images:
 ## Make the locust images in quay.io up to date with docker.io
 ## Requires write permissions to quay.io/backstage-performance organization or individual repos
 .PHONY: update-locust-images
-update-locust-images: backup-locust-images
-	skopeo copy --all --src-no-creds docker://docker.io/locustio/locust:latest docker://quay.io/backstage-performance/locust:latest-2.x
+update-locust-images: backup-locust-images build-locust-image push-locust-image
 	skopeo copy --all --src-no-creds docker://docker.io/containersol/locust_exporter:latest docker://quay.io/backstage-performance/locust_exporter:latest-2.x
 	skopeo copy --all --src-no-creds docker://docker.io/lotest/locust-k8s-operator:latest docker://quay.io/backstage-performance/locust-k8s-operator:latest-2.x
+
+.PHONY: build-locust-image
+build-locust-image:
+	podman build -t quay.io/backstage-performance/locust:latest-2.x -f ./ci-scripts/ui/locust.Containerfile ./ci-scripts/ui
+
+.PHONY: push-locust-image
+push-locust-image:
+	podman push quay.io/backstage-performance/locust:latest-2.x
 
 ## Undeploy RHDH
 .PHONY: undeploy-rhdh

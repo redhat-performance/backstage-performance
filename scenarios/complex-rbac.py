@@ -138,7 +138,7 @@ def setup_test_users(environment, msg, **kwargs):
 
 @events.init.add_listener
 def on_locust_init(environment, **_kwargs):
-    if not isinstance(environment.runner, MasterRunner):
+    if isinstance(environment.runner, WorkerRunner):
         environment.runner.register_message("test_users", setup_test_users)
 
 
@@ -146,7 +146,7 @@ def on_locust_init(environment, **_kwargs):
 def on_test_start(environment, **_kwargs):
     # When the test is started, evenly divides list between
     # worker nodes to ensure unique data across threads
-    if not isinstance(environment.runner, WorkerRunner):
+    if isinstance(environment.runner, MasterRunner):
         users = []
         for i in range(1, int(environment.runner.target_user_count)+1):
             users.append(f"t_{i}")
@@ -166,6 +166,8 @@ def on_test_start(environment, **_kwargs):
 
 @events.init_command_line_parser.add_listener
 def _(parser):
+    parser.add_argument("--page-n-count", type=int, default=0)
+    parser.add_argument("--catalog-tab-n-count", type=int, default=0)
     parser.add_argument("--keycloak-host", type=str, default="")
     parser.add_argument("--keycloak-password", is_secret=True, default="")
     parser.add_argument("--debug", type=bool, default=True)

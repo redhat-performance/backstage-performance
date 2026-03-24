@@ -85,7 +85,24 @@ Scaffolder_Allow_Response_Time_Avg,\
 Scaffolder_Deny_Response_Time_Avg,\
 Orchestrator_Allow_Response_Time_Avg,\
 Orchestrator_Deny_Response_Time_Avg,\
-Auth_Policy_Response_Time_Avg"
+Auth_Policy_Response_Time_Avg,\
+PAGE_N_COUNT,\
+CATALOG_TAB_N_COUNT,\
+DynamicPluginsNCount,\
+LoginPageLoadedResponseTimeAvg,\
+LoginPageLoadedResponseTimeMax,\
+HomePageLoadedResponseTimeAvg,\
+HomePageLoadedResponseTimeMax,\
+CatalogPageLoadedResponseTimeAvg,\
+CatalogPageLoadedResponseTimeMax,\
+ComponentPageLoadedResponseTimeAvg,\
+ComponentPageLoadedResponseTimeMax,\
+CatalogTabNLoadedResponseTimeAvg,\
+CatalogTabNLoadedResponseTimeMax,\
+PageNLoadedResponseTimeAvg,\
+PageNLoadedResponseTimeMax,\
+E2EDurationAvg,\
+E2EDurationMax"
 
 echo "$headers"
 
@@ -172,7 +189,24 @@ find "${1:-.}" -name benchmark.json -print0 | while IFS= read -r -d '' filename;
         .results.rbac.scaffolder.deny_avg.mean,
         .results.rbac.orchestrator.allow_avg.mean,
         .results.rbac.orchestrator.deny_avg.mean,
-        .results.rbac.auth.policy_check_avg.mean
+        .results.rbac.auth.policy_check_avg.mean,
+        .metadata.env.PAGE_N_COUNT,
+        .metadata.env.CATALOG_TAB_N_COUNT,
+        ((.metadata.env.PAGE_N_COUNT | tonumber) + (.metadata.env.CATALOG_TAB_N_COUNT | tonumber)),
+        .results.login_page_loaded.locust_requests_avg_response_time.mean,
+        .results.login_page_loaded.locust_requests_avg_response_time.max,
+        .results.home_page_loaded.locust_requests_avg_response_time.mean,
+        .results.home_page_loaded.locust_requests_avg_response_time.max,
+        .results.catalog_page_loaded.locust_requests_avg_response_time.mean,
+        .results.catalog_page_loaded.locust_requests_avg_response_time.max,
+        .results.component_page_loaded.locust_requests_avg_response_time.mean,
+        .results.component_page_loaded.locust_requests_avg_response_time.max,
+        .results.catalog_tab_n_loaded.locust_requests_avg_response_time.mean,
+        .results.catalog_tab_n_loaded.locust_requests_avg_response_time.max,
+        .results.page_n_loaded.locust_requests_avg_response_time.mean,
+        .results.page_n_loaded.locust_requests_avg_response_time.max,
+        .results.duration.locust_requests_avg_response_time.mean,
+        .results.duration.locust_requests_avg_response_time.max
         ] | @csv' &&
         rc=0 || rc=1
     if [[ "$rc" -ne 0 ]]; then

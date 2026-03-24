@@ -34,6 +34,8 @@ read -ra rbac_policy_size <<<"${SCALE_RBAC_POLICY_SIZE:-10000}"
 
 read -ra catalog_apis_components <<<"${SCALE_CATALOG_SIZES:-1:1 10000:10000}"
 
+read -ra page_n_catalog_tab_n_counts <<<"${SCALE_PAGE_N_CATALOG_TAB_N_COUNTS:-0:0}"
+
 read -ra rhdh_replicas <<<"${SCALE_REPLICAS:-1:1}"
 
 read -ra db_storages <<<"${SCALE_DB_STORAGES:-1Gi 2Gi}"
@@ -107,11 +109,11 @@ for w in "${workers[@]}"; do
                             echo "ERROR: Invalid entry '$combined_entry'. Expected format: active_users:spawn_rate:backstage_users:groups:apis:components"
                             exit 1
                         fi
-                        active_users="${tokens[0]}"  # active users
-                        bu="${tokens[2]}"  # backstage users
-                        bg="${tokens[3]}"  # groups
-                        a="${tokens[4]}"   # apis
-                        c="${tokens[5]}"   # components
+                        active_users="${tokens[0]}" # active users
+                        bu="${tokens[2]}"           # backstage users
+                        bg="${tokens[3]}"           # groups
+                        a="${tokens[4]}"            # apis
+                        c="${tokens[5]}"            # components
                         output="$ARTIFACT_DIR/scalability_c-${r}r-${dbr}dbr-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${active_users}u-${counter}.csv"
                         for cr_cl in "${cpu_requests_limits[@]}"; do
                             IFS=":" read -ra tokens <<<"${cr_cl}"
@@ -124,7 +126,7 @@ for w in "${workers[@]}"; do
                                 [[ -f "${output}" ]] || echo "$header" >"$output"
                                 index="${r}r-${dbr}dbr-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c"
                                 iteration="${index}/test/${counter}/${active_users}u"
-                                (( counter += 1 ))
+                                ((counter += 1))
                                 collect_run_metric
                             done
                         done
@@ -147,14 +149,19 @@ for w in "${workers[@]}"; do
                                     mr="${tokens[0]}"                                        # memory requests
                                     [[ "${#tokens[@]}" == 1 ]] && ml="" || ml="${tokens[1]}" # memory limits
                                     [[ -f "${output}" ]] || echo "$header" >"$output"
-                                    for a_c in "${catalog_apis_components[@]}"; do
-                                        IFS=":" read -ra tokens <<<"${a_c}"
-                                        a="${tokens[0]}"                                       # apis
-                                        [[ "${#tokens[@]}" == 1 ]] && c="" || c="${tokens[1]}" # components
-                                        index="${r}r-${dbr}dbr-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c"
-                                        iteration="${index}/test/${counter}/${active_users}u"
-                                        (( counter += 1 ))
-                                        collect_run_metric
+                                    for p_ct in "${page_n_catalog_tab_n_counts[@]}"; do
+                                        IFS=":" read -ra tokens <<<"${p_ct}"
+                                        p="${tokens[0]}"                                         # page count
+                                        [[ "${#tokens[@]}" == 1 ]] && ct="" || ct="${tokens[1]}" # catalog tab count
+                                        for a_c in "${catalog_apis_components[@]}"; do
+                                            IFS=":" read -ra tokens <<<"${a_c}"
+                                            a="${tokens[0]}"                                       # apis
+                                            [[ "${#tokens[@]}" == 1 ]] && c="" || c="${tokens[1]}" # components
+                                            index="${r}r-${dbr}dbr-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c-${p}p-${ct}ct"
+                                            iteration="${index}/test/${counter}/${active_users}u"
+                                            ((counter += 1))
+                                            collect_run_metric
+                                        done
                                     done
                                 done
                             done
@@ -210,10 +217,24 @@ Scaffolder_Allow_Response_Time_Avg \
 Scaffolder_Deny_Response_Time_Avg \
 Orchestrator_Allow_Response_Time_Avg \
 Orchestrator_Deny_Response_Time_Avg \
-Auth_Policy_Response_Time_Avg"
+Auth_Policy_Response_Time_Avg \
+LoginPageLoadedResponseTimeAvg \
+LoginPageLoadedResponseTimeMax \
+HomePageLoadedResponseTimeAvg \
+HomePageLoadedResponseTimeMax \
+CatalogPageLoadedResponseTimeAvg \
+CatalogPageLoadedResponseTimeMax \
+ComponentPageLoadedResponseTimeAvg \
+ComponentPageLoadedResponseTimeMax \
+CatalogTabNLoadedResponseTimeAvg \
+CatalogTabNLoadedResponseTimeMax \
+PageNLoadedResponseTimeAvg \
+PageNLoadedResponseTimeMax \
+E2EDurationAvg \
+E2EDurationMax"
 
 # Metrics
-for x_axis_scale_label in "ActiveUsers:linear:Active Users" "RBAC_POLICY_SIZE:log:RBAC Policy Size" "Iteration:linear:Iteration" "CATALOG_SIZE:linear:Catalog Size" "COMPONENT_COUNT:linear:Component Count" "API_COUNT:linear:API Count" "RHDH_DEPLOYMENT_REPLICAS:linear:RHDH Deployment Replicas"; do
+for x_axis_scale_label in "ActiveUsers:linear:Active Users" "RBAC_POLICY_SIZE:log:RBAC Policy Size" "Iteration:linear:Iteration" "CATALOG_SIZE:linear:Catalog Size" "COMPONENT_COUNT:linear:Component Count" "API_COUNT:linear:API Count" "RHDH_DEPLOYMENT_REPLICAS:linear:RHDH Deployment Replicas" "DynamicPluginsNCount:linear:Dynamic Plugins Count"; do
     IFS=":" read -ra tokens <<<"${x_axis_scale_label}"
     xa="${tokens[0]}"                                         # x_axis
     [[ "${#tokens[@]}" -lt 2 ]] && sc="" || sc="${tokens[1]}" # scale
