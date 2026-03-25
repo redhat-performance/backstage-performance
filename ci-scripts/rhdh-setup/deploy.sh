@@ -83,6 +83,10 @@ export RBAC_POLICY_UPLOAD_TO_GITHUB="${RBAC_POLICY_UPLOAD_TO_GITHUB:-true}"
 export RHDH_LOG_LEVEL="${RHDH_LOG_LEVEL:-warn}"
 export KEYCLOAK_LOG_LEVEL="${KEYCLOAK_LOG_LEVEL:-WARN}"
 
+export DYNAMIC_PLUGIN_BS_VERSION="${DYNAMIC_PLUGIN_BS_VERSION:-1.48}"
+export PAGE_N_COUNT="${PAGE_N_COUNT:-0}"
+export CATALOG_TAB_N_COUNT="${CATALOG_TAB_N_COUNT:-0}"
+
 export PSQL_LOG="${PSQL_LOG:-true}"
 export RHDH_METRIC="${RHDH_METRIC:-true}"
 export PSQL_EXPORT="${PSQL_EXPORT:-false}"
@@ -91,6 +95,8 @@ export PGBOUNCER_REPLICAS="${PGBOUNCER_REPLICAS:-0}"
 export LOG_MIN_DURATION_STATEMENT="${LOG_MIN_DURATION_STATEMENT:-65}"
 export LOG_MIN_DURATION_SAMPLE="${LOG_MIN_DURATION_SAMPLE:-50}"
 export LOG_STATEMENT_SAMPLE_RATE="${LOG_STATEMENT_SAMPLE_RATE:-0.7}"
+
+export LOCUST_NAMESPACE=${LOCUST_NAMESPACE:-locust-operator}
 
 export INSTALL_METHOD=helm
 
@@ -697,6 +703,32 @@ install_rhdh_with_helm() {
             yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.x.yaml")' "$TMP_DIR/chart-values.temp.yaml"
         fi
         yq -i '.global.dynamic.plugins |= . + load("template/backstage/helm/rbac-plugin-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"
+        if [ "${CATALOG_TAB_N_COUNT}" -gt 0 ] || [ "${PAGE_N_COUNT}" -gt 0 ]; then
+            log_info "Setting up dynamic plugins root volume to 10Gi"
+            yq 'with(.upstream.backstage.extraVolumes[] | select(.name == "dynamic-plugins-root"); .ephemeral.volumeClaimTemplate.spec.resources.requests.storage = "10Gi")' -i "$TMP_DIR/chart-values.temp.yaml"
+        fi
+    fi
+
+    # Page N dynamic plugins
+    export PAGE_N
+    rm -rvf "$TMP_DIR/page-n-plugin-patch.yaml"
+    if [ "${PAGE_N_COUNT}" -gt 0 ]; then
+        for ((PAGE_N = 1; PAGE_N <= PAGE_N_COUNT; ++PAGE_N)); do
+            log_info "Setting up Page ${PAGE_N}/${PAGE_N_COUNT} dynamic plugin"
+            envsubst '${DYNAMIC_PLUGIN_BS_VERSION} ${PAGE_N}' <template/backstage/helm/page-n-plugin-patch.yaml >>"$TMP_DIR/page-n-plugin-patch.yaml"
+        done
+        yq -i '.global.dynamic.plugins |= . + load("'"$TMP_DIR/page-n-plugin-patch.yaml"'")' "$TMP_DIR/chart-values.temp.yaml"
+    fi
+
+    export CATALOG_TAB_N
+    rm -rvf "$TMP_DIR/catalog-tab-n-plugin-patch.yaml"
+    # Catalog tab N dynamic plugins
+    if [ "${CATALOG_TAB_N_COUNT}" -gt 0 ]; then
+        for ((CATALOG_TAB_N = 1; CATALOG_TAB_N <= CATALOG_TAB_N_COUNT; ++CATALOG_TAB_N)); do
+            log_info "Setting up Catalog tab ${CATALOG_TAB_N}/${CATALOG_TAB_N_COUNT} dynamic plugin"
+            envsubst '${DYNAMIC_PLUGIN_BS_VERSION} ${CATALOG_TAB_N}' <template/backstage/helm/catalog-tab-n-plugin-patch.yaml >>"$TMP_DIR/catalog-tab-n-plugin-patch.yaml"
+        done
+        yq -i '.global.dynamic.plugins |= . + load("'"$TMP_DIR/catalog-tab-n-plugin-patch.yaml"'")' "$TMP_DIR/chart-values.temp.yaml"
     fi
 
     # Pod affinity for multiple replicas to schedule on same node

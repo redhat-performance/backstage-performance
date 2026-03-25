@@ -1,0 +1,15 @@
+# Catalog tab ${CATALOG_TAB_N} dynamic plugin
+# Note: images build from https://github.com/pmacik/rhdh-loadtests/tree/backstage-performance
+- package: oci://quay.io/backstage-performance/rhdh-loadtest-plugins:bs_${DYNAMIC_PLUGIN_BS_VERSION}_catalog-tab-${CATALOG_TAB_N}!internal-backstage-plugin-catalog-tab-${CATALOG_TAB_N}
+  disabled: false
+  pluginConfig:
+    dynamicPlugins:
+      frontend:
+        internal.backstage-plugin-catalog-tab-${CATALOG_TAB_N}:
+          entityTabs:
+            - path: /catalog-tab-${CATALOG_TAB_N}
+              title: Catalog Tab ${CATALOG_TAB_N}
+              mountPoint: entity.page.catalog-tab-${CATALOG_TAB_N}
+          mountPoints:
+            - mountPoint: entity.page.catalog-tab-${CATALOG_TAB_N}/cards
+              importName: EntityCatalogCard
