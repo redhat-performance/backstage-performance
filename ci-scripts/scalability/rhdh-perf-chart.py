@@ -152,6 +152,8 @@ else:
         sample_row = next(reader)
         for column_name, value in sample_row.items():
             if column_name != x_axis:  # Skip the x-axis column
+                if value is None or (isinstance(value, str) and not value.strip()):
+                    continue
                 try:
                     float(value)
                     metrics_to_process.append(column_name)
@@ -206,8 +208,16 @@ def generate_chart(metric, csv_files, labels, x_axis, x_scale, metadata=None):
             reader = csv.DictReader(csvfile)
             for row in reader:
                 try:
-                    x_val = float(row[x_axis])
-                    value = float(row[metric])
+                    raw_x = row.get(x_axis)
+                    raw_y = row.get(metric)
+                    if raw_x is None or raw_y is None:
+                        continue
+                    if isinstance(raw_x, str) and not raw_x.strip():
+                        continue
+                    if isinstance(raw_y, str) and not raw_y.strip():
+                        continue
+                    x_val = float(raw_x)
+                    value = float(raw_y)
                     # Convert memory from bytes to MB if metric is memory
                     if 'memory' in metric.lower():
                         value = value / (1024 * 1024)
@@ -218,7 +228,7 @@ def generate_chart(metric, csv_files, labels, x_axis, x_scale, metadata=None):
                             value = value * 100
                     x_vals.append(x_val)
                     metric_values.append(value)
-                except (KeyError, ValueError):
+                except (KeyError, ValueError, TypeError):
                     continue
 
         # Sort values by x-axis
@@ -366,12 +376,14 @@ def generate_chart(metric, csv_files, labels, x_axis, x_scale, metadata=None):
 
     fig.update_layout(**layout_update)
 
-    # Set axis ranges
-    if all_x and all_metric_values:
-        x_min = min(min(x) for x in all_x if x)
-        x_max = max(max(x) for x in all_x if x)
-        y_min = min(min(y) for y in all_metric_values if y)
-        y_max = max(max(y) for y in all_metric_values if y)
+    # Set axis ranges only when at least one series has points (skip empty CSVs / all-invalid rows)
+    series_with_data = [
+        (x, y) for x, y in zip(all_x, all_metric_values) if x and y]
+    if series_with_data:
+        x_min = min(min(x) for x, _ in series_with_data)
+        x_max = max(max(x) for x, _ in series_with_data)
+        y_min = min(min(y) for _, y in series_with_data)
+        y_max = max(max(y) for _, y in series_with_data)
 
         if x_scale == 'log':
             # For log scale, ensure we have reasonable bounds

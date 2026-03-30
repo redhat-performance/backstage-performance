@@ -33,6 +33,8 @@ read -ra rbac_policy_size <<<"${SCALE_RBAC_POLICY_SIZE:-10000}"
 
 read -ra catalog_apis_components <<<"${SCALE_CATALOG_SIZES:-1:1 10000:10000}"
 
+read -ra page_n_catalog_tab_n_counts <<<"${SCALE_PAGE_N_CATALOG_TAB_N_COUNTS:-0:0}"
+
 read -ra rhdh_replicas <<<"${SCALE_REPLICAS:-1:1}"
 
 read -ra db_storages <<<"${SCALE_DB_STORAGES:-1Gi 2Gi}"
@@ -48,13 +50,13 @@ if [ -n "${SCALE_COMBINED:-}" ]; then
     echo "////// RHDH scalability test (COMBINED MODE) //////"
     echo "SCALE_COMBINED is set - overriding inner loops (catalog, users/groups, active_users)"
     echo "Number of combined entries: ${#combined_entries[*]}"
-    echo "Number of scalability matrix iterations: $((${#workers[*]} * ${#cpu_requests_limits[*]} * ${#memory_requests_limits[*]} * ${#rhdh_replicas[*]} * ${#db_storages[*]} * ${#rbac_policy_size[*]} * ${#combined_entries[*]}))"
+    echo "Number of scalability matrix iterations: $((${#workers[*]} * ${#cpu_requests_limits[*]} * ${#memory_requests_limits[*]} * ${#rhdh_replicas[*]} * ${#db_storages[*]} * ${#rbac_policy_size[*]} * ${#combined_entries[*]} * ${#page_n_catalog_tab_n_counts[*]}))"
     echo
 else
     USE_COMBINED_MODE=false
     echo
     echo "////// RHDH scalability test (NESTED LOOPS MODE) //////"
-    echo "Number of scalability matrix iterations: $((${#workers[*]} * ${#active_users_spawn_rate[*]} * ${#bs_users_groups[*]} * ${#catalog_apis_components[*]} * ${#rhdh_replicas[*]} * ${#db_storages[*]} * ${#cpu_requests_limits[*]} * ${#memory_requests_limits[*]} * ${#rbac_policy_size[*]}))"
+    echo "Number of scalability matrix iterations: $((${#workers[*]} * ${#active_users_spawn_rate[*]} * ${#bs_users_groups[*]} * ${#catalog_apis_components[*]} * ${#rhdh_replicas[*]} * ${#db_storages[*]} * ${#cpu_requests_limits[*]} * ${#memory_requests_limits[*]} * ${#rbac_policy_size[*]} * ${#page_n_catalog_tab_n_counts[*]}))"
     echo
 fi
 
@@ -118,7 +120,6 @@ run_test_iteration() {
     mv -vf $$.json "$test_artifacts/benchmark.json"
 }
 
-
 env_setup() {
     echo
     echo "/// Setting up RHDH for scalability test ///"
@@ -138,7 +139,9 @@ env_setup() {
     export WORKERS=$w
     export API_COUNT=$a
     export COMPONENT_COUNT=$c
-    index="${r}r-${dbr}dbr-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c"
+    export PAGE_N_COUNT=$p
+    export CATALOG_TAB_N_COUNT=$ct
+    index="${r}r-${dbr}dbr-db_${s}-${bu}bu-${bg}bg-${rbs}rbs-${w}w-${cr}cr-${cl}cl-${mr}mr-${ml}ml-${a}a-${c}c-${p}p-${ct}ct"
     set +x
     oc login "$OPENSHIFT_API" -u "$OPENSHIFT_USERNAME" -p "$OPENSHIFT_PASSWORD" --insecure-skip-tls-verify=true
 }
@@ -152,24 +155,29 @@ perform_cleanup() {
 }
 
 standard_iteration() {
-    for a_c in "${catalog_apis_components[@]}"; do
-        IFS=":" read -ra tokens <<<"${a_c}"
-        a="${tokens[0]}"                                       # apis
-        [[ "${#tokens[@]}" == 1 ]] && c="" || c="${tokens[1]}" # components
-        for bu_bg in "${bs_users_groups[@]}"; do
-            IFS=":" read -ra tokens <<<"${bu_bg}"
-            bu="${tokens[0]}"                                        # backstage users
-            [[ "${#tokens[@]}" == 1 ]] && bg="" || bg="${tokens[1]}" # backstage groups
-            env_setup
-            if [ "$ALWAYS_CLEANUP" == "false" ]; then
-                perform_cleanup
-            fi
-            for au_sr in "${active_users_spawn_rate[@]}"; do
-                IFS=":" read -ra tokens <<<"${au_sr}"
-                au=${tokens[0]}                                          # active users
-                [[ "${#tokens[@]}" == 1 ]] && sr="" || sr="${tokens[1]}" # spawn rate
-                run_test_iteration
-                ((counter += 1))
+    for p_ct in "${page_n_catalog_tab_n_counts[@]}"; do
+        IFS=":" read -ra tokens <<<"${p_ct}"
+        p="${tokens[0]}"                                         # page count
+        [[ "${#tokens[@]}" == 1 ]] && ct="" || ct="${tokens[1]}" # catalog tab count
+        for a_c in "${catalog_apis_components[@]}"; do
+            IFS=":" read -ra tokens <<<"${a_c}"
+            a="${tokens[0]}"                                       # apis
+            [[ "${#tokens[@]}" == 1 ]] && c="" || c="${tokens[1]}" # components
+            for bu_bg in "${bs_users_groups[@]}"; do
+                IFS=":" read -ra tokens <<<"${bu_bg}"
+                bu="${tokens[0]}"                                        # backstage users
+                [[ "${#tokens[@]}" == 1 ]] && bg="" || bg="${tokens[1]}" # backstage groups
+                env_setup
+                if [ "$ALWAYS_CLEANUP" == "false" ]; then
+                    perform_cleanup
+                fi
+                for au_sr in "${active_users_spawn_rate[@]}"; do
+                    IFS=":" read -ra tokens <<<"${au_sr}"
+                    au=${tokens[0]}                                          # active users
+                    [[ "${#tokens[@]}" == 1 ]] && sr="" || sr="${tokens[1]}" # spawn rate
+                    run_test_iteration
+                    ((counter += 1))
+                done
             done
         done
     done
@@ -205,12 +213,12 @@ for w in "${workers[@]}"; do
                                     echo "ERROR: Invalid entry '$combined_entry'. Expected format: active_users:spawn_rate:backstage_users:groups:apis:components"
                                     exit 1
                                 fi
-                                au="${tokens[0]}"  # active users
-                                sr="${tokens[1]}"  # spawn rate
-                                bu="${tokens[2]}"  # backstage users
-                                bg="${tokens[3]}"  # groups
-                                a="${tokens[4]}"   # apis
-                                c="${tokens[5]}"   # components
+                                au="${tokens[0]}" # active users
+                                sr="${tokens[1]}" # spawn rate
+                                bu="${tokens[2]}" # backstage users
+                                bg="${tokens[3]}" # groups
+                                a="${tokens[4]}"  # apis
+                                c="${tokens[5]}"  # components
                                 env_setup
                                 if [ "$ALWAYS_CLEANUP" == "false" ]; then
                                     perform_cleanup
