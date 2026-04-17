@@ -27,6 +27,7 @@ LOCUST_NAMESPACE="${LOCUST_NAMESPACE:-locust-operator}"
 RHDH_METRIC="${RHDH_METRIC:-true}"
 PSQL_EXPORT="${PSQL_EXPORT:-false}"
 ENABLE_ORCHESTRATOR="${ENABLE_ORCHESTRATOR:-false}"
+UPLOAD_TO_OPENSEARCH="${UPLOAD_TO_OPENSEARCH:-false}"
 
 cli="oc"
 clin="$cli -n $RHDH_NAMESPACE"
@@ -261,6 +262,22 @@ fi
 set +u
 deactivate
 set -u
+
+# Upload results to OpenSearch
+if [ "$UPLOAD_TO_OPENSEARCH" == "true" ]; then
+    export OPENSEARCH_URL OPENSEARCH_USER OPENSEARCH_PASSWORD OPENSEARCH_INDEX
+
+    OPENSEARCH_INDEX=${OPENSEARCH_INDEX:-rhdh-performance.default}
+    OPENSEARCH_URL=$(cat /usr/local/ci-secrets/backstage-performance/rhdh.es.url)
+    OPENSEARCH_USER=$(cat /usr/local/ci-secrets/backstage-performance/rhdh.es.user)
+    OPENSEARCH_PASSWORD=$(cat /usr/local/ci-secrets/backstage-performance/rhdh.es.password)
+
+    python3 -m pip install --quiet -r ci-scripts/opensearch/requirements.txt
+    if [ "$OPENSEARCH_URL" != "" ] && [ "$OPENSEARCH_USER" != "" ] && [ "$OPENSEARCH_PASSWORD" != "" ]; then
+        echo "$(date -u -Ins) Uploading results to OpenSearch"
+        python3 ./ci-scripts/opensearch/upload_benchmark.py "$ARTIFACT_DIR"
+    fi
+fi
 
 # NodeJS profiling
 if [ "$RHDH_INSTALL_METHOD" == "helm" ] && ${ENABLE_PROFILING}; then

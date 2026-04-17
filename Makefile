@@ -67,6 +67,9 @@ export LOCUST_EXTRA_CMD := $(subst ",,$(subst ',,$(LOCUST_EXTRA_CMD)))
 export AUTH_PROVIDER ?= keycloak
 export KEYCLOAK_USER_PASS ?= changeme
 
+export UPLOAD_TO_OPENSEARCH ?= false
+export OPENSEARCH_INDEX ?= rhdh-performance.default
+
 export PAGE_N_COUNT ?= 0
 export CATALOG_TAB_N_COUNT ?= 0
 

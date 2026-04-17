@@ -2,3 +2,4 @@ locust==2.43.3
 plotly==5.17.0
 pyyaml==6.0.3
 selenium==4.41.0
+
