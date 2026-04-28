@@ -32,7 +32,7 @@ export RHDH_IMAGE_REPO ?=
 export RHDH_IMAGE_TAG ?=
 
 # RHDH base version
-export RHDH_BASE_VERSION ?= 1.9
+export RHDH_BASE_VERSION ?= 1.10
 
 # RHDH Helm chart to deploy
 export RHDH_NAMESPACE ?= rhdh-performance
@@ -337,7 +337,7 @@ lint: shellcheck
 
 ## Run the load test in CI end to end
 .PHONY: ci-run
-ci-run: setup-venv deploy-locust test
+ci-run: setup-venv deploy-locust ensure-catalog-population test
 
 ## Deploy and populate RHDH in CI end to end
 .PHONY: ci-deploy
