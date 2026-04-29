@@ -42,7 +42,7 @@ export RHDH_IMAGE_REGISTRY=${RHDH_IMAGE_REGISTRY:-}
 export RHDH_IMAGE_REPO=${RHDH_IMAGE_REPO:-}
 export RHDH_IMAGE_TAG=${RHDH_IMAGE_TAG:-}
 
-export RHDH_BASE_VERSION=${RHDH_BASE_VERSION:-1.9}
+export RHDH_BASE_VERSION=${RHDH_BASE_VERSION:-1.10}
 
 export RHDH_HELM_REPO=${RHDH_HELM_REPO:-oci://quay.io/rhdh/chart}
 export RHDH_HELM_CHART=${RHDH_HELM_CHART:-redhat-developer-hub}
@@ -970,6 +970,16 @@ log_entity_count() {
 
 ensure_entity_count() {
     entity_type=$1
+    if [ "$entity_type" == "User" ]; then
+        entity_icon="👤"
+    elif [ "$entity_type" == "Group" ]; then
+        entity_icon="👥"
+    elif [ "$entity_type" == "Component" ]; then
+        entity_icon="🧩"
+    elif [ "$entity_type" == "API" ]; then
+        entity_icon="⚙️"
+    fi
+    entity_log="$entity_icon $entity_type"
     e_count=$2
     timeout=$3
 
@@ -978,21 +988,21 @@ ensure_entity_count() {
     while true; do
         b_count=$(get_catalog_entity_count "$entity_type")
         if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
-            log_error "Timeout waiting on '$entity_type' count"
+            log_error "Timeout waiting on '$entity_log' count"
             exit 1
         else
             log_entity_count "$entity_type" "$e_count" "$b_count" "$timeout"
             if [[ "$last_count" != "$b_count" ]]; then # reset the timeout if current count changes
-                log_info "The current '$entity_type' count changed, resetting waiting timeout to $timeout seconds"
+                log_info "The current '$entity_log' count changed, resetting waiting timeout to $timeout seconds"
                 timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
                 last_count=$b_count
             fi
             if [[ $b_count -ge $e_count ]]; then
-                log_info "The '$entity_type' count reached expected value ($b_count)"
+                log_info "The '$entity_log' count reached expected value ($b_count)"
                 break
             fi
         fi
-        log_info "Waiting for the '$entity_type' count to be ${e_count} (current: ${b_count})"
+        log_info "Waiting for the '$entity_log' count to be ${e_count} (current: ${b_count})"
         sleep 10s
     done
 }
