@@ -61,9 +61,13 @@ export ENABLE_ORCHESTRATOR=${ENABLE_ORCHESTRATOR:-true}
 export RHDH_HELM_CHART_VERSION=${RHDH_HELM_CHART_VERSION:-}
 export ALWAYS_CLEANUP=${ALWAYS_CLEANUP:-false}
 export SCALE_COMBINED='${SCALE_COMBINED:-}'
-export ENSURE_CATALOG_POPULATION_TIMEOUT=7200
-export CATALOG_REFRESH_INTERVAL_MINUTES=720
-export RHDH_STARTUP_TIMEOUT_SECONDS=7200
+export LOCUST_EXTRA_CMD=${LOCUST_EXTRA_CMD:---reset-stats}
+export PAGE_N_COUNT=${PAGE_N_COUNT:-0}
+export CATALOG_TAB_N_COUNT=${CATALOG_TAB_N_COUNT:-0}
+export ENSURE_CATALOG_POPULATION_TIMEOUT=${ENSURE_CATALOG_POPULATION_TIMEOUT:-7200}
+export CATALOG_REFRESH_INTERVAL_MINUTES=${CATALOG_REFRESH_INTERVAL_MINUTES:-10080}
+export RHDH_STARTUP_TIMEOUT_SECONDS=${RHDH_STARTUP_TIMEOUT_SECONDS:-7200}
+export RHDH_NODEJS_MAX_HEAP_SIZE=${RHDH_NODEJS_MAX_HEAP_SIZE:-2048}
 " >test.env
     git commit -am "chore($ticket): $testname on $branch"
     git push -fu origin "$branch"
@@ -71,14 +75,19 @@ export RHDH_STARTUP_TIMEOUT_SECONDS=7200
     git checkout "$SOURCE_BRANCH"
 
     sleep 5s
-    pr_number=$(
+    pulls_out="$(
         curl -L --silent \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/redhat-performance/backstage-performance/pulls?head=redhat-performance:$branch&state=open" |
-            jq -rc '.[0].number // empty'
-    )
+            "https://api.github.com/repos/redhat-performance/backstage-performance/pulls?head=redhat-performance:$branch&state=open"
+    )"
+    # List endpoint returns an array; auth/errors return an object — avoid jq indexing objects as arrays.
+    pr_number=$(echo "$pulls_out" | jq -rc 'if type == "array" then (.[0].number // empty) else empty end')
+    if [ -z "$pr_number" ] && ! echo "$pulls_out" | jq -e 'type == "array"' >/dev/null 2>&1; then
+        echo "$(date -u +'%Y-%m-%dT%H:%M:%S,%N+00:00') FATAL GitHub API (list PRs) failed: $pulls_out" >&2
+        exit 1
+    fi
 
     if [ -z "$pr_number" ]; then
         curl_data='{
@@ -99,7 +108,11 @@ export RHDH_STARTUP_TIMEOUT_SECONDS=7200
                 "https://api.github.com/repos/redhat-performance/backstage-performance/pulls" \
                 -d "$curl_data"
         )"
-        pr_number=$(echo "$curl_out" | jq -rc '.number')
+        pr_number=$(echo "$curl_out" | jq -rc '.number // empty')
+        if [ -z "$pr_number" ]; then
+            echo "$(date -u +'%Y-%m-%dT%H:%M:%S,%N+00:00') FATAL GitHub API (create PR) failed: $curl_out" >&2
+            exit 1
+        fi
     fi
 
     curl_comment_out="$(
@@ -113,7 +126,11 @@ export RHDH_STARTUP_TIMEOUT_SECONDS=7200
             "https://api.github.com/repos/redhat-performance/backstage-performance/issues/$pr_number/comments" \
             -d '{"body":"/test mvp-scalability"}'
     )"
-    comment_url=$(echo "$curl_comment_out" | jq -rc '.html_url')
+    comment_url=$(echo "$curl_comment_out" | jq -rc '.html_url // empty')
+    if [ -z "$comment_url" ]; then
+        echo "$(date -u +'%Y-%m-%dT%H:%M:%S,%N+00:00') FATAL GitHub API (issue comment) failed: $curl_comment_out" >&2
+        exit 1
+    fi
     echo "$(date -u +'%Y-%m-%dT%H:%M:%S,%N+00:00') INFO Triggered build by ${comment_url}"
 
     curl \
@@ -217,6 +234,39 @@ function mvp_replicas_scale_test() {
     _test "$name" "$nick" "$ticket"
 }
 
+function entity_burden_compare_test() {
+    name="Entity burden test"
+    nick="entity-burden-compare"
+    ticket="$1" # Jira story
+    memory_limits="${2:-}"
+
+    export DURATION="15m"
+    export SCALE_BS_USERS_GROUPS="100:20"
+    export SCALE_CATALOG_SIZES="1:1 5000:5000 10000:10000 15000:15000 20000:20000 25000:25000 30000:30000"
+    export SCALE_DB_STORAGES="20Gi"
+    export SCALE_MEMORY_REQUESTS_LIMITS="${memory_limits:-:}"
+
+    _test "$name" "$nick" "$ticket"
+}
+
+function storage_limit_compare_test() {
+    name="Storage limit test"
+    nick="storage-limit-compare"
+    ticket="$1" # Jira story
+    memory_limits="${2:-}"
+
+    export DURATION="15m"
+    export SCALE_BS_USERS_GROUPS="100:20"
+    export SCALE_CATALOG_SIZES="1:1 3000:3000 4000:4000 5000:5000 6000:6000 7000:7000 8000:8000 9000:9000 10000:10000"
+    export SCALE_DB_STORAGES="1Gi"
+    export SCALE_MEMORY_REQUESTS_LIMITS="${memory_limits:-:}"
+    
+    export ENSURE_CATALOG_POPULATION_TIMEOUT=14400
+    export CATALOG_REFRESH_INTERVAL_MINUTES=10080
+    export RHDH_STARTUP_TIMEOUT_SECONDS=14400
+
+    _test "$name" "$nick" "$ticket"
+}
 
 function orchestrator_compare_test() {
     name="Orchestrator compare test"
@@ -294,6 +344,7 @@ function rbac_groups_test() {
     name="RBAC Groups test"
     nick="rbac_groups"
     ticket="$1" # Jira story
+    memory_limits="${2:-}"
 
     export DURATION="10m"
     export RHDH_LOG_LEVEL=debug
@@ -307,7 +358,7 @@ function rbac_groups_test() {
     export SCALE_REPLICAS="1:1"
     export SCALE_DB_STORAGES="20Gi"
     export SCALE_CPU_REQUESTS_LIMITS=":"
-    export SCALE_MEMORY_REQUESTS_LIMITS=":"
+    export SCALE_MEMORY_REQUESTS_LIMITS="${memory_limits:-:}"
     export SCALE_COMBINED="10:2:1000:10000:2500:2500 50:5:5000:50000:12500:12500 100:10:10000:150000:25000:25000"
 
     _test "$name" "$nick" "$ticket"
@@ -317,6 +368,7 @@ function rbac_nested_test() {
     name="RBAC Nested test"
     nick="rbac_nested"
     ticket="$1" # Jira story
+    memory_limits="${2:-}"
 
     export DURATION="10m"
     export RHDH_LOG_LEVEL=debug
@@ -330,8 +382,217 @@ function rbac_nested_test() {
     export SCALE_REPLICAS="1:1"
     export SCALE_DB_STORAGES="20Gi"
     export SCALE_CPU_REQUESTS_LIMITS=":"
-    export SCALE_MEMORY_REQUESTS_LIMITS=":"
+    export SCALE_MEMORY_REQUESTS_LIMITS="${memory_limits:-:}"
     export SCALE_COMBINED="10:2:1000:10000:2500:2500 50:5:5000:50000:12500:12500 100:10:10000:150000:25000:25000"
+
+    _test "$name" "$nick" "$ticket"
+}
+
+function ui_baseline_compare_test() {
+    name="UI baseline compare test"
+    nick="ui-baseline-compare"
+    ticket="$1"
+    memory_limits="${2:-}"
+
+    export DURATION="10m"
+    export RHDH_LOG_LEVEL=debug
+    export SCALE_WORKERS=1
+    export RBAC_POLICY=all_groups_admin_inherited
+    export ENABLE_ORCHESTRATOR=true
+    export SCENARIO=ui-baseline
+    export ALWAYS_CLEANUP=true
+
+    export SCALE_RBAC_POLICY_SIZE="1000"
+    export SCALE_REPLICAS="1:1"
+    export SCALE_DB_STORAGES="20Gi"
+    export SCALE_CPU_REQUESTS_LIMITS=":"
+    export SCALE_MEMORY_REQUESTS_LIMITS="${memory_limits:-:}"
+    export SCALE_COMBINED="1:1:1000:10000:2500:2500 1:1:1000:10000:2500:2500 1:1:1000:10000:2500:2500 1:1:1000:10000:2500:2500 1:1:1000:10000:2500:2500"
+
+    export PAGE_N_COUNT=0
+    export CATALOG_TAB_N_COUNT=0
+
+    _test "$name" "$nick" "$ticket"
+}
+
+function ui_dynamic_plugins_compare_test() {
+    name="UI dynamic plugins compare test"
+    nick="ui-dynamic-plugins-compare"
+    ticket="$1"
+    memory_limits="${2:-}"
+
+    export DURATION="10m"
+    export RHDH_LOG_LEVEL=debug
+    export SCALE_WORKERS=1
+    export RBAC_POLICY=all_groups_admin_inherited
+    export ENABLE_ORCHESTRATOR=true
+    export SCENARIO=ui-baseline
+    export ALWAYS_CLEANUP=true
+
+    export SCALE_RBAC_POLICY_SIZE="1000"
+    export SCALE_REPLICAS="1:1"
+    export SCALE_DB_STORAGES="20Gi"
+    export SCALE_CPU_REQUESTS_LIMITS=":"
+    export SCALE_MEMORY_REQUESTS_LIMITS="${memory_limits:-:}"
+    export SCALE_COMBINED="1:1:1000:10000:2500:2500 1:1:1000:10000:2500:2500 1:1:1000:10000:2500:2500 1:1:1000:10000:2500:2500 1:1:1000:10000:2500:2500"
+
+    export PAGE_N_COUNT=100
+    export CATALOG_TAB_N_COUNT=100
+
+    _test "$name" "$nick" "$ticket"
+}
+
+function large_scale_xs_compare_test() {
+    name="Large scale XS compare test"
+    nick="large-scale-xs-compare"
+    ticket="$1"
+
+    export DURATION="10m"
+    export RHDH_LOG_LEVEL=debug
+    export SCALE_WORKERS=10
+    export RBAC_POLICY=all_groups_admin_inherited
+    export ENABLE_ORCHESTRATOR=true
+    export SCENARIO=mvp
+    export ALWAYS_CLEANUP=true
+
+    export SCALE_RBAC_POLICY_SIZE="10000"
+    export SCALE_REPLICAS="3:1"
+    export SCALE_DB_STORAGES="20Gi"
+    export SCALE_CPU_REQUESTS_LIMITS="3:3"
+    export SCALE_MEMORY_REQUESTS_LIMITS="2Gi:2Gi"
+    export RHDH_NODEJS_MAX_HEAP_SIZE=2048
+    export SCALE_COMBINED="10:1:1000:10000:1250:1250" # Format "activeusers:spawnrate:users:groups:apis:components"
+
+    export PAGE_N_COUNT=0
+    export CATALOG_TAB_N_COUNT=0
+
+    export ENSURE_CATALOG_POPULATION_TIMEOUT=18000
+    export CATALOG_REFRESH_INTERVAL_MINUTES=10080
+    export RHDH_STARTUP_TIMEOUT_SECONDS=18000
+
+    _test "$name" "$nick" "$ticket"
+}
+
+function large_scale_s_compare_test() {
+    name="Large scale S compare test"
+    nick="large-scale-s-compare"
+    ticket="$1"
+
+    export DURATION="10m"
+    export RHDH_LOG_LEVEL=debug
+    export SCALE_WORKERS=50
+    export RBAC_POLICY=all_groups_admin_inherited
+    export ENABLE_ORCHESTRATOR=true
+    export SCENARIO=mvp
+    export ALWAYS_CLEANUP=true
+
+    export SCALE_RBAC_POLICY_SIZE="50000"
+    export SCALE_REPLICAS="3:1"
+    export SCALE_DB_STORAGES="20Gi"
+    export SCALE_CPU_REQUESTS_LIMITS="3:3"
+    export SCALE_MEMORY_REQUESTS_LIMITS="2Gi:2Gi"
+    export RHDH_NODEJS_MAX_HEAP_SIZE=2048
+    export SCALE_COMBINED="50:5:5000:50000:7500:7500" # Format "activeusers:spawnrate:users:groups:apis:components"
+
+    export PAGE_N_COUNT=0
+    export CATALOG_TAB_N_COUNT=0
+
+    export ENSURE_CATALOG_POPULATION_TIMEOUT=18000
+    export CATALOG_REFRESH_INTERVAL_MINUTES=10080
+    export RHDH_STARTUP_TIMEOUT_SECONDS=18000
+
+    _test "$name" "$nick" "$ticket"
+}
+
+function large_scale_m_compare_test() {
+    name="Large scale M compare test"
+    nick="large-scale-m-compare"
+    ticket="$1"
+
+    export DURATION="10m"
+    export RHDH_LOG_LEVEL=debug
+    export SCALE_WORKERS=50
+    export RBAC_POLICY=all_groups_admin_inherited
+    export ENABLE_ORCHESTRATOR=true
+    export SCENARIO=mvp
+    export ALWAYS_CLEANUP=true
+
+    export SCALE_RBAC_POLICY_SIZE="50000"
+    export SCALE_REPLICAS="3:1"
+    export SCALE_DB_STORAGES="20Gi"
+    export SCALE_CPU_REQUESTS_LIMITS="3:3"
+    export SCALE_MEMORY_REQUESTS_LIMITS="2Gi:2Gi"
+    export RHDH_NODEJS_MAX_HEAP_SIZE=2048
+    export SCALE_COMBINED="100:10:10000:150000:12500:12500" # Format "activeusers:spawnrate:users:groups:apis:components"
+
+    export PAGE_N_COUNT=0
+    export CATALOG_TAB_N_COUNT=0
+
+    export ENSURE_CATALOG_POPULATION_TIMEOUT=18000
+    export CATALOG_REFRESH_INTERVAL_MINUTES=10080
+    export RHDH_STARTUP_TIMEOUT_SECONDS=18000
+
+    _test "$name" "$nick" "$ticket"
+}
+
+function large_scale_l_compare_test() {
+    name="Large scale L compare test"
+    nick="large-scale-l-compare"
+    ticket="$1"
+
+    export DURATION="10m"
+    export RHDH_LOG_LEVEL=debug
+    export SCALE_WORKERS=50
+    export RBAC_POLICY=all_groups_admin_inherited
+    export ENABLE_ORCHESTRATOR=true
+    export SCENARIO=mvp
+    export ALWAYS_CLEANUP=true
+
+    export SCALE_RBAC_POLICY_SIZE="50000"
+    export SCALE_REPLICAS="3:1"
+    export SCALE_DB_STORAGES="50Gi"
+    export SCALE_CPU_REQUESTS_LIMITS="3:3"
+    export SCALE_MEMORY_REQUESTS_LIMITS="6Gi:6Gi"
+    export RHDH_NODEJS_MAX_HEAP_SIZE=4096
+    export SCALE_COMBINED="200:20:20000:350000:25000:25000" # Format "activeusers:spawnrate:users:groups:apis:components"
+
+    export PAGE_N_COUNT=0
+    export CATALOG_TAB_N_COUNT=0
+
+    export ENSURE_CATALOG_POPULATION_TIMEOUT=18000
+    export CATALOG_REFRESH_INTERVAL_MINUTES=10080
+    export RHDH_STARTUP_TIMEOUT_SECONDS=18000
+
+    _test "$name" "$nick" "$ticket"
+}
+
+function large_scale_xl_compare_test() {
+    name="Large scale XL compare test"
+    nick="large-scale-xl-compare"
+    ticket="$1"
+
+    export DURATION="10m"
+    export RHDH_LOG_LEVEL=debug
+    export SCALE_WORKERS=50
+    export RBAC_POLICY=all_groups_admin_inherited
+    export ENABLE_ORCHESTRATOR=true
+    export SCENARIO=mvp
+    export ALWAYS_CLEANUP=true
+
+    export SCALE_RBAC_POLICY_SIZE="50000"
+    export SCALE_REPLICAS="3:1"
+    export SCALE_DB_STORAGES="100Gi"
+    export SCALE_CPU_REQUESTS_LIMITS="3:3"
+    export SCALE_MEMORY_REQUESTS_LIMITS="32Gi:31Gi"
+    export RHDH_NODEJS_MAX_HEAP_SIZE=30720
+    export SCALE_COMBINED="300:30:30000:500000:35000:35000" # Format "activeusers:spawnrate:users:groups:apis:components"
+
+    export PAGE_N_COUNT=0
+    export CATALOG_TAB_N_COUNT=0
+
+    export ENSURE_CATALOG_POPULATION_TIMEOUT=18000
+    export CATALOG_REFRESH_INTERVAL_MINUTES=10080
+    export RHDH_STARTUP_TIMEOUT_SECONDS=18000
 
     _test "$name" "$nick" "$ticket"
 }
@@ -407,15 +668,15 @@ function complex_rbac_replicas_scale_test() {
 }
 
 # !!! Configure here !!!
-VERSION_OLD="1.8"
-VERSION_NEW="1.9"
-RHDH_HELM_CHART_VERSION_OLD=1.8.2
-RHDH_HELM_CHART_VERSION_NEW=1.9-200-CI
-SOURCE_BRANCH_OLD=rhdh-v1.8.x
+VERSION_OLD="1.9"
+VERSION_NEW="1.10"
+RHDH_HELM_CHART_VERSION_OLD=1.9.4
+RHDH_HELM_CHART_VERSION_NEW=1.10-124-CI
+SOURCE_BRANCH_OLD=rhdh-v1.9.x
 SOURCE_BRANCH_NEW=main
 
 run_mvp_compare() {
-    mvp_compare_test "RHIDP-XXXX" "$@"
+    mvp_compare_test "RHIDP-13652" "$@"
 }
 run_mvp_memory_scale() {
     mvp_memory_scale_test "RHIDP-XXXX" "$@"
@@ -424,8 +685,16 @@ run_mvp_replicas_scale() {
     mvp_replicas_scale_test "RHIDP-XXXX" "$@"
 }
 
+run_entity_burden_compare() {
+    entity_burden_compare_test "RHIDP-13652" "$@"
+}
+
+run_storage_limit_compare() {
+    storage_limit_compare_test "RHIDP-13652" "$@"
+}
+
 run_orchestrator_compare() {
-    orchestrator_compare_test "RHIDP-XXXX" "$@"
+    orchestrator_compare_test "RHIDP-13652" "$@"
 }
 run_orchestrator_memory_scale() {
     orchestrator_memory_scale_test "RHIDP-XXXX" "$@"
@@ -435,15 +704,15 @@ run_orchestrator_replicas_scale() {
 }
 
 run_rbac_groups_test() {
-    rbac_groups_test "RHIDP-XXXX"
+    rbac_groups_test "RHIDP-XXXX" "$@"
 }
 run_rbac_nested_test() {
-    rbac_nested_test "RHIDP-XXXX"
+    rbac_nested_test "RHIDP-XXXX" "$@"
 }
 
 # Compare test: 5 iterations, 1 replica. Optional: memory e.g. "1Gi:2Gi"
 run_complex_rbac_compare() {
-    complex_rbac_compare_test "RHIDP-XXXX" "$@"
+    complex_rbac_compare_test "RHIDP-13652" "$@"
 }
 
 # Memory one: compare test with optional memory (memory-scale).
@@ -454,6 +723,30 @@ run_complex_rbac_memory_scale() {
 # Replicas scale test: lower 3 scales, replicas 1..5. Optional: memory.
 run_complex_rbac_replicas_scale() {
     complex_rbac_replicas_scale_test "RHIDP-XXXX" "$@"
+}
+
+run_ui_baseline_compare() {
+    ui_baseline_compare_test "RHIDP-13654" "$@"
+}
+
+run_ui_dynamic_plugins_compare() {
+    ui_dynamic_plugins_compare_test "RHIDP-13654" "$@"
+}
+
+run_large_scale_xs_compare() {
+    large_scale_xs_compare_test "RHIDP-13655"
+}
+run_large_scale_s_compare() {
+    large_scale_s_compare_test "RHIDP-13655"
+}
+run_large_scale_m_compare() {
+    large_scale_m_compare_test "RHIDP-13655"
+}
+run_large_scale_l_compare() {
+    large_scale_l_compare_test "RHIDP-13655"
+}
+run_large_scale_xl_compare() {
+    large_scale_xl_compare_test "RHIDP-13655"
 }
 
 # Optional override: set SCALE_MEMORY_LIMITS (e.g. "1Gi:2Gi" for requests:limits) to pass
@@ -470,6 +763,12 @@ for test_id in "${test_ids[@]}"; do
     "mvp_replicas_scale")
         run_mvp_replicas_scale "${SCALE_MEMORY_LIMITS:-}"
         ;;
+    "entity_burden_compare")
+        run_entity_burden_compare "${SCALE_MEMORY_LIMITS:-}"
+        ;;
+    "storage_limit_compare")
+        run_storage_limit_compare "${SCALE_MEMORY_LIMITS:-}"
+        ;;
     "orchestrator_compare")
         run_orchestrator_compare "${SCALE_MEMORY_LIMITS:-}"
         ;;
@@ -480,10 +779,31 @@ for test_id in "${test_ids[@]}"; do
         run_orchestrator_replicas_scale "${SCALE_MEMORY_LIMITS:-}"
         ;;
     "rbac_groups")
-        run_rbac_groups_test
+        run_rbac_groups_test "${SCALE_MEMORY_LIMITS:-}"
         ;;
     "rbac_nested")
-        run_rbac_nested_test
+        run_rbac_nested_test "${SCALE_MEMORY_LIMITS:-}"
+        ;;
+    "ui_baseline_compare")
+        run_ui_baseline_compare "${SCALE_MEMORY_LIMITS:-}"
+        ;;
+    "ui_dynamic_plugins_compare")
+        run_ui_dynamic_plugins_compare "${SCALE_MEMORY_LIMITS:-}"
+        ;;
+    "large_scale_xs_compare")
+        run_large_scale_xs_compare
+        ;;
+    "large_scale_s_compare")
+        run_large_scale_s_compare
+        ;;
+    "large_scale_m_compare")
+        run_large_scale_m_compare
+        ;;
+    "large_scale_l_compare")
+        run_large_scale_l_compare
+        ;;
+    "large_scale_xl_compare")
+        run_large_scale_xl_compare
         ;;
     "complex_rbac_compare")
         run_complex_rbac_compare "${SCALE_MEMORY_LIMITS:-}"
@@ -498,11 +818,20 @@ for test_id in "${test_ids[@]}"; do
         run_mvp_compare
         run_mvp_memory_scale
         run_mvp_replicas_scale
+        # run_entity_burden_compare
+        # run_storage_limit_compare
         # run_orchestrator_compare
         # run_orchestrator_memory_scale
         # run_orchestrator_replicas_scale
         # run_rbac_groups_test
         # run_rbac_nested_test
+        # run_ui_baseline_compare
+        # run_ui_dynamic_plugins_compare
+        # run_large_scale_xs_compare
+        # run_large_scale_s_compare
+        # run_large_scale_m_compare
+        # run_large_scale_l_compare
+        # run_large_scale_xl_compare
         # run_complex_rbac_compare
         # run_complex_rbac_memory_scale
         # run_complex_rbac_replicas_scale
