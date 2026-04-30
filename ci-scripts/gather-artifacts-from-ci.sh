@@ -30,7 +30,7 @@ gather_artifacts_from_ci() {
 
             JOB_NAME="pull-ci-${ORG}-${REPO}-${BRANCH}-${TEST_NAME}"
 
-            BASE_URL="https://gcsweb-ci.apps.ci.l2s4.p1.openshiftapps.com/gcs/test-platform-results/pr-logs/pull/${ORG}_${REPO}/${PR_NUMBER}/${JOB_NAME}/"
+            BASE_URL="https://gcsweb-ci.apps.ci.l2s4.p1.openshiftapps.com/gcs/test-platform-results/pr-logs/pull/${ORG}_${REPO}/${PR_NUMBER}/${JOB_NAME}"
             LATEST_BUILD=$(curl -sSL "${BASE_URL}/latest-build.txt" |
                 grep -oE '[0-9]{19}' |
                 sort -un |
@@ -143,7 +143,7 @@ PageNLoadedResponseTimeMax \
 E2EDurationAvg \
 E2EDurationMax"
 
-    for x_axis_scale_label in "ActiveUsers:linear:Active Users" "RBAC_POLICY_SIZE:log:RBAC Policy Size" "Iteration:linear:Iteration" "DynamicPluginsNCount:linear:Dynamic Plugins Count"; do
+    for x_axis_scale_label in "ActiveUsers:linear:Active Users" "RBAC_POLICY_SIZE:log:RBAC Policy Size" "Iteration:linear:Iteration" "DynamicPluginsNCount:linear:Dynamic Plugins Count" "CATALOG_SIZE:linear:Catalog Size"; do
         IFS=":" read -ra tokens <<<"${x_axis_scale_label}"
         xa="${tokens[0]}"                                         # x_axis
         [[ "${#tokens[@]}" -lt 2 ]] && sc="" || sc="${tokens[1]}" # scale
