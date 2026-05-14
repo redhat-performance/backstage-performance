@@ -378,6 +378,8 @@ p, role:default/a, catalog-entity, read, allow
 p, role:default/a, catalog.entity.create, create, allow
 p, role:default/a, catalog.location.create, create, allow
 p, role:default/a, catalog.location.read, read, allow
+p, role:default/a, lightspeed.chat.read, read, allow
+p, role:default/a, lightspeed.chat.create, create, allow
 g, user:default/guru, role:default/a
 g, user:development/guest, role:default/a
 EOF
