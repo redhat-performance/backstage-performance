@@ -753,6 +753,7 @@ install_rhdh_with_helm() {
             ${RHDH_NAMESPACE} \
             ${RHDH_METRIC} \
             ${RHDH_LOG_LEVEL} \
+            ${RHDH_BASE_VERSION} \
             ${COOKIE_SECRET} \
             ' <"$TMP_DIR/chart-values.temp.yaml" >"$TMP_DIR/chart-values.yaml"
 

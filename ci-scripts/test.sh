@@ -16,6 +16,12 @@ RHDH_NAMESPACE=${RHDH_NAMESPACE:-rhdh-performance}
 RHDH_INSTALL_METHOD=${RHDH_INSTALL_METHOD:-helm}
 AUTH_PROVIDER=${AUTH_PROVIDER:-keycloak}
 
+export GITHUB_TOKEN GITHUB_USER GITHUB_REPO QUAY_TOKEN
+GITHUB_TOKEN="$(cat /usr/local/ci-secrets/backstage-performance/github.token)"
+GITHUB_USER="$(cat /usr/local/ci-secrets/backstage-performance/github.user)"
+GITHUB_REPO="$(cat /usr/local/ci-secrets/backstage-performance/github.repo)"
+QUAY_TOKEN="$(cat /usr/local/ci-secrets/backstage-performance/quay.token)"
+
 # testing env
 if [ "$RHDH_INSTALL_METHOD" == "olm" ]; then
     if [ "$AUTH_PROVIDER" == "keycloak" ]; then
