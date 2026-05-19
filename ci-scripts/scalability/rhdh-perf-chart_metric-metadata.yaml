@@ -232,3 +232,87 @@ metrics:
     subtitle: "Policy permission"
     label: "Response Time"
     units: "ms"
+
+  LoginPageLoadedResponseTimeAvg:
+    title: "Login Page Load Duration"
+    subtitle: "Average"
+    label: "Duration"
+    units: "ms"
+
+  LoginPageLoadedResponseTimeMax:
+    title: "Login Page Load Duration"
+    subtitle: "Maximum"
+    label: "Duration"
+    units: "ms"
+
+  HomePageLoadedResponseTimeAvg:
+    title: "Home Page Load Duration"
+    subtitle: "Average"
+    label: "Duration"
+    units: "ms"
+
+  HomePageLoadedResponseTimeMax:
+    title: "Home Page Load Duration"
+    subtitle: "Maximum"
+    label: "Duration"
+    units: "ms"
+
+  CatalogPageLoadedResponseTimeAvg:
+    title: "Catalog Page Load Duration"
+    subtitle: "Average"
+    label: "Duration"
+    units: "ms"
+
+  CatalogPageLoadedResponseTimeMax:
+    title: "Catalog Page Load Duration"
+    subtitle: "Maximum"
+    label: "Duration"
+    units: "ms"
+
+  ComponentPageLoadedResponseTimeAvg:
+    title: "Component Page Load Duration"
+    subtitle: "Average"
+    label: "Duration"
+    units: "ms"
+
+  ComponentPageLoadedResponseTimeMax:
+    title: "Component Page Load Duration"
+    subtitle: "Maximum"
+    label: "Duration"
+    units: "ms"
+
+  CatalogTabNLoadedResponseTimeAvg:
+    title: "Catalog Tab N Load Duration"
+    subtitle: "Average"
+    label: "Duration"
+    units: "ms"
+
+  CatalogTabNLoadedResponseTimeMax:
+    title: "Catalog Tab N Load Duration"
+    subtitle: "Maximum"
+    label: "Duration"
+    units: "ms"
+
+  PageNLoadedResponseTimeAvg:
+    title: "Page N Load Duration"
+    subtitle: "Average"
+    label: "Duration" 
+    units: "ms"
+
+  PageNLoadedResponseTimeMax:
+    title: "Page N Load Duration"
+    subtitle: "Maximum"
+    label: "Duration"
+    units: "ms"
+
+  E2EDurationAvg:
+    title: "E2E Test Duration"
+    subtitle: "Average"
+    label: "Duration"
+    units: "ms"
+
+  E2EDurationMax:
+    title: "E2E Test Duration"
+    subtitle: "E2E Duration"
+    label: "Duration"
+    units: "ms"

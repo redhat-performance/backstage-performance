@@ -298,6 +298,9 @@ fi
 echo "$(date -u -Ins) Generating summary CSV"
 ./ci-scripts/runs-to-csv.sh "$ARTIFACT_DIR" >"$ARTIFACT_DIR/summary.csv"
 
+echo "$(date -u -Ins) Generating summary charts"
+./ci-scripts/generate-charts.sh "$ARTIFACT_DIR"
+
 echo "$(date -u -Ins) Collecting error reports"
 # Error report
 find "$ARTIFACT_DIR" -name load-test.log -print0 | sort -V | while IFS= read -r file; do
