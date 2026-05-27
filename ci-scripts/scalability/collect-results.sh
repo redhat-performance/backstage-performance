@@ -86,7 +86,7 @@ rhdh_version=""
 benchmark_jsons="$(find "${ARTIFACT_DIR}" -name benchmark.json || true)"
 if [ -n "$benchmark_jsons" ]; then
     for b_v in $benchmark_jsons; do
-        rhdh_version=$(jq -r '.metadata.image."konflux.additional-tags" | split(", ") | map(select(test("[0-9]\\.[0-9]-[0-9]+"))) | .[0]' "$b_v" || true)
+        rhdh_version=$(jq -r '.metadata.image."konflux.additional-tags" | if type == "string" then split(", ") | map(select(test("[0-9]\\.[0-9]-[0-9]+"))) | .[0] else empty end' "$b_v" || true)
         if [ -n "$rhdh_version" ]; then
             echo "Identified RHDH version: $rhdh_version"
             break

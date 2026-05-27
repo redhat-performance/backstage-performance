@@ -10,12 +10,12 @@ ARTIFACT_DIR=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))'
 mkdir -p "${ARTIFACT_DIR}"
 
 PRS="${PRS:-}"
-BRANCHES="${BRANCHES:-rhdh-v1.8.x main}"
+BRANCHES="${BRANCHES:-rhdh-v1.9.x main}"
 
-CURRENT_VERSION=${CURRENT_VERSION:-1.9-200-CI}
-PREVIOUS_VERSION=${PREVIOUS_VERSION:-1.8.2}
-CURRENT_BASE_VERSION=1.9
-PREVIOUS_BASE_VERSION=1.8
+CURRENT_VERSION=${CURRENT_VERSION:-1.10-124-CI}
+PREVIOUS_VERSION=${PREVIOUS_VERSION:-1.9.4}
+CURRENT_BASE_VERSION=1.10
+PREVIOUS_BASE_VERSION=1.9
 
 gather_artifacts_from_ci() {
     for PR_NUMBER in ${PRS}; do
@@ -110,9 +110,40 @@ DeployDuration \
 PopulateDuration \
 PopulateUsersGroupsDuration \
 PopulateCatalogDuration \
-Duration"
+Duration \
+Orchestrator_Workflow_Overview_Response_Time_Avg \
+Orchestrator_Workflow_Overview_Response_Time_Max \
+Orchestrator_Workflow_Execute_Response_Time_Avg \
+Orchestrator_Workflow_Execute_Response_Time_Max \
+Orchestrator_Workflow_Instance_by_Id_Response_Time_Avg \
+Orchestrator_Workflow_Instance_by_Id_Response_Time_Max \
+Orchestrator_Workflow_All_Instances_Response_Time_Avg \
+Orchestrator_Workflow_All_Instances_Response_Time_Max \
+Catalog_Allow_Response_Time_Avg \
+Catalog_Deny_Response_Time_Avg \
+RBAC_Allow_Response_Time_Avg \
+RBAC_Deny_Response_Time_Avg \
+Scaffolder_Allow_Response_Time_Avg \
+Scaffolder_Deny_Response_Time_Avg \
+Orchestrator_Allow_Response_Time_Avg \
+Orchestrator_Deny_Response_Time_Avg \
+Auth_Policy_Response_Time_Avg \
+LoginPageLoadedResponseTimeAvg \
+LoginPageLoadedResponseTimeMax \
+HomePageLoadedResponseTimeAvg \
+HomePageLoadedResponseTimeMax \
+CatalogPageLoadedResponseTimeAvg \
+CatalogPageLoadedResponseTimeMax \
+ComponentPageLoadedResponseTimeAvg \
+ComponentPageLoadedResponseTimeMax \
+CatalogTabNLoadedResponseTimeAvg \
+CatalogTabNLoadedResponseTimeMax \
+PageNLoadedResponseTimeAvg \
+PageNLoadedResponseTimeMax \
+E2EDurationAvg \
+E2EDurationMax"
 
-    for x_axis_scale_label in "ActiveUsers:linear:Active Users" "RBAC_POLICY_SIZE:log:RBAC Policy Size" "Iteration:linear:Iteration"; do
+    for x_axis_scale_label in "ActiveUsers:linear:Active Users" "RBAC_POLICY_SIZE:log:RBAC Policy Size" "Iteration:linear:Iteration" "DynamicPluginsNCount:linear:Dynamic Plugins Count"; do
         IFS=":" read -ra tokens <<<"${x_axis_scale_label}"
         xa="${tokens[0]}"                                         # x_axis
         [[ "${#tokens[@]}" -lt 2 ]] && sc="" || sc="${tokens[1]}" # scale
@@ -145,7 +176,7 @@ Duration"
 
 generate_rhdh_perf_charts_for_scenarios() {
     # Comparing current version with previous version for each scenario
-    for s in mvp-compare mvp-memory-scale mvp-replicas-scale orchestrator-compare orchestrator-memory-scale orchestrator-replicas-scale complex-rbac-compare complex-rbac-memory-scale complex-rbac-replicas-scale; do
+    for s in mvp-compare mvp-memory-scale mvp-replicas-scale entity-burden-compare storage-limit-compare orchestrator-compare orchestrator-memory-scale orchestrator-replicas-scale complex-rbac-compare complex-rbac-memory-scale complex-rbac-replicas-scale ui-baseline-compare ui-dynamic-plugins-compare large-scale-xs-compare large-scale-s-compare large-scale-m-compare large-scale-l-compare large-scale-xl-compare; do
 
         export CURRENT_DIR="${ARTIFACT_DIR}/.artifacts.test-${CURRENT_BASE_VERSION}-${s}-${CURRENT_BASE_VERSION}"
         export PREVIOUS_DIR="${ARTIFACT_DIR}/.artifacts.test-${CURRENT_BASE_VERSION}-${s}-${PREVIOUS_BASE_VERSION}"
