@@ -2,26 +2,6 @@ global:
   clusterRouterBase: ${OPENSHIFT_APP_DOMAIN}
   imagePullSecrets:
     - rhdh-pull-secret
-  catalogIndex: # workaround for https://redhat.atlassian.net/browse/RHDHBUGS-3095, remove once fixed
-    image:
-      registry: quay.io
-      repository: rhdh/plugin-catalog-index
-      tag: "${RHDH_BASE_VERSION}"
-  lightspeed: # workaround for https://redhat.atlassian.net/browse/RHDHBUGS-3095, remove once fixed
-    initContainer:
-      name: lightspeed-rag-init
-      image:
-        registry: quay.io
-        repository: redhat-ai-dev/rag-content
-        tag: release-1.9-lls-0.5.0-642c567fe10a62b5ff711654306b72912f341e05
-      imagePullPolicy: Always
-    sidecar:
-      name: lightspeed-core
-      image:
-        registry: quay.io
-        repository: lightspeed-core/lightspeed-stack
-        tag: "0.5.1"
-      imagePullPolicy: Always
   dynamic:
     includes:
       - dynamic-plugins.default.yaml
