@@ -777,12 +777,13 @@ install_rhdh_with_helm() {
     if [ -n "${RHDH_RESOURCES_CPU_LIMITS}" ]; then yq -i '.upstream.backstage.resources.limits.cpu = "'"${RHDH_RESOURCES_CPU_LIMITS}"'"' "$TMP_DIR/chart-values.yaml"; fi
     if [ -n "${RHDH_RESOURCES_MEMORY_REQUESTS}" ]; then yq -i '.upstream.backstage.resources.requests.memory = "'"${RHDH_RESOURCES_MEMORY_REQUESTS}"'"' "$TMP_DIR/chart-values.yaml"; fi
     if [ -n "${RHDH_RESOURCES_MEMORY_LIMITS}" ]; then yq -i '.upstream.backstage.resources.limits.memory = "'"${RHDH_RESOURCES_MEMORY_LIMITS}"'"' "$TMP_DIR/chart-values.yaml"; fi
-    if [ -n "${RHDH_NODEJS_MAX_HEAP_SIZE}" ]; then yq -i '.upstream.backstage.extraEnvVars |= . + [{"name": "NODE_OPTIONS", "value": "--max-old-space-size='"${RHDH_NODEJS_MAX_HEAP_SIZE}"'"}]' "$TMP_DIR/chart-values.yaml"; fi
-
-    # NodeJS Profiling
+    if [ -n "${RHDH_NODEJS_MAX_HEAP_SIZE}" ]; then
+        yq -i '.upstream.backstage.extraEnvVars |= . + [{"name": "NODE_OPTIONS", "value": "--max-old-space-size='"${RHDH_NODEJS_MAX_HEAP_SIZE}"'"}]' "$TMP_DIR/chart-values.yaml"
+    fi
     if ${ENABLE_PROFILING}; then
         log_info "Setting up NodeJS Profiling"
-        yq -i '.upstream.backstage.command |= ["node", "--prof", "--heapsnapshot-signal=SIGUSR2", "packages/backend"]' "$TMP_DIR/chart-values.yaml"
+        yq -i '.upstream.backstage.command = ["node","--prof","--logfile=/tmp/rhdh-v8.log","--no-logfile-per-isolate","--heapsnapshot-signal=SIGUSR2","--diagnostic-dir=/tmp","--require","./instrumentation.js","packages/backend"]' "$TMP_DIR/chart-values.yaml"
+        yq -i '.upstream.backstage.args = ["--config", "app-config.yaml", "--config", "app-config.example.yaml", "--config", "app-config.example.production.yaml"] + (.upstream.backstage.args // [])' "$TMP_DIR/chart-values.yaml"
     fi
 
     log_info "Setting up relaxed liveness/readiness probes for large LDAP sync tolerance"
