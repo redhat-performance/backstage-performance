@@ -281,18 +281,7 @@ fi
 
 # NodeJS profiling
 if [ "$RHDH_INSTALL_METHOD" == "helm" ] && ${ENABLE_PROFILING}; then
-    cpu_profile_file="$ARTIFACT_DIR/rhdh.cpu.profile"
-    memory_profile_file="$ARTIFACT_DIR/rhdh.heapsnapshot"
-    pod="$($clin get pod -l app.kubernetes.io/name=developer-hub -o name)"
-    echo "[INFO][$(date -u -Ins)] Collecting CPU profile into $cpu_profile_file"
-    $clin exec "$pod" -c backstage-backend -- /bin/bash -c 'find /opt/app-root/src -name "*v8.log" -exec base64 -w0 {} \;' | base64 -d >"$cpu_profile_file"
-    echo "[INFO][$(date -u -Ins)] Collecting heap snapshot into $memory_profile_file"
-    # shellcheck disable=SC2016
-    $clin exec "$pod" -c backstage-backend -- /bin/bash -c 'for i in $(ls /proc | grep "^[0-9]"); do if [ -f /proc/$i/cmdline ]; then if $(cat /proc/$i/cmdline | grep node); then kill -s USR1 $i; break; fi; fi; done'
-    echo "[INFO][$(date -u -Ins)] Waiting for 3 minutes till the heap snapshot is written down"
-    sleep 3m
-    echo "[INFO][$(date -u -Ins)] Downloading heap snapshot..."
-    $clin exec "$pod" -c backstage-backend -- /bin/bash -c 'find /opt/app-root/src -name "*.heapsnapshot" -exec base64 -w0 {} \;' | base64 -d >"$memory_profile_file"
+    ./ci-scripts/collect-nodejs-profiling.sh
 fi
 
 echo "$(date -u -Ins) Generating summary CSV"

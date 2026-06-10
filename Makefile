@@ -421,6 +421,14 @@ psql-debug-cleanup:
 ensure-catalog-population:
 	cd ci-scripts/rhdh-setup; ./deploy.sh -p
 
+## Collect NodeJS profiling data
+export DOWNLOAD_ONLY ?= false
+export GATHER_MEMORY_PROFILE ?= true
+export GATHER_CPU_PROFILE ?= true
+.PHONY: collect-nodejs-profiling
+collect-nodejs-profiling:
+	DOWNLOAD_ONLY=$(DOWNLOAD_ONLY) GATHER_MEMORY_PROFILE=$(GATHER_MEMORY_PROFILE) GATHER_CPU_PROFILE=$(GATHER_CPU_PROFILE) ./ci-scripts/collect-nodejs-profiling.sh
+
 ##	=== Help ===
 
 ## Print help message for all Makefile targets
