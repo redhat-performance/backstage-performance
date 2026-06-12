@@ -162,8 +162,7 @@ annotate_n() {
 mark_resource_for_rhdh() {
   resource=$1
   name=$2
-  annotate_n "$resource" "$name" "rhdh.redhat.com/backstage-name=developer-hub"
-  label_n "$resource" "$name" "rhdh.redhat.com/ext-config-sync=true"
+  label_n "$resource" "$name" "rhdh.redhat.com/external-config=true"
 }
 
 export -f log_info log_warn log_error log_token log_token_info log_token_err wait_and_approve_install_plans wait_to_exist wait_to_start_in_namespace wait_for_crd wait_to_start label label_n annotate annotate_n mark_resource_for_rhdh

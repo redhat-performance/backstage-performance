@@ -1,0 +1,12 @@
+catalog:
+  providers:
+    devSandbox:
+      default:
+        namespace: toolchain-member-operator
+        schedule:
+          frequency:
+            minutes: 30
+          initialDelay:
+            minutes: 5
+          timeout:
+            minutes: 3

@@ -1,0 +1,6 @@
+app:
+  baseUrl: ${RHDH_URL}
+backend:
+  baseUrl: ${RHDH_URL}
+  cors:
+    origin: ${RHDH_URL}

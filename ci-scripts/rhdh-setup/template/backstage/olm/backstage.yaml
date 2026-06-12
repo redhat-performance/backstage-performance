@@ -1,4 +1,4 @@
-apiVersion: rhdh.redhat.com/v1alpha3
+apiVersion: rhdh.redhat.com/v1alpha5
 kind: Backstage
 metadata:
   name: developer-hub
@@ -11,6 +11,10 @@ spec:
           key: app-config.rhdh.yaml
         - name: app-config-backend-secret
           key: app-config.rhdh.backend-secret.yaml
+        - name: app-config-rhdh-db
+          key: app-config.rhdh.db.yaml
+        - name: app-config-rhdh-urls
+          key: app-config.rhdh.urls.yaml
       mountPath: /opt/app-root/src
     dynamicPluginsConfigMapName: "dynamic-plugins-rhdh"
     extraFiles:
@@ -48,10 +52,25 @@ spec:
           name: keycloak-client-secret-backstage
         - key: BACKEND_SECRET
           name: rhdh-backend-secret
+        - name: rhdh-db-credentials
     imagePullSecrets:
       - rhdh-pull-secret
-    replicas: ${RHDH_DEPLOYMENT_REPLICAS}
     route:
       enabled: true
   database:
-    enableLocalDb: true
+    enableLocalDb: false
+  deployment:
+    patch:
+      spec:
+        replicas: ${RHDH_DEPLOYMENT_REPLICAS}
+        template:
+          spec:
+            containers:
+              - name: backstage-backend
+                volumeMounts:
+                  - name: techdocs-data
+                    mountPath: /opt/app-root/src/techdocs-data
+            volumes:
+              - name: techdocs-data
+                persistentVolumeClaim:
+                  claimName: rhdh-techdocs

@@ -57,6 +57,7 @@ export RHDH_OLM_INDEX_IMAGE="${RHDH_OLM_INDEX_IMAGE:-quay.io/rhdh/iib:${RHDH_BAS
 export RHDH_OLM_CHANNEL=${RHDH_OLM_CHANNEL:-fast}
 export RHDH_OLM_OPERATOR_PACKAGE=${RHDH_OLM_OPERATOR_PACKAGE:-rhdh}
 export RHDH_OLM_WATCH_EXT_CONF=${RHDH_OLM_WATCH_EXT_CONF:-true}
+export RHDH_OLM_ENABLE_CACHE_LABEL_FILTER=${RHDH_OLM_ENABLE_CACHE_LABEL_FILTER:-true}
 export RHDH_OLM_OPERATOR_RESOURCES_CPU_REQUESTS=${RHDH_OLM_OPERATOR_RESOURCES_CPU_REQUESTS:-}
 export RHDH_OLM_OPERATOR_RESOURCES_CPU_LIMITS=${RHDH_OLM_OPERATOR_RESOURCES_CPU_LIMITS:-}
 export RHDH_OLM_OPERATOR_RESOURCES_MEMORY_REQUESTS=${RHDH_OLM_OPERATOR_RESOURCES_MEMORY_REQUESTS:-}
@@ -75,6 +76,7 @@ export AUTH_PROVIDER="${AUTH_PROVIDER:-''}"
 export ENABLE_RBAC="${ENABLE_RBAC:-false}"
 export ENABLE_ORCHESTRATOR="${ENABLE_ORCHESTRATOR:-false}"
 export FORCE_ORCHESTRATOR_INFRA_UNINSTALL="${FORCE_ORCHESTRATOR_INFRA_UNINSTALL:-false}"
+export ENABLE_DEV_SANDBOX_CATALOG_PLUGIN="${ENABLE_DEV_SANDBOX_CATALOG_PLUGIN:-false}"
 export ENABLE_PROFILING="${ENABLE_PROFILING:-false}"
 export RBAC_POLICY="${RBAC_POLICY:-all_groups_admin_inherited}"
 export RBAC_POLICY_FILE_URL="${RBAC_POLICY_FILE_URL:-}"
@@ -824,16 +826,42 @@ install_rhdh_with_helm() {
 install_rhdh_with_olm() {
     $clin create secret generic rhdh-backend-secret --from-literal=BACKEND_SECRET="$(mktemp -u XXXXXXXXXXX)"
     mark_resource_for_rhdh secret rhdh-backend-secret
+
     $clin create cm app-config-backend-secret --from-file=template/backstage/olm/app-config.rhdh.backend-secret.yaml
     mark_resource_for_rhdh cm app-config-backend-secret
+
+    $clin create cm app-config-rhdh-db --from-file=template/backstage/olm/app-config.rhdh.db.yaml
+    mark_resource_for_rhdh cm app-config-rhdh-db
+
+    export RHDH_URL
+    if [ "$AUTH_PROVIDER" == "keycloak" ]; then
+        RHDH_URL="https://rhdh-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}"
+    else
+        RHDH_URL="http://backstage-developer-hub-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}"
+    fi
+    # shellcheck disable=SC2016
+    envsubst '${RHDH_URL}' <template/backstage/olm/app-config.rhdh.urls.yaml >"$TMP_DIR/app-config.rhdh.urls.yaml"
+    $clin create cm app-config-rhdh-urls --from-file="$TMP_DIR/app-config.rhdh.urls.yaml"
+    mark_resource_for_rhdh configmap app-config-rhdh-urls
+
     cp template/backstage/olm/dynamic-plugins.configmap.yaml "$TMP_DIR/dynamic-plugins.configmap.yaml"
     if ${ENABLE_RBAC}; then
         cat template/backstage/olm/rbac-plugin-patch.yaml >>"$TMP_DIR/dynamic-plugins.configmap.yaml"
     fi
+    if ${ENABLE_DEV_SANDBOX_CATALOG_PLUGIN}; then
+        cat template/backstage/olm/dev-sandbox/dev-sandbox-catalog-plugin-patch.yaml >>"$TMP_DIR/dynamic-plugins.configmap.yaml"
+    fi
     $clin apply -f "$TMP_DIR/dynamic-plugins.configmap.yaml"
     mark_resource_for_rhdh cm dynamic-plugins-rhdh
+    mark_resource_for_rhdh cm app-config-rhdh
+    if [ "$AUTH_PROVIDER" == "keycloak" ]; then
+        mark_resource_for_rhdh secret keycloak-client-secret-backstage
+    fi
+    mark_resource_for_rhdh secret rhdh-db-credentials
+    mark_resource_for_rhdh secret rhdh-backend-secret
+    mark_resource_for_rhdh cm app-config-backend-secret
     set -x
-    OLM_CHANNEL="${RHDH_OLM_CHANNEL}" UPSTREAM_IIB="${RHDH_OLM_INDEX_IMAGE}" NAMESPACE_SUBSCRIPTION="${RHDH_OPERATOR_NAMESPACE}" WATCH_EXT_CONF="${RHDH_OLM_WATCH_EXT_CONF}" ./install-rhdh-catalog-source.sh --install-operator "${RHDH_OLM_OPERATOR_PACKAGE:-rhdh}"
+    OLM_CHANNEL="${RHDH_OLM_CHANNEL}" UPSTREAM_IIB="${RHDH_OLM_INDEX_IMAGE}" NAMESPACE_SUBSCRIPTION="${RHDH_OPERATOR_NAMESPACE}" WATCH_EXT_CONF="${RHDH_OLM_WATCH_EXT_CONF}" ENABLE_CACHE_LABEL_FILTER="${RHDH_OLM_ENABLE_CACHE_LABEL_FILTER}" ./install-rhdh-catalog-source.sh --install-operator "${RHDH_OLM_OPERATOR_PACKAGE:-rhdh}"
     set +x
     wait_for_crd backstages.rhdh.redhat.com
 
@@ -848,13 +876,53 @@ install_rhdh_with_olm() {
         yq -i '(.spec.application.image |= "'"${RHDH_IMAGE_REGISTRY}/${RHDH_IMAGE_REPO}:${RHDH_IMAGE_TAG}"'")' "$backstage_yaml"
     fi
     if ${ENABLE_RBAC}; then
-        rbac_policy='[{"name": "rbac-policy"}]'
-        yq -i '(.spec.application.extraFiles.configMaps |= (. // []) + '"$rbac_policy"')' "$backstage_yaml"
+        # Patch backstage deployment to mount rbac-policy PVC if setup_rbac_policy_from_url was used
+        log_info "Patching backstage deployment to mount rbac-policy PVC"
+        # Add volume if not already present
+        if ! yq -e '.spec.deployment.patch.spec.template.spec.volumes[] | select(.name == "rbac-policy")' "$backstage_yaml" >/dev/null 2>&1; then
+            yq -i '.spec.deployment.patch.spec.template.spec.volumes += [{"name": "rbac-policy", "persistentVolumeClaim": { "claimName": "rbac-policy-pvc" }}]' "$backstage_yaml"
+        fi
+        # Add volumeMount if not present for rbac-policy
+        if ! yq -e '.spec.deployment.patch.spec.template.spec.containers[] | select(.name == "backstage-backend") | .volumeMounts[] | select(.name == "rbac-policy")' "$backstage_yaml" >/dev/null 2>&1; then
+            yq -i '(.spec.deployment.patch.spec.template.spec.containers[] | select(.name == "backstage-backend") | .volumeMounts) += [{"name": "rbac-policy", "mountPath": "/opt/app-root/src/rbac"}]' "$backstage_yaml"
+
+        fi
     fi
+    # RHDH resources
+    log_info "Setting up RHDH resources"
+    if [ -n "${RHDH_RESOURCES_CPU_REQUESTS}" ]; then yq -i '(.spec.deployment.patch.spec.template.spec.containers[] | select(.name == "backstage-backend")).resources.requests.cpu = "'"${RHDH_RESOURCES_CPU_REQUESTS}"'"' "$backstage_yaml"; fi
+    if [ -n "${RHDH_RESOURCES_CPU_LIMITS}" ]; then yq -i '(.spec.deployment.patch.spec.template.spec.containers[] | select(.name == "backstage-backend")).resources.limits.cpu = "'"${RHDH_RESOURCES_CPU_LIMITS}"'"' "$backstage_yaml"; fi
+    if [ -n "${RHDH_RESOURCES_MEMORY_REQUESTS}" ]; then yq -i '(.spec.deployment.patch.spec.template.spec.containers[] | select(.name == "backstage-backend")).resources.requests.memory = "'"${RHDH_RESOURCES_MEMORY_REQUESTS}"'"' "$backstage_yaml"; fi
+    if [ -n "${RHDH_RESOURCES_MEMORY_LIMITS}" ]; then yq -i '(.spec.deployment.patch.spec.template.spec.containers[] | select(.name == "backstage-backend")).resources.limits.memory = "'"${RHDH_RESOURCES_MEMORY_LIMITS}"'"' "$backstage_yaml"; fi
+    if [ -n "${RHDH_NODEJS_MAX_HEAP_SIZE}" ]; then yq -i '(.spec.application.extraEnvs.envs) += [{"name": "NODE_OPTIONS", "value": "--max-old-space-size='"${RHDH_NODEJS_MAX_HEAP_SIZE}"'"}]' "$backstage_yaml"; fi
+
+    if ${ENABLE_DEV_SANDBOX_CATALOG_PLUGIN}; then
+        log_info "Applying dev-sandbox-catalog-plugin"
+        envsubst <template/backstage/olm/dev-sandbox/dev-sandbox-catalog.rbac.yaml | $clin apply -f -
+        yq -i '.spec.deployment.patch.spec.template.spec.serviceAccountName = "developer-hub"' "$backstage_yaml"
+        # Add volume if not already present
+        if ! yq -e '.spec.deployment.patch.spec.template.spec.volumes[] | select(.name == "kube-api-access")' "$backstage_yaml" >/dev/null 2>&1; then
+            yq -i '.spec.deployment.patch.spec.template.spec.volumes += load("template/backstage/olm/dev-sandbox/dev-sandbox-catalog-plugin-volumes-patch.yaml")' "$backstage_yaml"
+        fi
+        # Add volumeMount if not present for kube-api-access
+        if ! yq -e '.spec.deployment.patch.spec.template.spec.containers[] | select(.name == "backstage-backend") | .volumeMounts[] | select(.name == "kube-api-access")' "$backstage_yaml" >/dev/null 2>&1; then
+            yq -i '(.spec.deployment.patch.spec.template.spec.containers[] | select(.name == "backstage-backend") | .volumeMounts) += load("template/backstage/olm/dev-sandbox/dev-sandbox-catalog-plugin-volumemounts-patch.yaml")' "$backstage_yaml"
+        fi
+        $clin create cm app-config-rhdh-dev-sandbox-catalog-plugin --from-file=template/backstage/olm/dev-sandbox/app-config.rhdh.dev-sandbox-catalog-plugin.yaml
+        mark_resource_for_rhdh cm app-config-rhdh-dev-sandbox-catalog-plugin
+        yq -i '.spec.application.appConfig.configMaps += [{"name": "app-config-rhdh-dev-sandbox-catalog-plugin", "key": "app-config.rhdh.dev-sandbox-catalog-plugin.yaml"}]' "$backstage_yaml"
+    fi
+    log_info "Setting up relaxed liveness/readiness probes for large LDAP sync tolerance"
+    failureThreshold=$(bc -l <<<"scale=0; ($API_COUNT + $COMPONENT_COUNT + $BACKSTAGE_USER_COUNT + $GROUP_COUNT) / 2000")
+    yq -i '(.spec.deployment.patch.spec.template.spec.containers[] | select(.name == "backstage-backend") | .readinessProbe) = {"httpGet":{"path":"/healthcheck","port":7007,"scheme":"HTTP"},"initialDelaySeconds":60,"timeoutSeconds":5,"periodSeconds":60,"successThreshold":1,"failureThreshold":'"$failureThreshold"'}' "$backstage_yaml"
+    yq -i '(.spec.deployment.patch.spec.template.spec.containers[] | select(.name == "backstage-backend") | .livenessProbe) = {"httpGet":{"path":"/healthcheck","port":7007,"scheme":"HTTP"},"initialDelaySeconds":60,"timeoutSeconds":5,"periodSeconds":60,"successThreshold":1,"failureThreshold":'"$failureThreshold"'}' "$backstage_yaml"
+    yq -i '(.spec.deployment.patch.spec.progressDeadlineSeconds) = '"${RHDH_STARTUP_TIMEOUT_SECONDS}"'' "$backstage_yaml"
+
     $clin apply -f "$backstage_yaml"
 
-    wait_to_start statefulset "backstage-psql-developer-hub" 300 300
-    wait_to_start deployment "backstage-developer-hub" 300 300
+    wait_for_rhdh_db_to_start
+    wait_timeout=${RHDH_STARTUP_TIMEOUT_SECONDS:-$((600 * replica_count))}
+    wait_to_start deployment "backstage-developer-hub" 300 "$wait_timeout"
     return $?
 }
 
@@ -881,6 +949,9 @@ backstage_install() {
         yq -i '.catalog.providers.ldapOrg.default.schedule.frequency.minutes = '"${CATALOG_REFRESH_INTERVAL_MINUTES}"'' "$TMP_DIR/app-config.yaml"
     fi
     until $clin create configmap app-config-rhdh --from-file "app-config.rhdh.yaml=$TMP_DIR/app-config.yaml"; do $clin delete configmap app-config-rhdh --ignore-not-found=true; done
+    if [ "$INSTALL_METHOD" == "olm" ]; then
+        mark_resource_for_rhdh configmap app-config-rhdh
+    fi
     if ${ENABLE_RBAC}; then
         if ${RBAC_POLICY_UPLOAD_TO_GITHUB}; then
             log_info "RBAC policy will be generated and uploaded to GitHub"
@@ -1099,6 +1170,7 @@ delete_rhdh_with_olm() {
     done
     $cli delete namespace "$RHDH_OPERATOR_NAMESPACE" --ignore-not-found=true --wait
     $cli delete crd backstages.rhdh.redhat.com --ignore-not-found=true --wait
+    $cli delete -f template/backstage/olm/dev-sandbox/dev-sandbox-catalog.rbac.yaml --ignore-not-found=true --wait
 }
 
 delete() {
