@@ -15,7 +15,26 @@ podSecurityContext:
 k8s:
   clusterRole:
     enabled: true
-
+locustPods:
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+      ephemeralStorage: 500Mi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+      ephemeralStorage: 2Gi
+  workerResources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+      ephemeralStorage: 500Mi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+      ephemeralStorage: 2Gi
+      
 config:
   loadGenerationPods:
     resource:
