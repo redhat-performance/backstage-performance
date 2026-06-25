@@ -49,4 +49,3 @@ techdocs:
       publishDirectory: /opt/app-root/src/techdocs-data
 enabled:
   github: true
-  keycloak: true

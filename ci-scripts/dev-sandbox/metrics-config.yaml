@@ -127,6 +127,9 @@
 {{ monitor_pod('rhdh-operator', 'rhdh-operator.*', '(rhdh|backstage)-(operator|controller-manager)', 60) }}
 {{ pod_info('rhdh-operator', 'rhdh-operator.*', '(rhdh|backstage)-(operator|controller-manager)', 'manager') }}
 
+{{ monitor_pod('rhdh-developer-hub', 'rhdh-performance', 'backstage-developer-hub.*', 60) }}
+{{ pod_info('rhdh-developer-hub', 'rhdh-performance', 'backstage-developer-hub.*', 'backstage-backend') }}
+
 - name: measurements.rhdh-operator.restarts
   monitoring_query: kube_pod_container_status_restarts_total{namespace="rhdh-operator", pod=~"(rhdh|backstage)-(operator|controller-manager)-.*", container="manager"}
   monitoring_step: 60

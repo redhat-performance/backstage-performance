@@ -1,0 +1,2 @@
+      - package: oci://quay.io/asoro/dev-sandbox-catalog-backend-module:0.4.0
+        disabled: false
