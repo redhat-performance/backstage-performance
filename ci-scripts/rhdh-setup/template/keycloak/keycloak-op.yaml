@@ -4,7 +4,7 @@ kind: Subscription
 metadata:
   name: rhbk-operator
 spec:
-  channel: stable-v26.0
+  channel: stable-v26.6
   name: rhbk-operator
   source: redhat-operators
   sourceNamespace: openshift-marketplace
