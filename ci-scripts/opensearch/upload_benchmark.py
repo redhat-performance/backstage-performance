@@ -76,6 +76,8 @@ INDEX_MAPPING = {
             "pre_load_db": {"type": "keyword"},
             "wait_for_search_index": {"type": "keyword"},
             "scalability_iteration": {"type": "integer"},
+            "rhdh_image_digest": {"type": "keyword"},
+            "rhdh_release_tag": {"type": "keyword"},
             "measurements": {"type": "object", "dynamic": True},
             "results": {"type": "object", "dynamic": True},
             "timings": {
@@ -299,6 +301,11 @@ def transform_benchmark(benchmark: dict, filepath: str) -> dict:
         "pre_load_db": env.get("PRE_LOAD_DB"),
         "wait_for_search_index": env.get("WAIT_FOR_SEARCH_INDEX"),
         "scalability_iteration": safe_int(nested_get(meta, "scalability", "iteration")),
+        "rhdh_image_digest": nested_get(
+            meta, "cluster", "pods", "rhdh-developer-hub-backstage-backend", "image"
+        ),
+        "rhdh_release_tag": nested_get(meta, "image", "konflux.additional-tags")
+        or env.get("RHDH_HELM_CHART_VERSION"),
     }
 
     doc["measurements"] = _extract_measurements(meas)
