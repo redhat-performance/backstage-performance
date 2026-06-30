@@ -1,0 +1,3 @@
+- name: kube-api-access
+  mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+  readOnly: true

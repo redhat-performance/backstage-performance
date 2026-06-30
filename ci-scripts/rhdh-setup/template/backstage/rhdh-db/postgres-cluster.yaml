@@ -3,6 +3,7 @@ kind: PostgresCluster
 metadata:
   name: rhdh-postgresql-cluster
 spec:
+  image: registry.connect.redhat.com/crunchydata/crunchy-postgres@sha256:16aa44a68786e213130e84baf3fb2292ee5acdcf2695d87b25f8172492d2bf20
   postgresVersion: 16
   patroni:
     dynamicConfiguration:
@@ -40,6 +41,7 @@ spec:
                     postgres-operator.crunchydata.com/instance-set: primary
   backups:
     pgbackrest:
+      image: registry.connect.redhat.com/crunchydata/crunchy-pgbackrest@sha256:1c7f0a3a31916f8f8658f0d22a019aaf7832a21027e90679fe5ce3c75638f1ea
       repos:
         - name: repo1
           volume:

@@ -126,4 +126,4 @@ done <<<"$(find "$monitoring_collection_dir" -name '*.csv')"
 wait
 
 csvjoin -c timestamp -d ";" --datetime-format "%F %T" "$monitoring_collection_dir"/*.csv >"$ARTIFACT_DIR/metrics-all.csv"
-csvcut -c "timestamp,measurements.cluster_configmaps_count,measurements.cluster_namespaces_count,measurements.cluster_secrets_count,measurements.rhdh-operator.memory,measurements.rhdh-operator.restarts" "$ARTIFACT_DIR/metrics-all.csv" >"$ARTIFACT_DIR/metrics.summary.csv"
+csvcut -c "timestamp,measurements.cluster_configmaps_count,measurements.cluster_namespaces_count,measurements.cluster_secrets_count,measurements.rhdh-operator.memory,measurements.rhdh-operator.restarts,measurements.rhdh-developer-hub.cpu,measurements.rhdh-developer-hub.memory,measurements.rhdh-developer-hub.restarts" "$ARTIFACT_DIR/metrics-all.csv" >"$ARTIFACT_DIR/metrics.summary.csv"

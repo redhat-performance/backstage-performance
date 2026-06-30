@@ -9,4 +9,4 @@ spec:
   name: crunchy-postgres-operator
   source: certified-operators
   sourceNamespace: openshift-marketplace
-  startingCSV: postgresoperator.v5.8.6
+  startingCSV: postgresoperator.v5.8.7
