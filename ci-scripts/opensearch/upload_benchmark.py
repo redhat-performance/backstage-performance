@@ -304,8 +304,7 @@ def transform_benchmark(benchmark: dict, filepath: str) -> dict:
         "rhdh_image_digest": nested_get(
             meta, "cluster", "pods", "rhdh-developer-hub-backstage-backend", "image"
         ),
-        "rhdh_release_tag": nested_get(meta, "image", "konflux.additional-tags")
-        or env.get("RHDH_HELM_CHART_VERSION"),
+        "rhdh_release_tag": nested_get(meta, "image", "konflux.additional-tags", default="").split(",")[-1].strip(),
     }
 
     doc["measurements"] = _extract_measurements(meas)
