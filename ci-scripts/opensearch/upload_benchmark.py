@@ -140,6 +140,10 @@ def ensure_index(client: OpenSearch) -> None:
         client.indices.create(index=INDEX_NAME, body=INDEX_MAPPING)
         log.info("Created index '%s'", INDEX_NAME)
     else:
+        client.indices.put_mapping(
+            index=INDEX_NAME,
+            body={"properties": INDEX_MAPPING["mappings"]["properties"]},
+        )
         log.info("Index '%s' already exists", INDEX_NAME)
 
 
@@ -304,8 +308,7 @@ def transform_benchmark(benchmark: dict, filepath: str) -> dict:
         "rhdh_image_digest": nested_get(
             meta, "cluster", "pods", "rhdh-developer-hub-backstage-backend", "image"
         ),
-        "rhdh_release_tag": nested_get(meta, "image", "konflux.additional-tags")
-        or env.get("RHDH_HELM_CHART_VERSION"),
+        "rhdh_release_tag": nested_get(meta, "image", "konflux.additional-tags", default="").split(",")[-1].strip(),
     }
 
     doc["measurements"] = _extract_measurements(meas)
