@@ -6,13 +6,14 @@ into OpenSearch with proper timestamps for Kibana/Grafana dashboards.
 
 Usage:
     python upload_benchmark.py benchmark.json [benchmark2.json ...]
-    python upload_benchmark.py --dir /path/to/artifacts/
+    python upload_benchmark.py --write-opensearch-doc --dir /path/to/artifacts/
 
 Environment variables:
     OPENSEARCH_URL      - OpenSearch endpoint (e.g. https://...es.amazonaws.com)
     OPENSEARCH_USER     - Master username (default: admin)
     OPENSEARCH_PASSWORD - Master password
     OPENSEARCH_INDEX    - Index name (default: rhdh-performance.default)
+    ARTIFACT_DIR        - Directory for --write-opensearch-doc output (default: parent of benchmark.json)
 """
 
 import argparse
@@ -36,6 +37,7 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 INDEX_NAME = os.environ.get("OPENSEARCH_INDEX", "rhdh-performance.default")
+OPENSEARCH_FORMAT_FILENAME = "opensearch_format_benchmark.json"
 
 INDEX_MAPPING = {
     "mappings": {
@@ -330,6 +332,25 @@ def find_benchmark_files(paths: list[str]) -> list[Path]:
     return files
 
 
+def _artifact_output_dir(files: list[Path]) -> Path:
+    if os.environ.get("ARTIFACT_DIR"):
+        return Path(os.environ["ARTIFACT_DIR"]).resolve()
+    if files:
+        return files[0].resolve().parent
+    return Path(".artifacts").resolve()
+
+
+def write_opensearch_docs(docs: list[dict], files: list[Path]) -> Path:
+    output_dir = _artifact_output_dir(files)
+    out_path = output_dir / OPENSEARCH_FORMAT_FILENAME
+
+    entries = [{"_index": INDEX_NAME, **doc} for doc in docs]
+    payload = entries[0] if len(entries) == 1 else entries
+
+    with open(out_path, "w") as f:
+        json.dump(payload, f, indent=2, default=str)
+    log.info("Wrote OpenSearch document(s) to %s", out_path)
+
 def upload_documents(client: OpenSearch, docs: list[dict]) -> None:
     actions = [
         {
@@ -361,6 +382,11 @@ def main():
         action="store_true",
         help="Parse and print documents without uploading",
     )
+    parser.add_argument(
+        "--write-opensearch-doc",
+        action="store_true",
+        help=f"Write transformed document(s) to ARTIFACT_DIR/{OPENSEARCH_FORMAT_FILENAME}",
+    )
     args = parser.parse_args()
 
     files = find_benchmark_files(args.paths)
@@ -378,6 +404,9 @@ def main():
         doc = transform_benchmark(benchmark, str(filepath))
         doc["_id"] = compute_doc_id(benchmark, str(filepath))
         docs.append(doc)
+
+    if args.write_opensearch_doc:
+        write_opensearch_docs(docs, files)
 
     if args.dry_run:
         for doc in docs:
