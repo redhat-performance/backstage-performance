@@ -6,7 +6,8 @@ into OpenSearch with proper timestamps for Kibana/Grafana dashboards.
 
 Usage:
     python upload_benchmark.py benchmark.json [benchmark2.json ...]
-    python upload_benchmark.py --write-opensearch-doc --dir /path/to/artifacts/
+    python upload_benchmark.py --write-opensearch-doc --dry-run /path/to/artifacts/
+    python upload_benchmark.py --upload-opensearch-doc /path/to/opensearch_format_benchmark.json
 
 Environment variables:
     OPENSEARCH_URL      - OpenSearch endpoint (e.g. https://...es.amazonaws.com)
@@ -78,6 +79,7 @@ INDEX_MAPPING = {
             "pre_load_db": {"type": "keyword"},
             "wait_for_search_index": {"type": "keyword"},
             "scalability_iteration": {"type": "integer"},
+            "result": {"type": "keyword"},
             "measurements": {"type": "object", "dynamic": True},
             "results": {"type": "object", "dynamic": True},
             "timings": {
@@ -301,6 +303,7 @@ def transform_benchmark(benchmark: dict, filepath: str) -> dict:
         "pre_load_db": env.get("PRE_LOAD_DB"),
         "wait_for_search_index": env.get("WAIT_FOR_SEARCH_INDEX"),
         "scalability_iteration": safe_int(nested_get(meta, "scalability", "iteration")),
+        "result": benchmark.get("result"),
     }
 
     doc["measurements"] = _extract_measurements(meas)
@@ -313,7 +316,14 @@ def transform_benchmark(benchmark: dict, filepath: str) -> dict:
         "populate_catalog_duration": safe_float(nested_get(timings, "populate_catalog", "duration")),
     }
 
+    _apply_opl_aliases(doc)
     return doc
+
+
+def _apply_opl_aliases(doc: dict) -> None:
+    """Add fields expected by OPL pass_or_fail alongside OpenSearch field names."""
+    doc["name"] = doc.get("test_name")
+    doc["started"] = doc.get("@timestamp")
 
 
 def find_benchmark_files(paths: list[str]) -> list[Path]:
@@ -350,6 +360,29 @@ def write_opensearch_docs(docs: list[dict], files: list[Path]) -> Path:
     with open(out_path, "w") as f:
         json.dump(payload, f, indent=2, default=str)
     log.info("Wrote OpenSearch document(s) to %s", out_path)
+    return out_path
+
+
+def load_opensearch_doc(path: Path) -> dict:
+    """Load a pre-transformed OpenSearch document, preserving its _id."""
+    with open(path) as f:
+        payload = json.load(f)
+
+    if isinstance(payload, list):
+        if len(payload) != 1:
+            log.error("Expected a single document in %s, got %d", path, len(payload))
+            sys.exit(1)
+        payload = payload[0]
+
+    doc = dict(payload)
+    doc.pop("_index", None)
+
+    if not doc.get("_id"):
+        log.error("Missing _id in %s — run --write-opensearch-doc first", path)
+        sys.exit(1)
+
+    return doc
+
 
 def upload_documents(client: OpenSearch, docs: list[dict]) -> None:
     actions = [
@@ -374,7 +407,7 @@ def main():
     )
     parser.add_argument(
         "paths",
-        nargs="+",
+        nargs="*",
         help="benchmark.json file(s) or directory containing them",
     )
     parser.add_argument(
@@ -387,7 +420,27 @@ def main():
         action="store_true",
         help=f"Write transformed document(s) to ARTIFACT_DIR/{OPENSEARCH_FORMAT_FILENAME}",
     )
+    parser.add_argument(
+        "--upload-opensearch-doc",
+        metavar="PATH",
+        help=f"Upload a pre-transformed {OPENSEARCH_FORMAT_FILENAME} (uses embedded _id)",
+    )
     args = parser.parse_args()
+
+    if args.upload_opensearch_doc:
+        doc_path = Path(args.upload_opensearch_doc)
+        if not doc_path.is_file():
+            log.error("OpenSearch document not found: %s", doc_path)
+            sys.exit(1)
+        docs = [load_opensearch_doc(doc_path)]
+        client = connect_opensearch()
+        ensure_index(client)
+        upload_documents(client, docs)
+        return
+
+    if not args.paths:
+        log.error("Provide benchmark.json path(s) or use --upload-opensearch-doc")
+        sys.exit(1)
 
     files = find_benchmark_files(args.paths)
     if not files:

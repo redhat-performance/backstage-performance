@@ -28,6 +28,7 @@ RHDH_METRIC="${RHDH_METRIC:-true}"
 PSQL_EXPORT="${PSQL_EXPORT:-false}"
 ENABLE_ORCHESTRATOR="${ENABLE_ORCHESTRATOR:-false}"
 UPLOAD_TO_OPENSEARCH="${UPLOAD_TO_OPENSEARCH:-false}"
+PERFORM_REGRESSION="${PERFORM_REGRESSION:-false}"
 
 cli="oc"
 clin="$cli -n $RHDH_NAMESPACE"
@@ -274,8 +275,18 @@ if [ "$UPLOAD_TO_OPENSEARCH" == "true" ]; then
 
     python3 -m pip install --quiet -r ci-scripts/opensearch/requirements.txt
     if [ "$OPENSEARCH_URL" != "" ] && [ "$OPENSEARCH_USER" != "" ] && [ "$OPENSEARCH_PASSWORD" != "" ]; then
-        echo "$(date -u -Ins) Uploading results to OpenSearch"
-        python3 ./ci-scripts/opensearch/upload_benchmark.py "$ARTIFACT_DIR"
+        if [ "$PERFORM_REGRESSION" == "true" ]; then
+            echo "$(date -u -Ins) Transforming benchmark to OpenSearch format"
+            python3 ./ci-scripts/opensearch/upload_benchmark.py \
+                --write-opensearch-doc --dry-run "$ARTIFACT_DIR"
+
+            echo "$(date -u -Ins) Uploading OpenSearch-format doc"
+            python3 ./ci-scripts/opensearch/upload_benchmark.py \
+                --upload-opensearch-doc "$ARTIFACT_DIR/opensearch_format_benchmark.json"
+        else
+            echo "$(date -u -Ins) Uploading results to OpenSearch"
+            python3 ./ci-scripts/opensearch/upload_benchmark.py "$ARTIFACT_DIR"
+        fi
     fi
 fi
 
