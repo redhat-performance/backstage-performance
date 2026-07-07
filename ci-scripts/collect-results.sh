@@ -7,6 +7,7 @@ set -o pipefail
 echo -e "\n === Collecting test results and metrics ===\n"
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
 # shellcheck disable=SC1090,SC1091
 source "$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$SCRIPT_DIR"/../test.env)"
 
@@ -17,6 +18,8 @@ export TMP_DIR
 
 TMP_DIR=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "${TMP_DIR:-.tmp}")
 mkdir -p "${TMP_DIR}"
+
+export ARTIFACT_DIR TMP_DIR
 
 export RHDH_NAMESPACE LOCUST_NAMESPACE
 
@@ -136,7 +139,10 @@ set +u
 source $PYTHON_VENV_DIR/bin/activate
 set -u
 python3 -m pip install --quiet -U pip
-python3 -m pip install --quiet -e "git+https://github.com/redhat-performance/opl.git#egg=opl-rhcloud-perf-team-core&subdirectory=core"
+python3 -m pip install --quiet -e "git+https://github.com/shashankkestwal/opl.git@chore/RHIDP-15096#egg=opl-rhcloud-perf-team-core&subdirectory=core"
+python3 -m pip install --quiet -e "git+https://github.com/shashankkestwal/opl.git@chore/RHIDP-15096#egg=opl-rhcloud-perf-team-extras&subdirectory=extras"
+
+
 set +u
 deactivate
 set -u
@@ -260,11 +266,7 @@ if [ "$RHDH_METRIC" == "true" ]; then
     envsubst <config/cluster_read_config.test.nodejs.yaml >"${metrics_config_dir}/cluster_read_config.test.nodejs.yaml"
     collect_additional_metrics "${metrics_config_dir}/cluster_read_config.test.nodejs.yaml"
 fi
-set +u
-deactivate
-set -u
 
-# Upload results to OpenSearch
 if [ "$UPLOAD_TO_OPENSEARCH" == "true" ]; then
     export OPENSEARCH_URL OPENSEARCH_USER OPENSEARCH_PASSWORD OPENSEARCH_INDEX
 
@@ -280,6 +282,24 @@ if [ "$UPLOAD_TO_OPENSEARCH" == "true" ]; then
             python3 ./ci-scripts/opensearch/upload_benchmark.py \
                 --write-opensearch-doc --dry-run "$ARTIFACT_DIR"
 
+            if [ ! -f "config/mvp-regression.yaml" ]; then
+                echo "$(date -u -Ins) ERROR: pass_or_fail config not found at config/mvp-regression.yaml"
+                exit 1
+            fi
+            cp -f config/mvp-regression.yaml "${ARTIFACT_DIR}/mvp-regression.yaml"
+
+            envsubst <config/mvp-regression.yaml >"${TMP_DIR}/mvp-regression.yaml"
+
+            echo "$(date -u -Ins) Running pass_or_fail regression check"
+            if ! pass_or_fail.py --config "${TMP_DIR}/mvp-regression.yaml" \
+                --current-file "$ARTIFACT_DIR/opensearch_format_benchmark.json"; then
+                echo "$(date -u -Ins) WARNING: pass_or_fail returned non-zero code"
+            fi
+            if [ ! -f "${ARTIFACT_DIR}/regression-decision.csv" ]; then
+                echo "$(date -u -Ins) ERROR: regression-decision.csv was not created by pass_or_fail"
+                exit 1
+            fi
+
             echo "$(date -u -Ins) Uploading OpenSearch-format doc"
             python3 ./ci-scripts/opensearch/upload_benchmark.py \
                 --upload-opensearch-doc "$ARTIFACT_DIR/opensearch_format_benchmark.json"
@@ -287,8 +307,14 @@ if [ "$UPLOAD_TO_OPENSEARCH" == "true" ]; then
             echo "$(date -u -Ins) Uploading results to OpenSearch"
             python3 ./ci-scripts/opensearch/upload_benchmark.py "$ARTIFACT_DIR"
         fi
+    else
+        echo "$(date -u -Ins) Skipping OpenSearch upload: OPENSEARCH_URL, OPENSEARCH_USER, or OPENSEARCH_PASSWORD not set"
     fi
 fi
+
+set +u
+deactivate
+set -u
 
 # NodeJS profiling
 if [ "$RHDH_INSTALL_METHOD" == "helm" ] && ${ENABLE_PROFILING}; then

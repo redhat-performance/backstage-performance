@@ -1,0 +1,47 @@
+history:
+  type: elasticsearch
+  skip_metadata_assert: true
+  es_server: ${OPENSEARCH_URL}
+  es_index: ${OPENSEARCH_INDEX}
+  es_server_user: ${OPENSEARCH_USER}
+  es_server_pass_env_var: OPENSEARCH_PASSWORD
+  es_server_verify: false
+  es_query: |
+    query:
+      match_all: {}
+    sort:
+      - "@timestamp":
+          order: desc
+    size: 10
+
+current:
+  type: status_data
+  file: ${ARTIFACT_DIR}/opensearch_format_benchmark.json
+
+sets:
+  # --- RHDH application (Prometheus) ---
+  - name: measurements.rhdh_developer_hub.cpu.mean
+  - name: measurements.rhdh_developer_hub.memory.mean
+  - name: measurements.rhdh_developer_hub.disk_throughput.mean
+
+  # --- PostgreSQL (Prometheus) ---
+  - name: measurements.rhdh_postgresql.cpu.mean
+  - name: measurements.rhdh_postgresql.memory.mean
+  - name: measurements.rhdh_postgresql.disk_throughput.mean
+
+  # --- Locust summary (flat stats under results.*) ---
+  - name: results.locust_users.mean
+  - name: results.locust_requests_fail_ratio.mean
+
+  # --- Locust aggregated (locust_requests_ prefix stripped) ---
+  - name: results.aggregated.avg_response_time.mean
+  - name: results.aggregated.avg_content_length.mean
+  - name: results.aggregated.current_rps.mean
+  - name: results.aggregated.num_failures.mean
+
+methods:
+  - check_by_stdev_2
+
+decisions:
+  type: csv
+  file: ${ARTIFACT_DIR}/regression-decision.csv

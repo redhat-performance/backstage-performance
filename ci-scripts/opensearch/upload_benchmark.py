@@ -44,6 +44,8 @@ INDEX_MAPPING = {
     "mappings": {
         "properties": {
             "@timestamp": {"type": "date"},
+            "started": {"type": "date"},
+            "ended": {"type": "date"},
             "test_name": {"type": "keyword"},
             "scenario_name": {"type": "keyword"},
             "scenario_version": {"type": "integer"},
@@ -82,6 +84,7 @@ INDEX_MAPPING = {
             "result": {"type": "keyword"},
             "measurements": {"type": "object", "dynamic": True},
             "results": {"type": "object", "dynamic": True},
+            "parameters": {"type": "keyword"},
             "timings": {
                 "properties": {
                     "benchmark_duration": {"type": "float"},
@@ -142,6 +145,10 @@ def ensure_index(client: OpenSearch) -> None:
         client.indices.create(index=INDEX_NAME, body=INDEX_MAPPING)
         log.info("Created index '%s'", INDEX_NAME)
     else:
+        client.indices.put_mapping(
+            index=INDEX_NAME,
+            body={"properties": INDEX_MAPPING["mappings"]["properties"]},
+        )
         log.info("Index '%s' already exists", INDEX_NAME)
 
 
@@ -265,10 +272,14 @@ def transform_benchmark(benchmark: dict, filepath: str) -> dict:
     started = parse_timestamp(benchmark.get("started"))
     if not started:
         started = parse_timestamp(nested_get(timings, "benchmark", "started"))
+    ended = parse_timestamp(nested_get(timings, "benchmark", "ended"))
 
     doc = {
         "@timestamp": started,
+        "started": started,
+        "ended": ended,
         "test_name": benchmark.get("name"),
+        "name": benchmark.get("name"),
         "scenario_name": nested_get(meta, "scenario", "name"),
         "scenario_version": safe_int(nested_get(meta, "scenario", "version")),
         "image_version": nested_get(meta, "image", "version"),
@@ -304,6 +315,7 @@ def transform_benchmark(benchmark: dict, filepath: str) -> dict:
         "wait_for_search_index": env.get("WAIT_FOR_SEARCH_INDEX"),
         "scalability_iteration": safe_int(nested_get(meta, "scalability", "iteration")),
         "result": benchmark.get("result"),
+        "parameters": {"run": env.get("PROW_JOB_ID") or env.get("BUILD_ID")},
     }
 
     doc["measurements"] = _extract_measurements(meas)
@@ -316,14 +328,9 @@ def transform_benchmark(benchmark: dict, filepath: str) -> dict:
         "populate_catalog_duration": safe_float(nested_get(timings, "populate_catalog", "duration")),
     }
 
-    _apply_opl_aliases(doc)
     return doc
 
 
-def _apply_opl_aliases(doc: dict) -> None:
-    """Add fields expected by OPL pass_or_fail alongside OpenSearch field names."""
-    doc["name"] = doc.get("test_name")
-    doc["started"] = doc.get("@timestamp")
 
 
 def find_benchmark_files(paths: list[str]) -> list[Path]:
