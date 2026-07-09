@@ -1,0 +1,66 @@
+tests:
+  - name: rhdh-mvp-cpt-xs
+    uuid_field: prow_job_id
+    version_field: git_commit
+    timestamp: "@timestamp"
+    threshold: 10
+
+    metadata:
+      scenario_name.keyword: mvp
+
+    metrics:
+      - name: rhdh_avg_response_time
+        metric_of_interest: results.aggregated.avg_response_time.mean
+        agg:
+          agg_type: avg
+        direction: 1
+        threshold: 5
+
+      - name: rhdh_cpu
+        metric_of_interest: measurements.rhdh_developer_hub.cpu.mean
+        agg:
+          agg_type: avg
+        direction: 1
+        threshold: 10
+
+      - name: rhdh_postgresql_cpu
+        metric_of_interest: measurements.rhdh_postgresql.cpu.mean
+        agg:
+          agg_type: avg
+        direction: 1
+        threshold: 10
+
+      - name: rhdh_memory
+        metric_of_interest: measurements.rhdh_developer_hub.memory.mean
+        agg:
+          agg_type: avg
+        direction: 1
+        threshold: 15
+
+      - name: rhdh_postgresql_memory
+        metric_of_interest: measurements.rhdh_postgresql.memory.mean
+        agg:
+          agg_type: avg
+        direction: 0
+        threshold: 15
+
+      - name: rhdh_disk_throughput
+        metric_of_interest: measurements.rhdh_developer_hub.disk_throughput.mean
+        agg:
+          agg_type: avg
+        direction: 0
+        threshold: 25
+
+      - name: rhdh_postgresql_disk_throughput
+        metric_of_interest: measurements.rhdh_postgresql.disk_throughput.mean
+        agg:
+          agg_type: avg
+        direction: 0
+        threshold: 25
+
+      - name: rhdh_avg_content_length
+        metric_of_interest: results.aggregated.avg_content_length.mean
+        agg:
+          agg_type: avg
+        direction: 0
+        threshold: 20
