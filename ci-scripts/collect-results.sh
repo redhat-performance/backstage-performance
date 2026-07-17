@@ -280,9 +280,6 @@ if [ "$RHDH_METRIC" == "true" ]; then
     envsubst <config/cluster_read_config.test.nodejs.yaml >"${metrics_config_dir}/cluster_read_config.test.nodejs.yaml"
     collect_additional_metrics "${metrics_config_dir}/cluster_read_config.test.nodejs.yaml"
 fi
-set +u
-deactivate
-set -u
 
 opensearch_config_present() {
     [ -n "${OPENSEARCH_URL:-}" ] && [ -n "${OPENSEARCH_USER:-}" ] && [ -n "${OPENSEARCH_PASSWORD:-}" ]
@@ -306,16 +303,27 @@ if [ "$UPLOAD_TO_OPENSEARCH" == "true" ]; then
     if [ "$PERFORM_REGRESSION" == "true" ]; then
         if opensearch_config_present; then
             OPENSEARCH_DOMAIN=$(echo "$OPENSEARCH_URL" | awk '{sub(/^https?:\/\//, ""); print}')
-            export ES_SERVER="https://${OPENSEARCH_USER}:${OPENSEARCH_PASSWORD}@${OPENSEARCH_DOMAIN}"
+            OPENSEARCH_PASSWORD_ENCODED=$(python3 -c "import os, urllib.parse; print(urllib.parse.quote(os.environ['OPENSEARCH_PASSWORD'], safe=''))")
+            export ES_SERVER="https://${OPENSEARCH_USER}:${OPENSEARCH_PASSWORD_ENCODED}@${OPENSEARCH_DOMAIN}"
             export ES_METADATA_INDEX="${OPENSEARCH_INDEX}"
             export ES_BENCHMARK_INDEX="${OPENSEARCH_INDEX}"
             echo "$(date -u -Ins) Running Orion regression analysis"
-            orion --config config/mvp-regression-orion.yaml \
+            mkdir -p "${ARTIFACT_DIR}/regression"
+
+            code=0
+            orion --config config/mvp-regression.yaml \
                 --cmr \
                 --lookback-size 6 \
                 --display git_commit,build_id,rhdh_release_tag \
-                -o json --save-output-path "${ARTIFACT_DIR}/regression_results.json" \
+                -o json --save-output-path "${ARTIFACT_DIR}/regression/latest_regression_results.json" \
                 --viz || code=$?
+
+            orion --config config/mvp-regression.yaml \
+                --hunter-analyze \
+                --lookback-size 10 \
+                --display git_commit,build_id,rhdh_release_tag \
+                -o json --save-output-path "${ARTIFACT_DIR}/regression/complete_regression_results.json" \
+                --viz
 
             if [[ "$code" -eq 2 ]]; then
                 echo "$(date -u -Ins) Performance regression detected."
@@ -325,6 +333,10 @@ if [ "$UPLOAD_TO_OPENSEARCH" == "true" ]; then
         fi
     fi
 fi
+
+set +u
+deactivate
+set -u
 
 # NodeJS profiling
 if [ "$RHDH_INSTALL_METHOD" == "helm" ] && ${ENABLE_PROFILING}; then
