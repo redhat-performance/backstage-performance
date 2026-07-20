@@ -784,8 +784,10 @@ def generate_html_summary(chart_data, labels, output_dir, metadata=None):
 </html>
 '''
 
-    scenario_prefix = args.scenario.replace(' ', '_')
-    html_path = os.path.join(output_dir, f'{scenario_prefix}_summary.html')
+    scenario_prefix = os.path.basename(args.scenario.replace(' ', '_').replace('\\', '/'))
+    if not scenario_prefix or scenario_prefix in ('.', '..'):
+        scenario_prefix = 'scenario'
+    html_path = os.path.join(output_dir, f'{scenario_prefix}-summary.html')
     with open(html_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
 
@@ -827,7 +829,5 @@ if generate_html and chart_data:
 print(f"\nSummary:")
 print(f"  Generated {len(chart_data)} chart(s)")
 if generate_html and chart_data:
-    scenario_prefix = args.scenario.replace(' ', '_')
-    print(
-        f"  Single HTML file with embedded charts: {os.path.join(output_dir, f'{scenario_prefix}_summary.html')}")
+    print(f"  Single HTML file with embedded charts: {html_path}")
 print(f"  Output directory: {output_dir}")
