@@ -71,6 +71,23 @@ for label in app.kubernetes.io/name=developer-hub app.kubernetes.io/name=postgre
 done
 gather_pod_logs "${ARTIFACT_DIR}/rhdh-logs" "$pods" "$RHDH_NAMESPACE"
 
+must_gather_dir="${ARTIFACT_DIR}/must-gather"
+mkdir -p "$must_gather_dir"
+must_gather_namespaces="${RHDH_NAMESPACE},${LOCUST_NAMESPACE}"
+if [ "$ENABLE_ORCHESTRATOR" == "true" ]; then
+    must_gather_namespaces="${must_gather_namespaces},openshift-serverless,openshift-serverless-logic"
+fi
+must_gather_args=(--namespaces "${must_gather_namespaces}" --with-secrets)
+if [ "${ENABLE_PROFILING:-false}" == "true" ]; then
+    must_gather_args+=(--with-heap-dumps)
+fi
+echo "$(date -u -Ins) Collecting RHDH must-gather for namespaces ${must_gather_namespaces}"
+$cli adm must-gather \
+  --image=registry.access.redhat.com/rhdh/rhdh-must-gather-rhel9:1.10 \
+  --dest-dir="$must_gather_dir" \
+  -- /usr/bin/gather "${must_gather_args[@]}" \
+  || echo "WARNING: RHDH must-gather failed"
+
 if [ "$ENABLE_ORCHESTRATOR" == "true" ]; then
     pods=$($clin get pods -l app.kubernetes.io/component=serverless-workflow -o jsonpath='{.items[*].metadata.name}')
     gather_pod_logs "${ARTIFACT_DIR}/workflow-logs" "$pods" "$RHDH_NAMESPACE"
