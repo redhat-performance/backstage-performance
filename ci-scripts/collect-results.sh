@@ -315,14 +315,14 @@ if [ "$UPLOAD_TO_OPENSEARCH" == "true" ]; then
                 --cmr \
                 --lookback-size 6 \
                 --display git_commit,build_id,rhdh_release_tag \
-                -o json --save-output-path "${ARTIFACT_DIR}/regression/latest_regression_results.json" \
+                -o json --save-output-path "${ARTIFACT_DIR}/regression/recent-summary.json" \
                 --viz || code=$?
 
             orion --config config/mvp-regression.yaml \
                 --hunter-analyze \
                 --lookback-size 10 \
                 --display git_commit,build_id,rhdh_release_tag \
-                -o json --save-output-path "${ARTIFACT_DIR}/regression/complete_regression_results.json" \
+                -o json --save-output-path "${ARTIFACT_DIR}/regression/regression-summary.json" \
                 --viz
 
             if [[ "$code" -eq 2 ]]; then
