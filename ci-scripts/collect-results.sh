@@ -309,24 +309,38 @@ if [ "$UPLOAD_TO_OPENSEARCH" == "true" ]; then
             export ES_BENCHMARK_INDEX="${OPENSEARCH_INDEX}"
             echo "$(date -u -Ins) Running Orion regression analysis"
             mkdir -p "${ARTIFACT_DIR}/regression"
+            MIN_CMR_COUNT=6
+            MIN_HUNTER_COUNT=10
 
-            code=0
-            orion --config config/mvp-regression.yaml \
-                --cmr \
-                --lookback-size 6 \
-                --display git_commit,build_id,rhdh_release_tag \
-                -o json --save-output-path "${ARTIFACT_DIR}/regression/recent-summary.json" \
-                --viz || code=$?
+            COUNT=$(curl -s -X GET \
+              "${ES_SERVER}/${ES_BENCHMARK_INDEX}/_count" \
+              -H "Content-Type: application/json" | jq '.count')
 
-            orion --config config/mvp-regression.yaml \
-                --hunter-analyze \
-                --lookback-size 10 \
-                --display git_commit,build_id,rhdh_release_tag \
-                -o json --save-output-path "${ARTIFACT_DIR}/regression/regression-summary.json" \
-                --viz
+            if [[ $COUNT -ge $MIN_CMR_COUNT ]]; then
+                echo "$(date -u -Ins) Regressing recent run"
+                code=0
+                orion --config config/mvp-regression.yaml \
+                    --cmr \
+                    --lookback-size $MIN_CMR_COUNT \
+                    --display git_commit,build_id,rhdh_release_tag \
+                    -o json --save-output-path "${ARTIFACT_DIR}/regression/recent-summary.json" \
+                    --viz || code=$?
 
-            if [[ "$code" -eq 2 ]]; then
-                echo "$(date -u -Ins) Performance regression detected."
+                [[ "$code" -eq 2 ]] && echo "$(date -u -Ins) Regression detected in recent run."
+
+                if [[ $COUNT -ge $MIN_HUNTER_COUNT ]]; then
+                    echo "$(date -u -Ins) Regressing history data"
+                    orion --config config/mvp-regression.yaml \
+                        --hunter-analyze \
+                        --lookback-size $MIN_HUNTER_COUNT \
+                        --display git_commit,build_id,rhdh_release_tag \
+                        -o json --save-output-path "${ARTIFACT_DIR}/regression/regression-summary.json" \
+                        --viz || true
+                else
+                    echo "$(date -u -Ins) Not enough data points to perform history regression."
+                fi
+            else
+                echo "$(date -u -Ins) Not enough data points to perform recent regression."
             fi
         else
             echo "$(date -u -Ins) Cannot perform regression check. Invalid OpenSearch credentials"
