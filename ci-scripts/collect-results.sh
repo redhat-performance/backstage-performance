@@ -345,6 +345,14 @@ if [ "$UPLOAD_TO_OPENSEARCH" == "true" ]; then
         else
             echo "$(date -u -Ins) Cannot perform regression check. Invalid OpenSearch credentials"
         fi
+        opensearch_index=${OPENSEARCH_INDEX//performance./}
+        for file in "${ARTIFACT_DIR}/regression/"*"${opensearch_index}"*_viz.html; do
+            [ -f "$file" ] || continue
+            title=$(basename "$file" _viz.html | tr '_-.' '   ')
+            echo "Updating title of $(basename "$file") -> ${title}"
+            sed "s|<head><meta charset=\"utf-8\" /></head>|<head><meta charset=\"utf-8\" /><title>${title}</title></head>|" \
+                "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+        done
     fi
 fi
 
