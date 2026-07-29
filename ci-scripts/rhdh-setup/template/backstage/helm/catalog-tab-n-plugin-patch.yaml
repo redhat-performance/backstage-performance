@@ -1,6 +1,5 @@
 # Catalog tab ${CATALOG_TAB_N} dynamic plugin
-# Note: images build from https://github.com/pmacik/rhdh-loadtests/tree/backstage-performance
-- package: oci://quay.io/backstage-performance/rhdh-loadtest-plugins:bs_${DYNAMIC_PLUGIN_BS_VERSION}_catalog-tab-${CATALOG_TAB_N}!internal-backstage-plugin-catalog-tab-${CATALOG_TAB_N}
+- package: oci://quay.io/rhdh-community/rhdh-loadtest-plugins:bs_${DYNAMIC_PLUGIN_BS_VERSION}_catalog-tab-${CATALOG_TAB_N}!internal-backstage-plugin-catalog-tab-${CATALOG_TAB_N}
   disabled: false
   pluginConfig:
     dynamicPlugins:

@@ -64,6 +64,7 @@ export RHDH_DB_RESOURCES_MEMORY_LIMITS ?=
 export RHDH_KEYCLOAK_REPLICAS ?= 1
 export LOCUST_EXTRA_CMD ?=
 export LOCUST_EXTRA_CMD := $(subst ",,$(subst ',,$(LOCUST_EXTRA_CMD)))
+export LOCUST_WORKER_MEMORY_LIMIT ?= 2Gi
 export AUTH_PROVIDER ?= keycloak
 export KEYCLOAK_USER_PASS ?= changeme
 

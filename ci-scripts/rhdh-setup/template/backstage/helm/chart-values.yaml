@@ -10,11 +10,6 @@ global:
         disabled: false
       - package: ./dynamic-plugins/dist/backstage-community-plugin-analytics-provider-segment
         disabled: true
-      # TechDocs
-      - package: ./dynamic-plugins/dist/backstage-plugin-techdocs
-        disabled: false
-      - package: ./dynamic-plugins/dist/backstage-plugin-techdocs-backend-dynamic
-        disabled: false
       - package: ./dynamic-plugins/dist/backstage-plugin-catalog-backend-module-ldap-dynamic
         disabled: false
 orchestrator:

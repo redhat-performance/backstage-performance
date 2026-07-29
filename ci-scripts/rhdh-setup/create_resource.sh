@@ -619,7 +619,7 @@ rhdh_token() {
     --data-urlencode "session_state=$session_state" \
     --data-urlencode "state=$state" \
     "$CODE_URL" | tee -a "$TMP_DIR/get_rhdh_token.log" | jq ".backstageIdentity | .expires_in_timestamp = $(python3 -c 'from datetime import datetime, timedelta; t_add=int(30*60); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))')")
-    echo "" >> "$TMP_DIR/get_rhdh_token.log"
+  echo "" >>"$TMP_DIR/get_rhdh_token.log"
   echo "$ACCESS_TOKEN"
 }
 

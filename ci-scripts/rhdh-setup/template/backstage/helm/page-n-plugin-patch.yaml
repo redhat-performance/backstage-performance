@@ -1,6 +1,5 @@
 # Page ${PAGE_N} dynamic plugin
-# Note: images build from https://github.com/pmacik/rhdh-loadtests/tree/backstage-performance
-- package: oci://quay.io/backstage-performance/rhdh-loadtest-plugins:bs_${DYNAMIC_PLUGIN_BS_VERSION}_page-${PAGE_N}!internal-backstage-plugin-page-${PAGE_N}
+- package: oci://quay.io/rhdh-community/rhdh-loadtest-plugins:bs_${DYNAMIC_PLUGIN_BS_VERSION}_page-${PAGE_N}!internal-backstage-plugin-page-${PAGE_N}
   disabled: false
   pluginConfig:
     dynamicPlugins:
