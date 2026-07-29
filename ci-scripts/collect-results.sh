@@ -28,6 +28,7 @@ RHDH_METRIC="${RHDH_METRIC:-true}"
 PSQL_EXPORT="${PSQL_EXPORT:-false}"
 ENABLE_ORCHESTRATOR="${ENABLE_ORCHESTRATOR:-false}"
 UPLOAD_TO_OPENSEARCH="${UPLOAD_TO_OPENSEARCH:-false}"
+PERFORM_REGRESSION="${PERFORM_REGRESSION:-false}"
 
 cli="oc"
 clin="$cli -n $RHDH_NAMESPACE"
@@ -153,6 +154,9 @@ source $PYTHON_VENV_DIR/bin/activate
 set -u
 python3 -m pip install --quiet -U pip
 python3 -m pip install --quiet -e "git+https://github.com/redhat-performance/opl.git#egg=opl-rhcloud-perf-team-core&subdirectory=core"
+if [ "$PERFORM_REGRESSION" == "true" ]; then
+    python3 -m pip install --quiet -e "git+https://github.com/cloud-bulldozer/orion.git@v1.1.5#egg=orion"
+fi
 set +u
 deactivate
 set -u
@@ -276,9 +280,10 @@ if [ "$RHDH_METRIC" == "true" ]; then
     envsubst <config/cluster_read_config.test.nodejs.yaml >"${metrics_config_dir}/cluster_read_config.test.nodejs.yaml"
     collect_additional_metrics "${metrics_config_dir}/cluster_read_config.test.nodejs.yaml"
 fi
-set +u
-deactivate
-set -u
+
+opensearch_config_present() {
+    [ -n "${OPENSEARCH_URL:-}" ] && [ -n "${OPENSEARCH_USER:-}" ] && [ -n "${OPENSEARCH_PASSWORD:-}" ]
+}
 
 # Upload results to OpenSearch
 if [ "$UPLOAD_TO_OPENSEARCH" == "true" ]; then
@@ -290,11 +295,70 @@ if [ "$UPLOAD_TO_OPENSEARCH" == "true" ]; then
     OPENSEARCH_PASSWORD=$(cat /usr/local/ci-secrets/backstage-performance/rhdh.es.password)
 
     python3 -m pip install --quiet -r ci-scripts/opensearch/requirements.txt
-    if [ "$OPENSEARCH_URL" != "" ] && [ "$OPENSEARCH_USER" != "" ] && [ "$OPENSEARCH_PASSWORD" != "" ]; then
+    if opensearch_config_present; then
         echo "$(date -u -Ins) Uploading results to OpenSearch"
         python3 ./ci-scripts/opensearch/upload_benchmark.py "$ARTIFACT_DIR"
     fi
+
+    if [ "$PERFORM_REGRESSION" == "true" ]; then
+        if opensearch_config_present; then
+            OPENSEARCH_DOMAIN=$(echo "$OPENSEARCH_URL" | awk '{sub(/^https?:\/\//, ""); print}')
+            OPENSEARCH_PASSWORD_ENCODED=$(python3 -c "import os, urllib.parse; print(urllib.parse.quote(os.environ['OPENSEARCH_PASSWORD'], safe=''))")
+            export ES_SERVER="https://${OPENSEARCH_USER}:${OPENSEARCH_PASSWORD_ENCODED}@${OPENSEARCH_DOMAIN}"
+            export ES_METADATA_INDEX="${OPENSEARCH_INDEX}"
+            export ES_BENCHMARK_INDEX="${OPENSEARCH_INDEX}"
+            echo "$(date -u -Ins) Running Orion regression analysis"
+            mkdir -p "${ARTIFACT_DIR}/regression"
+            MIN_CMR_COUNT=6
+            MIN_HUNTER_COUNT=10
+
+            COUNT=$(curl -s -X GET \
+              "${ES_SERVER}/${ES_BENCHMARK_INDEX}/_count" \
+              -H "Content-Type: application/json" | jq '.count')
+
+            if [[ $COUNT -ge $MIN_CMR_COUNT ]]; then
+                echo "$(date -u -Ins) Regressing recent run"
+                code=0
+                orion --config config/mvp-regression.yaml \
+                    --cmr \
+                    --lookback-size $MIN_CMR_COUNT \
+                    --display git_commit,build_id,rhdh_release_tag \
+                    -o json --save-output-path "${ARTIFACT_DIR}/regression/recent-summary.json" \
+                    --viz || code=$?
+
+                [[ "$code" -eq 2 ]] && echo "$(date -u -Ins) Regression detected in recent run."
+
+                if [[ $COUNT -ge $MIN_HUNTER_COUNT ]]; then
+                    echo "$(date -u -Ins) Regressing history data"
+                    orion --config config/mvp-regression.yaml \
+                        --hunter-analyze \
+                        --lookback-size $MIN_HUNTER_COUNT \
+                        --display git_commit,build_id,rhdh_release_tag \
+                        -o json --save-output-path "${ARTIFACT_DIR}/regression/regression-summary.json" \
+                        --viz || true
+                else
+                    echo "$(date -u -Ins) Not enough data points to perform history regression."
+                fi
+            else
+                echo "$(date -u -Ins) Not enough data points to perform recent regression."
+            fi
+        else
+            echo "$(date -u -Ins) Cannot perform regression check. Invalid OpenSearch credentials"
+        fi
+        opensearch_index=${OPENSEARCH_INDEX//performance./}
+        for file in "${ARTIFACT_DIR}/regression/"*"${opensearch_index}"*_viz.html; do
+            [ -f "$file" ] || continue
+            title=$(basename "$file" _viz.html | tr '_-.' '   ')
+            echo "Updating title of $(basename "$file") -> ${title}"
+            sed "s|<head><meta charset=\"utf-8\" /></head>|<head><meta charset=\"utf-8\" /><title>${title}</title></head>|" \
+                "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+        done
+    fi
 fi
+
+set +u
+deactivate
+set -u
 
 # NodeJS profiling
 if [ "$RHDH_INSTALL_METHOD" == "helm" ] && ${ENABLE_PROFILING}; then
