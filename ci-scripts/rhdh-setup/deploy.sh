@@ -42,6 +42,8 @@ export RHDH_IMAGE_REGISTRY=${RHDH_IMAGE_REGISTRY:-}
 export RHDH_IMAGE_REPO=${RHDH_IMAGE_REPO:-}
 export RHDH_IMAGE_TAG=${RHDH_IMAGE_TAG:-}
 
+export RHDH_CATALOG_INDEX_IMAGE=${RHDH_CATALOG_INDEX_IMAGE:-}
+
 export RHDH_BASE_VERSION=${RHDH_BASE_VERSION:-1.10}
 
 export RHDH_HELM_REPO=${RHDH_HELM_REPO:-oci://quay.io/rhdh/chart}
@@ -737,6 +739,14 @@ install_rhdh_with_helm() {
     if [ "${RHDH_DEPLOYMENT_REPLICAS}" -gt 1 ]; then
         log_info "Applying pod affinity for multiple replicas to schedule on same node"
         yq -i '.upstream.backstage |= . + load("template/backstage/helm/pod-affinity-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"
+    fi
+
+    # Override catalog index image
+    if [ -n "${RHDH_CATALOG_INDEX_IMAGE_REGISTRY}${RHDH_CATALOG_INDEX_IMAGE_REPO}${RHDH_CATALOG_INDEX_IMAGE_TAG}" ]; then
+        log_info "Overriding catalog index image to $RHDH_CATALOG_INDEX_IMAGE_REGISTRY/$RHDH_CATALOG_INDEX_IMAGE_REPO:$RHDH_CATALOG_INDEX_IMAGE_TAG"
+        yq -i '.global.catalogIndex.image.registry = "'"$RHDH_CATALOG_INDEX_IMAGE_REGISTRY"'"' "$TMP_DIR/chart-values.temp.yaml"
+        yq -i '.global.catalogIndex.image.repository = "'"$RHDH_CATALOG_INDEX_IMAGE_REPO"'"' "$TMP_DIR/chart-values.temp.yaml"
+        yq -i '.global.catalogIndex.image.tag = "'"$RHDH_CATALOG_INDEX_IMAGE_TAG"'"' "$TMP_DIR/chart-values.temp.yaml"
     fi
 
     log_info "Installing RHDH Helm chart $RHDH_HELM_RELEASE_NAME from $chart_origin in $RHDH_NAMESPACE namespace"
