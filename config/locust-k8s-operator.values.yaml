@@ -40,6 +40,8 @@ locustPods:
     image: "quay.io/backstage-performance/locust_exporter:latest-2.x"
     pullPolicy: Always
 
+metrics:
+  enabled: true
 
 serviceAccount:
   name: ${LOCUST_NAMESPACE}-locust-k8s-operator
