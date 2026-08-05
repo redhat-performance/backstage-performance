@@ -36,7 +36,7 @@ export RHDH_CATALOG_INDEX_IMAGE_REPO ?=
 export RHDH_CATALOG_INDEX_IMAGE_TAG ?=
 
 # RHDH base version
-export RHDH_BASE_VERSION ?= 1.11
+export RHDH_BASE_VERSION ?= 2.0
 
 # RHDH Helm chart to deploy
 export RHDH_NAMESPACE ?= rhdh-performance
