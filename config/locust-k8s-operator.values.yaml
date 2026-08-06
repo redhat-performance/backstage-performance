@@ -26,14 +26,14 @@ locustPods:
       cpu: 1000m
       memory: 2Gi
       ephemeralStorage: 512Mi
-  worker:
+  workerResources:
     requests:
       cpu: 250m
       memory: 256Mi
       ephemeralStorage: 128Mi
     limits:
       cpu: 1000m
-      memory: 2Gi
+      memory: ${LOCUST_WORKER_MEMORY_LIMIT}
       ephemeralStorage: 512Mi
 
   metricsExporter:
