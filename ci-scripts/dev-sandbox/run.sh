@@ -19,6 +19,9 @@ export RHDH_INSTALL_METHOD=${RHDH_INSTALL_METHOD:-olm}
 export RHDH_WORKLOADS_TEMPLATE_NAME=${RHDH_WORKLOADS_TEMPLATE_NAME:-default}
 export RHDH_WORKLOADS_TEMPLATE=${RHDH_WORKLOADS_TEMPLATE:-$SCRIPT_DIR/rhdh-perf-workloads.$RHDH_WORKLOADS_TEMPLATE_NAME.template.yaml}
 
+export COLLECT_HEAP_PROFILE=${COLLECT_HEAP_PROFILE:-false}
+export RHDH_OPERATOR_NAMESPACE=${RHDH_OPERATOR_NAMESPACE:-rhdh-operator}
+
 cd "$WSTC" || exit
 
 collect_counts() {
@@ -27,6 +30,14 @@ collect_counts() {
     for i in backstages secrets configmaps pods jobs; do
         echo "$i,$(oc get "$i" -A -o name | wc -l)" | tee -a "$out"
     done
+}
+
+collect_heap_profile() {
+    id=${1:-default}
+    if [ "$COLLECT_HEAP_PROFILE" == "true" ]; then
+        pod=$(oc -n "$RHDH_OPERATOR_NAMESPACE" get pods -l control-plane=controller-manager -o json | jq -rc '.items[] | select(.metadata.name | startswith("rhdh-operator")).metadata.name')
+        oc -n "$RHDH_OPERATOR_NAMESPACE" exec "pod/$pod" -c manager -- bash -c "curl -SsL localhost:6060/debug/pprof/heap | base64" | base64 -d >"$ARTIFACT_DIR/dev-sandbox/rhdh-operator-heap.$id.pprof"
+    fi
 }
 
 rm -rvf "$ARTIFACT_DIR/dev-sandbox"
@@ -39,10 +50,12 @@ workloads=$(for i in $(yq '.workloads[]' "$SCRIPT_DIR/workloads.yaml"); do echo 
 
 make clean-users
 collect_counts "baseline-counts-pre"
+collect_heap_profile "baseline"
 echo "Running baseline..."
 cmd="go run setup/main.go --users 1 --default 1 --custom 0 --username baseline --testname=baseline $workloads"
 yes | $cmd
 collect_counts "baseline-counts-post"
+collect_heap_profile "after-baseline"
 
 number_of_runs=${1:-10}
 number_of_users_per_run=${2:-2000}
@@ -58,7 +71,8 @@ for r in $(seq -w 1 "$number_of_runs"); do
     make clean-users
     collect_counts "$TEST_ID-counts-pre"
     cmd="go run setup/main.go --users $number_of_users_per_run --default $number_of_users_per_run --custom $number_of_users_with_workloads_per_run --template=$template $workloads --username $TEST_ID --testname=$TEST_ID --verbose --idler-timeout 15s --skip-install-operators"
-    yes | $cmd 2>&1| tee "$TEST_ID.log" && out="tmp/results/$(date +%F_%T)-counts.csv"
+    yes | $cmd 2>&1 | tee "$TEST_ID.log" && out="tmp/results/$(date +%F_%T)-counts.csv"
     collect_counts "$TEST_ID-counts-post"
+    collect_heap_profile "after-$TEST_ID"
 done
 date -u -Ins >"${ARTIFACT_DIR}/benchmark-after"

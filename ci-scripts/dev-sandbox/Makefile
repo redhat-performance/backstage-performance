@@ -11,6 +11,8 @@ export NUMBER_OF_RUNS ?= 10
 export NUMBER_OF_USERS_PER_RUN ?= 2000
 export NUMBER_OF_USERS_WITH_WORKLOADS_PER_RUN ?= 2000
 
+export COLLECT_HEAP_PROFILE ?= false
+
 export ARTIFACT_DIR ?=
 
 .PHONY: setup-toolchain-e2e
