@@ -6,7 +6,7 @@ tests:
     threshold: 10
 
     metadata:
-      scenario_name.keyword: mvp
+      scenario_name: mvp
 
     metrics:
       - name: rhdh_avg_response_time
