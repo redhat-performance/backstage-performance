@@ -23,6 +23,8 @@ spec:
             - --upstream=http://backstage-developer-hub:80
             - --http-address=0.0.0.0:4180
             - --skip-provider-button
+            - --reverse-proxy=true
+            - --redirect-url=https://rhdh-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}/oauth2/callback
             - --session-store-type=redis
             - --redis-connection-url=redis://oauth2-proxy-redis:6379
             - --skip-oidc-discovery

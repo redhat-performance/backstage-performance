@@ -6,6 +6,7 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.common.exceptions import (
     InvalidSessionIdException,
     NoSuchWindowException,
+    TimeoutException,
 )
 from selenium.webdriver.chrome.service import Service
 from selenium import webdriver
@@ -152,6 +153,7 @@ class UIBaselineTest(User):
         opts.add_argument("--window-position=0,0")
         opts.add_argument("--ignore-ssl-errors=yes")
         opts.add_argument("--ignore-certificate-errors")
+        opts.set_capability("acceptInsecureCerts", True)
         profile_id = uuid.uuid4().hex[:16]
         opts.add_argument(
             f"--user-data-dir=/tmp/chrome-user-data-{profile_id}")
@@ -287,6 +289,16 @@ class UIBaselineTest(User):
                 self._report_success(
                     self.step_name("e2e"), "duration", (time.time() - e2e_start)*1000)
                 return
+            except TimeoutException as e:
+                debug = self._page_debug()
+                print(f"UI timeout (attempt {attempt}): {debug}", flush=True)
+                if attempt == 0:
+                    continue
+                rt = self.tick_timer()
+                self._report_failure(
+                    self.step_name("ui"), "timeout", rt,
+                    f"{e.__class__.__name__}: {debug}")
+                raise
             except self._dead_session_errors as e:
                 self._dispose_driver()
                 if attempt == 0:
@@ -328,6 +340,24 @@ class UIBaselineTest(User):
         return WebDriverWait(self.driver, self.timeout).until(
             EC.url_contains(url_contains)
         )
+
+    def _page_debug(self, snippet_len=2000):
+        url = title = ""
+        snippet = ""
+        try:
+            url = self.driver.current_url
+        except Exception:
+            pass
+        try:
+            title = self.driver.title
+        except Exception:
+            pass
+        try:
+            src = self.driver.page_source or ""
+            snippet = src[:snippet_len].replace("\n", " ")
+        except Exception:
+            pass
+        return f"url={url!r} title={title!r} page_source={snippet!r}"
 
     # reporting methods
     def _report_success(self, category, name, response_time):
