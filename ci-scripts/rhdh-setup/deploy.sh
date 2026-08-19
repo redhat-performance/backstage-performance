@@ -31,6 +31,8 @@ export RHDH_RESOURCES_CPU_REQUESTS=${RHDH_RESOURCES_CPU_REQUESTS:-}
 export RHDH_RESOURCES_CPU_LIMITS=${RHDH_RESOURCES_CPU_LIMITS:-}
 export RHDH_RESOURCES_MEMORY_REQUESTS=${RHDH_RESOURCES_MEMORY_REQUESTS:-}
 export RHDH_RESOURCES_MEMORY_LIMITS=${RHDH_RESOURCES_MEMORY_LIMITS:-}
+export RHDH_RESOURCES_EPHEMERAL_STORAGE_REQUESTS=${RHDH_RESOURCES_EPHEMERAL_STORAGE_REQUESTS:-}
+export RHDH_RESOURCES_EPHEMERAL_STORAGE_LIMITS=${RHDH_RESOURCES_EPHEMERAL_STORAGE_LIMITS:-}
 export RHDH_NODEJS_MAX_HEAP_SIZE=${RHDH_NODEJS_MAX_HEAP_SIZE:-}
 export RHDH_DB_RESOURCES_CPU_REQUESTS=${RHDH_DB_RESOURCES_CPU_REQUESTS:-}
 export RHDH_DB_RESOURCES_CPU_LIMITS=${RHDH_DB_RESOURCES_CPU_LIMITS:-}
@@ -69,6 +71,7 @@ export RHDH_OLM_OPERATOR_RESOURCES_EPHEMERAL_STORAGE_REQUESTS=${RHDH_OLM_OPERATO
 export PRE_LOAD_DB="${PRE_LOAD_DB:-true}"
 export ENSURE_CATALOG_POPULATION_TIMEOUT=${ENSURE_CATALOG_POPULATION_TIMEOUT:-3600}
 export CATALOG_REFRESH_INTERVAL=${CATALOG_REFRESH_INTERVAL_MINUTES:-50}
+export LDAP_SCHEDULE_TIMEOUT_MINUTES=${LDAP_SCHEDULE_TIMEOUT_MINUTES:-50}
 export BACKSTAGE_USER_COUNT="${BACKSTAGE_USER_COUNT:-1}"
 export GROUP_COUNT="${GROUP_COUNT:-1}"
 export API_COUNT="${API_COUNT:-1}"
@@ -789,6 +792,8 @@ install_rhdh_with_helm() {
     if [ -n "${RHDH_RESOURCES_CPU_LIMITS}" ]; then yq -i '.upstream.backstage.resources.limits.cpu = "'"${RHDH_RESOURCES_CPU_LIMITS}"'"' "$TMP_DIR/chart-values.yaml"; fi
     if [ -n "${RHDH_RESOURCES_MEMORY_REQUESTS}" ]; then yq -i '.upstream.backstage.resources.requests.memory = "'"${RHDH_RESOURCES_MEMORY_REQUESTS}"'"' "$TMP_DIR/chart-values.yaml"; fi
     if [ -n "${RHDH_RESOURCES_MEMORY_LIMITS}" ]; then yq -i '.upstream.backstage.resources.limits.memory = "'"${RHDH_RESOURCES_MEMORY_LIMITS}"'"' "$TMP_DIR/chart-values.yaml"; fi
+    if [ -n "${RHDH_RESOURCES_EPHEMERAL_STORAGE_REQUESTS}" ]; then yq -i '.upstream.backstage.resources.requests.ephemeral-storage = "'"${RHDH_RESOURCES_EPHEMERAL_STORAGE_REQUESTS}"'"' "$TMP_DIR/chart-values.yaml"; fi
+    if [ -n "${RHDH_RESOURCES_EPHEMERAL_STORAGE_LIMITS}" ]; then yq -i '.upstream.backstage.resources.limits.ephemeral-storage = "'"${RHDH_RESOURCES_EPHEMERAL_STORAGE_LIMITS}"'"' "$TMP_DIR/chart-values.yaml"; fi
     if [ -n "${RHDH_NODEJS_MAX_HEAP_SIZE}" ]; then
         yq -i '.upstream.backstage.extraEnvVars |= . + [{"name": "NODE_OPTIONS", "value": "--max-old-space-size='"${RHDH_NODEJS_MAX_HEAP_SIZE}"'"}]' "$TMP_DIR/chart-values.yaml"
     fi
@@ -957,6 +962,10 @@ backstage_install() {
         yq -i '.catalog.processingInterval.minutes = '"${CATALOG_REFRESH_INTERVAL_MINUTES}"'' "$TMP_DIR/app-config.yaml"
         yq -i '.catalog.providers.ldapOrg.default.schedule.frequency.hours = 0' "$TMP_DIR/app-config.yaml"
         yq -i '.catalog.providers.ldapOrg.default.schedule.frequency.minutes = '"${CATALOG_REFRESH_INTERVAL_MINUTES}"'' "$TMP_DIR/app-config.yaml"
+    fi
+    if [ -n "${LDAP_SCHEDULE_TIMEOUT_MINUTES}" ]; then
+        yq -i '.catalog.providers.ldapOrg.default.schedule.timeout.hours = 0' "$TMP_DIR/app-config.yaml"
+        yq -i '.catalog.providers.ldapOrg.default.schedule.timeout.minutes = '"${LDAP_SCHEDULE_TIMEOUT_MINUTES}"'' "$TMP_DIR/app-config.yaml"
     fi
     until $clin create configmap app-config-rhdh --from-file "app-config.rhdh.yaml=$TMP_DIR/app-config.yaml"; do $clin delete configmap app-config-rhdh --ignore-not-found=true; done
     if [ "$INSTALL_METHOD" == "olm" ]; then
