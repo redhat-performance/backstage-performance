@@ -124,3 +124,28 @@ spec:
     targetPort: 8080
   tls:
     termination: passthrough
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: caddy-fronting-proxy-allow-to-rhdh
+  labels:
+    app: caddy-fronting-proxy
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: backstage
+      app.kubernetes.io/instance: ${RHDH_HELM_RELEASE_NAME}
+      app.kubernetes.io/name: developer-hub
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: caddy-fronting-proxy
+      ports:
+        - port: 4180
+          protocol: TCP
+        - port: 7007
+          protocol: TCP
