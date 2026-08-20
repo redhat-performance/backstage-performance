@@ -354,7 +354,7 @@ deploy-http2-proxy:
 
 ## Run the load test in CI end to end
 .PHONY: ci-run
-ci-run: setup-venv deploy-locust ensure-catalog-population test
+ci-run: setup-venv test-local
 
 ## Deploy and populate RHDH in CI end to end
 .PHONY: ci-deploy
