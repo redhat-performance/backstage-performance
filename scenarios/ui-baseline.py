@@ -143,9 +143,6 @@ class UIBaselineTest(User):
         else:
             self.user_name = "t_1"
 
-    def on_start(self):
-        self._ensure_driver()
-
     def _chrome_options(self):
         opts = webdriver.ChromeOptions()
         opts.add_argument("--headless=new")
@@ -228,10 +225,8 @@ class UIBaselineTest(User):
         for attempt in range(2):
             try:
                 self.reset_steps()
+                self._dispose_driver()
                 self._ensure_driver()
-                self.driver.delete_all_cookies()
-                self.driver.execute_cdp_cmd("Network.clearBrowserCookies", {})
-                self.driver.execute_cdp_cmd("Network.clearBrowserCache", {})
 
                 # load login page
                 self.reset_timer()
@@ -307,6 +302,8 @@ class UIBaselineTest(User):
                 self._report_failure(self.step_name(
                     "login"), "login_page", rt, str(e))
                 raise
+            finally:
+                self._dispose_driver()
 
     # utility methods
     def reset_timer(self):
