@@ -1053,11 +1053,21 @@ backstage_install() {
 }
 
 ensure_catalog_population() {
+    pids=()
     ensure_entity_count "User" "$((BACKSTAGE_USER_COUNT + 1))" "$ENSURE_CATALOG_POPULATION_TIMEOUT" &
+    pids+=("$!")
     ensure_entity_count "Group" "$GROUP_COUNT" "$ENSURE_CATALOG_POPULATION_TIMEOUT" &
+    pids+=("$!")
     ensure_entity_count "Component" "$COMPONENT_COUNT" "$ENSURE_CATALOG_POPULATION_TIMEOUT" &
+    pids+=("$!")
     ensure_entity_count "API" "$API_COUNT" "$ENSURE_CATALOG_POPULATION_TIMEOUT" &
-    wait
+    pids+=("$!")
+    exit_code=0
+    for pid in "${pids[@]}"; do
+        wait "$pid"
+        exit_code=$((exit_code + $?))
+    done
+    return "$exit_code"
 }
 
 log_entity_count() {
