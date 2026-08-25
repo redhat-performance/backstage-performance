@@ -59,10 +59,15 @@ gather_pod_logs() {
     done
 }
 
-pods="$(oc -n "$LOCUST_NAMESPACE" get pods -o json | jq -r '.items[] | select(.metadata.name | contains("locust-operator")).metadata.name')"
-pods="$pods $(oc -n "$LOCUST_NAMESPACE" get pods -o json | jq -r '.items[] | select(.metadata.name | contains("test-worker")).metadata.name')"
-pods="$pods $(oc -n "$LOCUST_NAMESPACE" get pods -o json | jq -r '.items[] | select(.metadata.name | contains("test-master")).metadata.name')"
-gather_pod_logs "${ARTIFACT_DIR}/locust-logs" "$pods" "$LOCUST_NAMESPACE"
+# Collect locust logs if not a local test
+if [  ! -d "${TMP_DIR}/local-test" ]; then
+    pods="$(oc -n "$LOCUST_NAMESPACE" get pods -o json | jq -r '.items[] | select(.metadata.name | contains("locust-operator")).metadata.name')"
+    pods="$pods $(oc -n "$LOCUST_NAMESPACE" get pods -o json | jq -r '.items[] | select(.metadata.name | contains("test-worker")).metadata.name')"
+    pods="$pods $(oc -n "$LOCUST_NAMESPACE" get pods -o json | jq -r '.items[] | select(.metadata.name | contains("test-master")).metadata.name')"
+    gather_pod_logs "${ARTIFACT_DIR}/locust-logs" "$pods" "$LOCUST_NAMESPACE"
+else
+    echo -e "\nCollected local locust run metrics, Bypassing locust pods logs collection"
+fi
 
 pods=""
 for label in app.kubernetes.io/name=developer-hub app.kubernetes.io/name=postgresql; do
@@ -140,6 +145,7 @@ try_gather_file "${TMP_DIR}/postgres-cluster.yaml"
 try_gather_file load-test.log
 try_gather_dir "${TMP_DIR}/rhdh-db-logs"
 try_gather_dir "${TMP_DIR}/workflows"
+try_gather_dir "${TMP_DIR}/local-test"
 try_gather_file test.env
 try_gather_dir "$TMP_DIR/catalog-entity-counts"
 
