@@ -127,7 +127,7 @@ namespace:
 .PHONY: deploy-rhdh-helm
 deploy-rhdh-helm: $(TMP_DIR) deploy-rhdh-db
 	date -u -Ins>$(TMP_DIR)/deploy-before
-	cd ./ci-scripts/rhdh-setup/; ./deploy.sh -i "$(AUTH_PROVIDER)" || true
+	cd ./ci-scripts/rhdh-setup/; ./deploy.sh -i "$(AUTH_PROVIDER)"
 	date -u -Ins>$(TMP_DIR)/deploy-after
 
 ## Undeploy RHDH with Helm
@@ -167,7 +167,7 @@ deploy-ldap:
 .PHONY: deploy-rhdh-olm
 deploy-rhdh-olm: $(TMP_DIR) deploy-rhdh-db
 	date -u -Ins>$(TMP_DIR)/deploy-before
-	cd ./ci-scripts/rhdh-setup; ./deploy.sh -o -i "$(AUTH_PROVIDER)" || true
+	cd ./ci-scripts/rhdh-setup; ./deploy.sh -o -i "$(AUTH_PROVIDER)"
 	date -u -Ins>$(TMP_DIR)/deploy-after
 
 ## Undeploy RHDH with OLM
