@@ -93,6 +93,8 @@ export KEYCLOAK_LOG_LEVEL="${KEYCLOAK_LOG_LEVEL:-WARN}"
 export DYNAMIC_PLUGIN_BS_VERSION="${DYNAMIC_PLUGIN_BS_VERSION:-1.52}"
 export PAGE_N_COUNT="${PAGE_N_COUNT:-0}"
 export CATALOG_TAB_N_COUNT="${CATALOG_TAB_N_COUNT:-0}"
+# RHDH 2.0+ requires the oauth2-proxy auth backend module as a dynamic plugin.
+export OAUTH2_PROXY_AUTH_PLUGIN_PACKAGE="${OAUTH2_PROXY_AUTH_PLUGIN_PACKAGE:-oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/backstage-plugin-auth-backend-module-oauth2-proxy-provider:bs_${DYNAMIC_PLUGIN_BS_VERSION}.0__0.3.0}"
 
 export PSQL_LOG="${PSQL_LOG:-true}"
 export RHDH_METRIC="${RHDH_METRIC:-true}"
@@ -699,6 +701,11 @@ install_rhdh_with_helm() {
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.backstage |= . + load("template/backstage/helm/oauth2-container-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"; fi
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.service.ports.targetPort = "oauth2-proxy"' "$TMP_DIR/chart-values.temp.yaml"; fi
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.service.ports.backend = 4180' "$TMP_DIR/chart-values.temp.yaml"; fi
+    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then
+        log_info "Enabling oauth2-proxy auth backend dynamic plugin"
+        envsubst '${OAUTH2_PROXY_AUTH_PLUGIN_PACKAGE}' <template/backstage/helm/oauth2-proxy-auth-plugin-patch.yaml >"$TMP_DIR/oauth2-proxy-auth-plugin-patch.yaml"
+        yq -i '.global.dynamic.plugins |= . + load("'"$TMP_DIR/oauth2-proxy-auth-plugin-patch.yaml"'")' "$TMP_DIR/chart-values.temp.yaml"
+    fi
 
     # RBAC
     if ${ENABLE_RBAC}; then
@@ -860,6 +867,10 @@ install_rhdh_with_olm() {
     mark_resource_for_rhdh configmap app-config-rhdh-urls
 
     cp template/backstage/olm/dynamic-plugins.configmap.yaml "$TMP_DIR/dynamic-plugins.configmap.yaml"
+    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then
+        # shellcheck disable=SC2016
+        envsubst '${OAUTH2_PROXY_AUTH_PLUGIN_PACKAGE}' <template/backstage/olm/oauth2-proxy-auth-plugin-patch.yaml >>"$TMP_DIR/dynamic-plugins.configmap.yaml"
+    fi
     if ${ENABLE_RBAC}; then
         cat template/backstage/olm/rbac-plugin-patch.yaml >>"$TMP_DIR/dynamic-plugins.configmap.yaml"
     fi
@@ -944,8 +955,11 @@ install_rhdh_with_olm() {
 backstage_install() {
     log_info "Installing RHDH with install method: $INSTALL_METHOD"
     cp "template/backstage/app-config.yaml" "$TMP_DIR/app-config.yaml"
-    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '. |= . + {"signInPage":"oauth2Proxy"}' "$TMP_DIR/app-config.yaml"; fi
-    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '. |= . + {"auth":{"environment":"production","providers":{"oauth2Proxy":{}}}}' "$TMP_DIR/app-config.yaml"; else yq -i '. |= . + {"auth":{"providers":{"guest":{"dangerouslyAllowOutsideDevelopment":true}}}}' "$TMP_DIR/app-config.yaml"; fi
+    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then
+        yq -i '. |= . + load("template/backstage/app-config-oauth2-proxy-patch.yaml")' "$TMP_DIR/app-config.yaml"
+    else
+        yq -i '. |= . + {"auth":{"providers":{"guest":{"dangerouslyAllowOutsideDevelopment":true}}}}' "$TMP_DIR/app-config.yaml"
+    fi
 
     if ${ENABLE_ORCHESTRATOR}; then
         install_orchestrator_infra

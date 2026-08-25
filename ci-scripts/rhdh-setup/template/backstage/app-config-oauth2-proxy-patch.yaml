@@ -1,0 +1,11 @@
+signInPage: oauth2Proxy
+auth:
+  environment: production
+  providers:
+    oauth2Proxy:
+      signIn:
+        resolvers:
+          - resolver: forwardedPreferredUsernameMatchingUserEntityName
+            dangerouslyAllowSignInWithoutUserInCatalog: true
+          - resolver: emailLocalPartMatchingUserEntityName
+            dangerouslyAllowSignInWithoutUserInCatalog: true

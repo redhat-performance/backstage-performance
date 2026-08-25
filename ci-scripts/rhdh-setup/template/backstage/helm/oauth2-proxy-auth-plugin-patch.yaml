@@ -1,0 +1,4 @@
+---
+# RHDH 2.0+ no longer registers oauth2Proxy in the backend. Load it as a dynamic plugin.
+- package: ${OAUTH2_PROXY_AUTH_PLUGIN_PACKAGE}
+  disabled: false
