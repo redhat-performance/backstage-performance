@@ -256,7 +256,8 @@ endif
 		fi; \
 	  BASE_HOST="https://$$(oc get routes "$$rhdh_route" -n "$$RHDH_NAMESPACE" -o jsonpath='{.spec.host}')"; \
 	fi; \
-	$(PYTHON_VENV)/bin/locust --host "$$BASE_HOST" --headless --users $$USERS --spawn-rate $$SPAWN_RATE --run-time $$DURATION --print-stats --page-n-count=$$PAGE_N_COUNT --catalog-tab-n-count=$$CATALOG_TAB_N_COUNT $$LOCUST_EXTRA_CMD -f ./scenarios/$$SCENARIO.py
+	mkdir -p $(TMP_DIR)/local-test; \
+	$(PYTHON_VENV)/bin/locust --host "$$BASE_HOST" --headless --users $$USERS --spawn-rate $$SPAWN_RATE --run-time $$DURATION --print-stats --page-n-count=$$PAGE_N_COUNT --catalog-tab-n-count=$$CATALOG_TAB_N_COUNT --html "$$TMP_DIR/local-test/local-summary.html" --csv "$$TMP_DIR/local-test/summary" $$LOCUST_EXTRA_CMD -f ./scenarios/$$SCENARIO.py > local-locust-test.log
 	@echo "All done!!!"
 
 
