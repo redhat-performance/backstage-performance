@@ -108,6 +108,9 @@ export LOG_STATEMENT_SAMPLE_RATE="${LOG_STATEMENT_SAMPLE_RATE:-0.7}"
 export LOCUST_NAMESPACE=${LOCUST_NAMESPACE:-locust-operator}
 
 export INSTALL_METHOD=helm
+export ENABLE_HTTP2_PROXY=${ENABLE_HTTP2_PROXY:-false}
+export CADDY_TLS_CERT=${CADDY_TLS_CERT:-}
+export CADDY_TLS_KEY=${CADDY_TLS_KEY:-}
 
 TMP_DIR=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "${TMP_DIR:-.tmp}")
 mkdir -p "${TMP_DIR}"
@@ -173,6 +176,105 @@ install_orchestrator_infra() {
 
     wait_and_approve_install_plans openshift-serverless
     wait_and_approve_install_plans openshift-serverless-logic
+}
+
+
+install_caddy_proxy() {
+    log_info "Installing Caddy HTTP/2 fronting proxy -> https://${CADDY_ROUTE_HOSTNAME}"
+    if [ -z "${CADDY_TLS_CERT}" ] || [ -z "${CADDY_TLS_KEY}" ]; then
+        log_info "No TLS cert provided, generating self-signed cert for ${CADDY_ROUTE_HOSTNAME}"
+        cat > "${TMP_DIR}/caddy-csr.cnf" <<EOF
+[req]
+distinguished_name = req_distinguished_name
+x509_extensions = v3_req
+prompt = no
+[req_distinguished_name]
+CN = caddy-proxy
+[v3_req]
+subjectAltName = DNS:${CADDY_ROUTE_HOSTNAME}
+EOF
+        openssl req -x509 -newkey rsa:4096 \
+            -keyout "${TMP_DIR}/caddy-tls.key" \
+            -out "${TMP_DIR}/caddy-tls.crt" \
+            -days 365 -nodes \
+            -config "${TMP_DIR}/caddy-csr.cnf" \
+            -extensions v3_req 2>/dev/null
+        CADDY_TLS_CERT="${TMP_DIR}/caddy-tls.crt"
+        CADDY_TLS_KEY="${TMP_DIR}/caddy-tls.key"
+    fi
+    $clin create secret tls tls-certs \
+        --cert="${CADDY_TLS_CERT}" --key="${CADDY_TLS_KEY}" \
+        --dry-run=client -o yaml | $clin apply -f -
+    # shellcheck disable=SC2016
+    envsubst '${CADDY_ROUTE_HOSTNAME} ${RHDH_HELM_RELEASE_NAME} ${RHDH_NAMESPACE} ${CADDY_BACKEND_PORT}' \
+        <template/backstage/caddy-proxy.yaml | $clin apply -f -
+    wait_to_start deployment caddy-fronting-proxy 120 120
+    echo -n "https://${CADDY_ROUTE_HOSTNAME}" >"${TMP_DIR}/backstage.url"
+    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then
+        local kc_host kc_user kc_pass admin_token client_id current_uris new_uris
+        kc_host="https://keycloak-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}"
+        kc_user=$(oc -n "${RHDH_NAMESPACE}" get secret rhdh-keycloak-initial-admin -o jsonpath='{.data.username}' | base64 -d)
+        kc_pass=$(oc -n "${RHDH_NAMESPACE}" get secret rhdh-keycloak-initial-admin -o jsonpath='{.data.password}' | base64 -d)
+        admin_token=$(curl -s -k "${kc_host}/realms/master/protocol/openid-connect/token" \
+            -d "client_id=admin-cli&username=${kc_user}&password=${kc_pass}&grant_type=password" | jq -r '.access_token')
+        client_id=$(curl -s -k "${kc_host}/admin/realms/backstage/clients?clientId=backstage" \
+            -H "Authorization: Bearer ${admin_token}" | jq -r '.[0].id')
+        current_uris=$(curl -s -k "${kc_host}/admin/realms/backstage/clients/${client_id}" \
+            -H "Authorization: Bearer ${admin_token}" | jq -c '.redirectUris')
+        new_uris=$(echo "${current_uris}" | jq --arg uri "https://${CADDY_ROUTE_HOSTNAME}/oauth2/callback" '. + [$uri] | unique')
+        curl -s -k -X PUT "${kc_host}/admin/realms/backstage/clients/${client_id}" \
+            -H "Authorization: Bearer ${admin_token}" -H "Content-Type: application/json" \
+            -d "{\"redirectUris\": ${new_uris}}" >/dev/null
+        log_info "Registered Caddy redirect URI in Keycloak: https://${CADDY_ROUTE_HOSTNAME}/oauth2/callback"
+    fi
+}
+
+setup_http2_proxy() {
+    log_info "Setting up HTTP/2 proxy (post-population)"
+    appurl=$(oc whoami --show-console)
+    export OPENSHIFT_APP_DOMAIN=${appurl#*.}
+    export CADDY_ROUTE_HOSTNAME=${CADDY_ROUTE_HOSTNAME:-"rhdh-h2-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}"}
+    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then export CADDY_BACKEND_PORT=4180; else export CADDY_BACKEND_PORT=7007; fi
+    log_info "HTTP/2 proxy: https://${CADDY_ROUTE_HOSTNAME} -> :${CADDY_BACKEND_PORT}"
+
+    install_caddy_proxy
+
+    local rhdh_deploy="${RHDH_HELM_RELEASE_NAME}-developer-hub"
+    if [ "$INSTALL_METHOD" == "olm" ]; then
+        rhdh_deploy="backstage-developer-hub"
+    fi
+
+    local caddy_url="https://${CADDY_ROUTE_HOSTNAME}"
+    local patched=false
+
+    for cm_name in "${rhdh_deploy}-app-config" "app-config-rhdh"; do
+        if ! $clin get configmap "$cm_name" &>/dev/null; then
+            continue
+        fi
+        log_info "Patching $cm_name: baseUrl + cors.origin -> $caddy_url"
+        $clin get configmap "$cm_name" -o yaml \
+            | sed -E \
+                -e "s|(baseUrl:[[:space:]]*https://)[^[:space:]]+|\1${CADDY_ROUTE_HOSTNAME}|g" \
+                -e "s|(origin:[[:space:]]*https://)[^[:space:]]+|\1${CADDY_ROUTE_HOSTNAME}|g" \
+            | $clin replace -f -
+        patched=true
+    done
+
+    # oauth2-proxy --redirect-url set to Caddy host
+    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then
+        log_info "Patching $rhdh_deploy oauth2-proxy --redirect-url -> ${caddy_url}/oauth2/callback"
+        $clin get deployment "$rhdh_deploy" -o yaml \
+            | sed "s|--redirect-url=https://[^[:space:]]*|--redirect-url=${caddy_url}/oauth2/callback|" \
+            | $clin replace -f -
+        patched=true
+    fi
+
+    if $patched; then
+        log_info "Restarting RHDH to pick up new baseUrl / oauth2 redirect"
+        $clin rollout restart deployment "$rhdh_deploy"
+        wait_to_start deployment "$rhdh_deploy" 300 600
+    fi
+    log_info "HTTP/2 proxy setup complete: $caddy_url"
 }
 
 delete_orchestrator_infra() {
@@ -964,6 +1066,7 @@ backstage_install() {
         yq -i '. |= . + {"auth":{"providers":{"guest":{"dangerouslyAllowOutsideDevelopment":true}}}}' "$TMP_DIR/app-config.yaml"
     fi
 
+
     if ${ENABLE_ORCHESTRATOR}; then
         install_orchestrator_infra
     fi
@@ -1250,12 +1353,12 @@ install() {
         log_error "Orchestrator is only supported with Helm install method"
         return 1
     fi
+    rm -f "${TMP_DIR}/backstage.url" "${TMP_DIR}/rhdh_token.json" "${TMP_DIR}/cookie.jar"
     setup_rhdh_namespace
     setup_operator_group
     setup_monitoring
     appurl=$(oc whoami --show-console)
     export OPENSHIFT_APP_DOMAIN=${appurl#*.}
-
     ldap_install 2>&1 | tee "${TMP_DIR}/ldap_install.log"
 
     keycloak_install 2>&1 | tee "${TMP_DIR}/keycloak_install.log"
@@ -1277,7 +1380,7 @@ install() {
 # Section 10: CLI Parsing
 ###############################################################################
 
-while getopts "oi:mrdwcWCeEklp" flag; do
+while getopts "oi:mrdwcWCeEklpH" flag; do
     case "${flag}" in
     o)
         export INSTALL_METHOD=olm
@@ -1336,6 +1439,9 @@ while getopts "oi:mrdwcWCeEklp" flag; do
     l)
         setup_rhdh_namespace
         ldap_install
+        ;;
+    H)
+        setup_http2_proxy
         ;;
     \?)
         log_warn "Invalid option: ${flag} - defaulting to -i (install)"
