@@ -425,6 +425,7 @@ psql-debug-cleanup:
 ## Ensure catalog population
 .PHONY: ensure-catalog-population
 ensure-catalog-population:
+	rm -rvf $(TMP_DIR)/rhdh_token.json	
 	cd ci-scripts/rhdh-setup; ./deploy.sh -p
 
 ## Collect NodeJS profiling data

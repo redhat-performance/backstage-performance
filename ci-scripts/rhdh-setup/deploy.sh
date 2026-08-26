@@ -791,6 +791,9 @@ install_rhdh_with_helm() {
             yq -i '.orchestrator.sonataflowPlatform.externalDBsecretRef="rhdh-db-credentials"' "$TMP_DIR/chart-values.yaml"
         fi
         yq -i '.orchestrator.sonataflowPlatform.externalDBName="postgres"' "$TMP_DIR/chart-values.yaml"
+        # Orchestrator plugin workaround
+        envsubst '${RHDH_NAMESPACE}' <template/backstage/helm/orchestrator-plugin-patch.yaml >"$TMP_DIR/orchestrator-plugin-patch.yaml"
+        yq -i '.orchestrator.plugins = load("'"$TMP_DIR/orchestrator-plugin-patch.yaml"'")' "$TMP_DIR/chart-values.yaml"
     fi
 
     # RHDH resources
