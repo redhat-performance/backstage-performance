@@ -10,12 +10,7 @@ global:
         disabled: false
       - package: ./dynamic-plugins/dist/backstage-community-plugin-analytics-provider-segment
         disabled: true
-      # TechDocs
-      - package: ./dynamic-plugins/dist/backstage-plugin-techdocs
-        disabled: false
-      - package: ./dynamic-plugins/dist/backstage-plugin-techdocs-backend-dynamic
-        disabled: false
-      - package: ./dynamic-plugins/dist/backstage-community-plugin-catalog-backend-module-ldap-dynamic
+      - package: oci://quay.io/backstage-performance/backstage-plugin-catalog-backend-module-ldap-dynamic:phase1-reviewfix
         disabled: false
 orchestrator:
   enabled: false
