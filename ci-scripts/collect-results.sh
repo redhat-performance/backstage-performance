@@ -323,10 +323,28 @@ if [ "$UPLOAD_TO_OPENSEARCH" == "true" ]; then
               "${ES_SERVER}/${ES_BENCHMARK_INDEX}/_count" \
               -H "Content-Type: application/json" | jq '.count')
 
+            cp config/orion/mvp-regression.yaml "${ARTIFACT_DIR}/regression/mvp-regression.yaml"
+            cp config/orion/mvp-anomaly-catch.yaml "${ARTIFACT_DIR}/regression/mvp-anomaly-catch.yaml"
+
+            orion --config "${ARTIFACT_DIR}/regression/mvp-anomaly-catch.yaml" \
+            --anomaly-detection \
+            --lookback-size $MIN_HUNTER_COUNT \
+            --display git_commit,build_id,rhdh_release_tag \
+            -o json --save-output-path "${ARTIFACT_DIR}/regression/anomaly-results.json" || true
+
+            anomaly_json=$(find "${ARTIFACT_DIR}/regression" -maxdepth 1 -type f -name 'anomaly-results*.json' -print -quit)
+            if [ -n "${anomaly_json}" ]; then
+                changepoint_ids=$(jq -c '[.[] | select(.is_changepoint == true) | .prow_job_id]' "$anomaly_json")
+                if [ -n "$changepoint_ids" ] && [ "$changepoint_ids" != "[]" ]; then
+                    echo "$(date -u -Ins) Excluding changepoint prow_job_ids from regression: $changepoint_ids"
+                    yq -i ".tests[0].metadata.not.prow_job_id = ${changepoint_ids}" "${ARTIFACT_DIR}/regression/mvp-regression.yaml"
+                fi
+            fi
+
             if [[ $COUNT -ge $MIN_CMR_COUNT ]]; then
                 echo "$(date -u -Ins) Regressing recent run"
                 code=0
-                orion --config config/mvp-regression.yaml \
+                orion --config "${ARTIFACT_DIR}/regression/mvp-regression.yaml" \
                     --cmr \
                     --lookback-size $MIN_CMR_COUNT \
                     --display git_commit,build_id,rhdh_release_tag \
@@ -337,7 +355,7 @@ if [ "$UPLOAD_TO_OPENSEARCH" == "true" ]; then
 
                 if [[ $COUNT -ge $MIN_HUNTER_COUNT ]]; then
                     echo "$(date -u -Ins) Regressing history data"
-                    orion --config config/mvp-regression.yaml \
+                    orion --config "${ARTIFACT_DIR}/regression/mvp-regression.yaml" \
                         --hunter-analyze \
                         --lookback-size $MIN_HUNTER_COUNT \
                         --display git_commit,build_id,rhdh_release_tag \
