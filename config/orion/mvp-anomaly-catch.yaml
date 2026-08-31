@@ -1,5 +1,5 @@
 tests:
-  - name: rhdh-performance.mvp-cpt.xs
+  - name: "{{ opensearch_index | replace('performance.', '') }}"
     uuid_field: prow_job_id
     version_field: git_commit
     timestamp: "@timestamp"

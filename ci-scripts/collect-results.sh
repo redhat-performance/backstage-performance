@@ -307,7 +307,7 @@ if [ "$UPLOAD_TO_OPENSEARCH" == "true" ]; then
         python3 ./ci-scripts/opensearch/upload_benchmark.py "$ARTIFACT_DIR"
     fi
 
-    if [ "$PERFORM_REGRESSION" == "true" ]; then
+    if [ "$PERFORM_REGRESSION" == "true" ] && [ "${SCENARIO:-}" == "mvp" ]; then
         if opensearch_config_present; then
             OPENSEARCH_DOMAIN=$(echo "$OPENSEARCH_URL" | awk '{sub(/^https?:\/\//, ""); print}')
             OPENSEARCH_PASSWORD_ENCODED=$(python3 -c "import os, urllib.parse; print(urllib.parse.quote(os.environ['OPENSEARCH_PASSWORD'], safe=''))")
