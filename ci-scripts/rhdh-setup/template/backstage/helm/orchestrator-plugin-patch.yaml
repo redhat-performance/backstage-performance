@@ -1,0 +1,58 @@
+---
+- package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/red-hat-developer-hub-backstage-plugin-orchestrator:bs_1.52.0__6.0.0
+  disabled: false
+  pluginConfig:
+    dynamicPlugins:
+      frontend:
+        red-hat-developer-hub.backstage-plugin-orchestrator:
+          # Legacy exports require `module: Legacy` — they are not available on the default PluginRoot module.
+          translationResources:
+            - importName: orchestratorTranslations
+              ref: orchestratorTranslationRef
+              module: Legacy
+          appIcons:
+            - importName: OrchestratorIcon
+              module: Legacy
+              name: orchestratorIcon
+          dynamicRoutes:
+            - importName: OrchestratorPage
+              module: Legacy
+              menuItem:
+                icon: orchestratorIcon
+                text: Orchestrator
+                textKey: menuItem.orchestrator
+              path: /orchestrator
+          entityTabs:
+            - path: /workflows
+              title: Workflows
+              titleKey: catalog.entityPage.workflows.title
+              mountPoint: entity.page.workflows
+          mountPoints:
+            - mountPoint: entity.page.workflows/cards
+              importName: OrchestratorCatalogTab
+              module: Legacy
+              config:
+                layout:
+                  gridColumn: 1 / -1
+                if:
+                  anyOf:
+                    - hasAnnotation: orchestrator.io/workflows
+- package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/red-hat-developer-hub-backstage-plugin-orchestrator-backend:bs_1.52.0__8.12.1
+  disabled: false
+  pluginConfig:
+    orchestrator:
+      dataIndexService:
+        url: http://sonataflow-platform-data-index-service.${RHDH_NAMESPACE}
+- package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/red-hat-developer-hub-backstage-plugin-orchestrator-form-widgets:bs_1.52.0__2.0.0
+  disabled: false
+  pluginConfig:
+    dynamicPlugins:
+      frontend:
+        red-hat-developer-hub.backstage-plugin-orchestrator-form-widgets:
+          pluginModule: Legacy
+- package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/red-hat-developer-hub-backstage-plugin-scaffolder-backend-module-orchestrator:bs_1.52.0__1.7.2
+  disabled: false
+  pluginConfig:
+    orchestrator:
+      dataIndexService:
+        url: http://sonataflow-platform-data-index-service.${RHDH_NAMESPACE}

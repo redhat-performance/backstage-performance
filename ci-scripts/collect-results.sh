@@ -148,6 +148,7 @@ try_gather_dir "${TMP_DIR}/workflows"
 try_gather_dir "${TMP_DIR}/local-test"
 try_gather_file test.env
 try_gather_dir "$TMP_DIR/catalog-entity-counts"
+try_gather_file "${TMP_DIR}/orchestrator-plugin-patch.yaml"
 
 # Metrics
 PYTHON_VENV_DIR=.venv
