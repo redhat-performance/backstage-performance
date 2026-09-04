@@ -245,16 +245,19 @@ else
 	@echo "no changes"
 endif
 	@ if [ -z "$$BASE_HOST" ]; then \
-	    if [ "$$RHDH_INSTALL_METHOD" == "olm" ]; then \
+	    if [ "$$ENABLE_HTTP2_PROXY" == "true" ]; then \
+	        BASE_HOST="https://$$(oc get routes caddy-fronting-proxy -n "$$RHDH_NAMESPACE" -o jsonpath='{.spec.host}')"; \
+	    elif [ "$$RHDH_INSTALL_METHOD" == "olm" ]; then \
 				if [ "$$AUTH_PROVIDER" == "keycloak" ]; then \
 						rhdh_route="rhdh"; \
 				else \
 						rhdh_route="backstage-developer-hub"; \
 				fi; \
+				BASE_HOST="https://$$(oc get routes "$$rhdh_route" -n "$$RHDH_NAMESPACE" -o jsonpath='{.spec.host}')"; \
 		elif [ "$$RHDH_INSTALL_METHOD" == "helm" ]; then \
 				rhdh_route="$$(oc -n "$$RHDH_NAMESPACE" get routes -l app.kubernetes.io/instance="$${RHDH_HELM_RELEASE_NAME}" -o jsonpath='{.items[0].metadata.name}')"; \
+				BASE_HOST="https://$$(oc get routes "$$rhdh_route" -n "$$RHDH_NAMESPACE" -o jsonpath='{.spec.host}')"; \
 		fi; \
-	  BASE_HOST="https://$$(oc get routes "$$rhdh_route" -n "$$RHDH_NAMESPACE" -o jsonpath='{.spec.host}')"; \
 	fi; \
 	mkdir -p $(TMP_DIR)/local-test; \
 	$(PYTHON_VENV)/bin/locust --host "$$BASE_HOST" --headless --users $$USERS --spawn-rate $$SPAWN_RATE --run-time $$DURATION --print-stats --page-n-count=$$PAGE_N_COUNT --catalog-tab-n-count=$$CATALOG_TAB_N_COUNT --html "$$TMP_DIR/local-test/local-summary.html" --csv "$$TMP_DIR/local-test/summary" $$LOCUST_EXTRA_CMD -f ./scenarios/$$SCENARIO.py > local-locust-test.log
@@ -290,16 +293,19 @@ else
 	@echo "no changes"
 endif
 	@ if [ -z "$$BASE_HOST" ]; then \
-	    if [ "$$RHDH_INSTALL_METHOD" == "olm" ]; then \
+	    if [ "$$ENABLE_HTTP2_PROXY" == "true" ]; then \
+	        BASE_HOST="https://$$(oc get routes caddy-fronting-proxy -n "$$RHDH_NAMESPACE" -o jsonpath='{.spec.host}')"; \
+	    elif [ "$$RHDH_INSTALL_METHOD" == "olm" ]; then \
 				if [ "$$AUTH_PROVIDER" == "keycloak" ]; then \
 						rhdh_route="rhdh"; \
 				else \
 						rhdh_route="backstage-developer-hub"; \
 				fi; \
+				BASE_HOST="https://$$(oc get routes "$$rhdh_route" -n "$$RHDH_NAMESPACE" -o jsonpath='{.spec.host}')"; \
 		elif [ "$$RHDH_INSTALL_METHOD" == "helm" ]; then \
 				rhdh_route="$$(oc -n "$$RHDH_NAMESPACE" get routes -l app.kubernetes.io/instance="$${RHDH_HELM_RELEASE_NAME}" -o jsonpath='{.items[0].metadata.name}')"; \
+				BASE_HOST="https://$$(oc get routes "$$rhdh_route" -n "$$RHDH_NAMESPACE" -o jsonpath='{.spec.host}')"; \
 		fi; \
-	  BASE_HOST="https://$$(oc get routes "$$rhdh_route" -n "$$RHDH_NAMESPACE" -o jsonpath='{.spec.host}')"; \
 	fi; \
 	envsubst < locust-test-template.yaml | tee $(TMP_DIR)/locust-test.yaml | kubectl apply --namespace $(LOCUST_NAMESPACE) -f -
 	kubectl create --namespace $(LOCUST_NAMESPACE) configmap locust.$(SCENARIO) --from-file scenarios/$(SCENARIO).py --dry-run=client -o yaml | kubectl apply --namespace $(LOCUST_NAMESPACE) -f -
@@ -341,9 +347,14 @@ lint: shellcheck
 
 ##	=== CI ===
 
+## Deploy HTTP/2 Caddy proxy in front of RHDH (after catalog population)
+.PHONY: deploy-http2-proxy
+deploy-http2-proxy:
+	cd ci-scripts/rhdh-setup; ./deploy.sh -H
+
 ## Run the load test in CI end to end
 .PHONY: ci-run
-ci-run: setup-venv deploy-locust ensure-catalog-population test
+ci-run: setup-venv test-local
 
 ## Deploy and populate RHDH in CI end to end
 .PHONY: ci-deploy
@@ -352,6 +363,9 @@ ifeq ($(RHDH_INSTALL_METHOD),helm)
 ci-deploy: deploy-rhdh-helm
 else ifeq ($(RHDH_INSTALL_METHOD),olm)
 ci-deploy: deploy-rhdh-olm
+endif
+ifeq ($(ENABLE_HTTP2_PROXY),true)
+	@$(MAKE) deploy-http2-proxy
 endif
 
 
