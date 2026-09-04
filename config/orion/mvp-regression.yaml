@@ -1,12 +1,9 @@
 tests:
-  - name: {{ opensearch_index | replace("performance.", "") }}
+  - name: "{{ opensearch_index | replace('performance.', '') }}"
     uuid_field: prow_job_id
     version_field: git_commit
     timestamp: "@timestamp"
     threshold: 10
-
-    metadata:
-      scenario_name: mvp
 
     metrics:
       - name: rhdh_avg_response_time
@@ -73,3 +70,6 @@ tests:
         direction: 0
         threshold: 25
         labels: ["[RHDH: Payload]"]
+
+    metadata:
+      scenario_name: mvp

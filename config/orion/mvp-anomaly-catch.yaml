@@ -1,0 +1,42 @@
+tests:
+  - name: "{{ opensearch_index | replace('performance.', '') }}"
+    uuid_field: prow_job_id
+    version_field: git_commit
+    timestamp: "@timestamp"
+    threshold: 50
+
+    metadata:
+      scenario_name: mvp
+
+    metrics:
+      - name: rhdh_avg_content_length
+        metric_of_interest: results.aggregated.avg_content_length.mean
+        agg:
+          agg_type: avg
+        direction: 0
+        threshold: 50
+        labels: ["[RHDH: Payload]"]
+
+      - name: rhdh_avg_response_time
+        metric_of_interest: results.aggregated.avg_response_time.mean
+        agg:
+          agg_type: avg
+        direction: 0
+        threshold: 50
+        labels: ["[RHDH: Latency]"]
+
+      - name: rhdh_memory
+        metric_of_interest: measurements.rhdh_developer_hub.memory.mean
+        agg:
+          agg_type: avg
+        direction: 0
+        threshold: 50
+        labels: ["[RHDH: Developer Hub memory]"]
+
+      - name: rhdh_cpu
+        metric_of_interest: measurements.rhdh_developer_hub.cpu.mean
+        agg:
+          agg_type: avg
+        direction: 0
+        threshold: 50
+        labels: ["[RHDH: Developer Hub CPU]"]
