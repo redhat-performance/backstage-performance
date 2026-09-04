@@ -696,28 +696,23 @@ install_rhdh_with_helm() {
 
     # OAuth2 Proxy
     log_info "Setting up OAuth2 Proxy"
-    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.backstage |= . + load("template/backstage/helm/oauth2-container-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"; fi
-    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.service.ports.targetPort = "oauth2-proxy"' "$TMP_DIR/chart-values.temp.yaml"; fi
-    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.service.ports.backend = 4180' "$TMP_DIR/chart-values.temp.yaml"; fi
-    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then
+    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then 
+        yq -i '. |= . + load("template/backstage/helm/oauth2-container-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"
+        yq -i '.extraEnv |= . + [{"name": "APP_CONFIG_backend_listen_port", "value": "7007"}]' "$TMP_DIR/chart-values.temp.yaml"
+        yq -i '.service.port = 4180' "$TMP_DIR/chart-values.temp.yaml"
         log_info "Enabling oauth2-proxy auth backend dynamic plugin"
         envsubst <template/backstage/helm/oauth2-proxy-auth-plugin-patch.yaml >"$TMP_DIR/oauth2-proxy-auth-plugin-patch.yaml"
-        yq -i '.global.dynamic.plugins |= . + load("'"$TMP_DIR/oauth2-proxy-auth-plugin-patch.yaml"'")' "$TMP_DIR/chart-values.temp.yaml"
+        yq -i '.dynamicPlugins.plugins |= . + load("'"$TMP_DIR/oauth2-proxy-auth-plugin-patch.yaml"'")' "$TMP_DIR/chart-values.temp.yaml"
     fi
 
     # RBAC
     if ${ENABLE_RBAC}; then
         log_info "Setting up RBAC"
-        if ${RBAC_POLICY_UPLOAD_TO_GITHUB} || [ -n "${RBAC_POLICY_FILE_URL}" ]; then
-            log_info "Using RBAC policy from URL with PVC mount"
-            yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-rbac-pvc.yaml")' "$TMP_DIR/chart-values.temp.yaml"
-        else
-            yq -i '.upstream.backstage |= . + load("template/backstage/helm/extravolume-patch-1.x.yaml")' "$TMP_DIR/chart-values.temp.yaml"
-        fi
-        yq -i '.global.dynamic.plugins |= . + load("template/backstage/helm/rbac-plugin-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"
+        yq -i '. |= . + load("template/backstage/helm/extravolume-patch-rbac-pvc.yaml")' "$TMP_DIR/chart-values.temp.yaml"
+        yq -i '.dynamicPlugins.plugins |= . + load("template/backstage/helm/rbac-plugin-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"
         if [ "${CATALOG_TAB_N_COUNT}" -gt 0 ] || [ "${PAGE_N_COUNT}" -gt 0 ]; then
             log_info "Setting up dynamic plugins root volume to 10Gi"
-            yq 'with(.upstream.backstage.extraVolumes[] | select(.name == "dynamic-plugins-root"); .ephemeral.volumeClaimTemplate.spec.resources.requests.storage = "10Gi")' -i "$TMP_DIR/chart-values.temp.yaml"
+            yq 'with(.extraVolumes[] | select(.name == "dynamic-plugins-root"); .ephemeral.volumeClaimTemplate.spec.resources.requests.storage = "10Gi")' -i "$TMP_DIR/chart-values.temp.yaml"
         fi
     fi
 
@@ -729,7 +724,7 @@ install_rhdh_with_helm() {
             log_info "Setting up Page ${PAGE_N}/${PAGE_N_COUNT} dynamic plugin"
             envsubst '${DYNAMIC_PLUGIN_BS_VERSION} ${PAGE_N}' <template/backstage/helm/page-n-plugin-patch.yaml >>"$TMP_DIR/page-n-plugin-patch.yaml"
         done
-        yq -i '.global.dynamic.plugins |= . + load("'"$TMP_DIR/page-n-plugin-patch.yaml"'")' "$TMP_DIR/chart-values.temp.yaml"
+        yq -i '.dynamicPlugins.plugins |= . + load("'"$TMP_DIR/page-n-plugin-patch.yaml"'")' "$TMP_DIR/chart-values.temp.yaml"
     fi
 
     export CATALOG_TAB_N
@@ -740,21 +735,21 @@ install_rhdh_with_helm() {
             log_info "Setting up Catalog tab ${CATALOG_TAB_N}/${CATALOG_TAB_N_COUNT} dynamic plugin"
             envsubst '${DYNAMIC_PLUGIN_BS_VERSION} ${CATALOG_TAB_N}' <template/backstage/helm/catalog-tab-n-plugin-patch.yaml >>"$TMP_DIR/catalog-tab-n-plugin-patch.yaml"
         done
-        yq -i '.global.dynamic.plugins |= . + load("'"$TMP_DIR/catalog-tab-n-plugin-patch.yaml"'")' "$TMP_DIR/chart-values.temp.yaml"
+        yq -i '.dynamicPlugins.plugins |= . + load("'"$TMP_DIR/catalog-tab-n-plugin-patch.yaml"'")' "$TMP_DIR/chart-values.temp.yaml"
     fi
 
     # Pod affinity for multiple replicas to schedule on same node
     if [ "${RHDH_DEPLOYMENT_REPLICAS}" -gt 1 ]; then
         log_info "Applying pod affinity for multiple replicas to schedule on same node"
-        yq -i '.upstream.backstage |= . + load("template/backstage/helm/pod-affinity-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"
+        yq -i '. |= . + load("template/backstage/helm/pod-affinity-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"
     fi
 
     # Override catalog index image
     if [ -n "${RHDH_CATALOG_INDEX_IMAGE_REGISTRY}${RHDH_CATALOG_INDEX_IMAGE_REPO}${RHDH_CATALOG_INDEX_IMAGE_TAG}" ]; then
         log_info "Overriding catalog index image to $RHDH_CATALOG_INDEX_IMAGE_REGISTRY/$RHDH_CATALOG_INDEX_IMAGE_REPO:$RHDH_CATALOG_INDEX_IMAGE_TAG"
-        yq -i '.global.catalogIndex.image.registry = "'"$RHDH_CATALOG_INDEX_IMAGE_REGISTRY"'"' "$TMP_DIR/chart-values.temp.yaml"
-        yq -i '.global.catalogIndex.image.repository = "'"$RHDH_CATALOG_INDEX_IMAGE_REPO"'"' "$TMP_DIR/chart-values.temp.yaml"
-        yq -i '.global.catalogIndex.image.tag = "'"$RHDH_CATALOG_INDEX_IMAGE_TAG"'"' "$TMP_DIR/chart-values.temp.yaml"
+        yq -i '.catalogIndex.image.registry = "'"$RHDH_CATALOG_INDEX_IMAGE_REGISTRY"'"' "$TMP_DIR/chart-values.temp.yaml"
+        yq -i '.catalogIndex.image.repository = "'"$RHDH_CATALOG_INDEX_IMAGE_REPO"'"' "$TMP_DIR/chart-values.temp.yaml"
+        yq -i '.catalogIndex.image.tag = "'"$RHDH_CATALOG_INDEX_IMAGE_TAG"'"' "$TMP_DIR/chart-values.temp.yaml"
     fi
 
     log_info "Installing RHDH Helm chart $RHDH_HELM_RELEASE_NAME from $chart_origin in $RHDH_NAMESPACE namespace"
@@ -781,14 +776,14 @@ install_rhdh_with_helm() {
     if ${ENABLE_ORCHESTRATOR}; then
         log_info "Enabling orchestrator plugins"
         yq -i '.orchestrator.enabled = true' "$TMP_DIR/chart-values.yaml"
-        yq -i ".orchestrator.sonataflowPlatform.externalDBHost=\"${POSTGRES_HOST}\"" "$TMP_DIR/chart-values.yaml"
-        yq -i ".orchestrator.sonataflowPlatform.externalDBPort=\"${POSTGRES_PORT}\"" "$TMP_DIR/chart-values.yaml"
+        yq -i ".orchestrator.sonataflowPlatform.externalDB.host=\"${POSTGRES_HOST}\"" "$TMP_DIR/chart-values.yaml"
+        yq -i ".orchestrator.sonataflowPlatform.externalDB.port=\"${POSTGRES_PORT}\"" "$TMP_DIR/chart-values.yaml"
         if [[ "${ENABLE_PGBOUNCER}" == "true" && "${PGBOUNCER_REPLICAS}" -gt 0 ]]; then
-            yq -i '.orchestrator.sonataflowPlatform.externalDBsecretRef="rhdh-db-sonataflow-credentials"' "$TMP_DIR/chart-values.yaml"
+            yq -i '.orchestrator.sonataflowPlatform.externalDB.existingSecret="rhdh-db-sonataflow-credentials"' "$TMP_DIR/chart-values.yaml"
         else
-            yq -i '.orchestrator.sonataflowPlatform.externalDBsecretRef="rhdh-db-credentials"' "$TMP_DIR/chart-values.yaml"
+            yq -i '.orchestrator.sonataflowPlatform.externalDB.existingSecret="rhdh-db-credentials"' "$TMP_DIR/chart-values.yaml"
         fi
-        yq -i '.orchestrator.sonataflowPlatform.externalDBName="postgres"' "$TMP_DIR/chart-values.yaml"
+        yq -i '.orchestrator.sonataflowPlatform.externalDB.name="postgres"' "$TMP_DIR/chart-values.yaml"
         # Orchestrator plugin workaround
         envsubst '${RHDH_NAMESPACE}' <template/backstage/helm/orchestrator-plugin-patch.yaml >"$TMP_DIR/orchestrator-plugin-patch.yaml"
         yq -i '.orchestrator.plugins = load("'"$TMP_DIR/orchestrator-plugin-patch.yaml"'")' "$TMP_DIR/chart-values.yaml"
@@ -796,31 +791,33 @@ install_rhdh_with_helm() {
 
     # RHDH resources
     log_info "Setting up RHDH resources"
-    if [ -n "${RHDH_RESOURCES_CPU_REQUESTS}" ]; then yq -i '.upstream.backstage.resources.requests.cpu = "'"${RHDH_RESOURCES_CPU_REQUESTS}"'"' "$TMP_DIR/chart-values.yaml"; fi
-    if [ -n "${RHDH_RESOURCES_CPU_LIMITS}" ]; then yq -i '.upstream.backstage.resources.limits.cpu = "'"${RHDH_RESOURCES_CPU_LIMITS}"'"' "$TMP_DIR/chart-values.yaml"; fi
-    if [ -n "${RHDH_RESOURCES_MEMORY_REQUESTS}" ]; then yq -i '.upstream.backstage.resources.requests.memory = "'"${RHDH_RESOURCES_MEMORY_REQUESTS}"'"' "$TMP_DIR/chart-values.yaml"; fi
-    if [ -n "${RHDH_RESOURCES_MEMORY_LIMITS}" ]; then yq -i '.upstream.backstage.resources.limits.memory = "'"${RHDH_RESOURCES_MEMORY_LIMITS}"'"' "$TMP_DIR/chart-values.yaml"; fi
-    if [ -n "${RHDH_RESOURCES_EPHEMERAL_STORAGE_REQUESTS}" ]; then yq -i '.upstream.backstage.resources.requests.ephemeral-storage = "'"${RHDH_RESOURCES_EPHEMERAL_STORAGE_REQUESTS}"'"' "$TMP_DIR/chart-values.yaml"; fi
-    if [ -n "${RHDH_RESOURCES_EPHEMERAL_STORAGE_LIMITS}" ]; then yq -i '.upstream.backstage.resources.limits.ephemeral-storage = "'"${RHDH_RESOURCES_EPHEMERAL_STORAGE_LIMITS}"'"' "$TMP_DIR/chart-values.yaml"; fi
+    if [ -n "${RHDH_RESOURCES_CPU_REQUESTS}" ]; then yq -i '.resources.requests.cpu = "'"${RHDH_RESOURCES_CPU_REQUESTS}"'"' "$TMP_DIR/chart-values.yaml"; fi
+    if [ -n "${RHDH_RESOURCES_CPU_LIMITS}" ]; then yq -i '.resources.limits.cpu = "'"${RHDH_RESOURCES_CPU_LIMITS}"'"' "$TMP_DIR/chart-values.yaml"; fi
+    if [ -n "${RHDH_RESOURCES_MEMORY_REQUESTS}" ]; then yq -i '.resources.requests.memory = "'"${RHDH_RESOURCES_MEMORY_REQUESTS}"'"' "$TMP_DIR/chart-values.yaml"; fi
+    if [ -n "${RHDH_RESOURCES_MEMORY_LIMITS}" ]; then yq -i '.resources.limits.memory = "'"${RHDH_RESOURCES_MEMORY_LIMITS}"'"' "$TMP_DIR/chart-values.yaml"; fi
+    if [ -n "${RHDH_RESOURCES_EPHEMERAL_STORAGE_REQUESTS}" ]; then yq -i '.resources.requests.ephemeral-storage = "'"${RHDH_RESOURCES_EPHEMERAL_STORAGE_REQUESTS}"'"' "$TMP_DIR/chart-values.yaml"; fi
+    if [ -n "${RHDH_RESOURCES_EPHEMERAL_STORAGE_LIMITS}" ]; then yq -i '.resources.limits.ephemeral-storage = "'"${RHDH_RESOURCES_EPHEMERAL_STORAGE_LIMITS}"'"' "$TMP_DIR/chart-values.yaml"; fi
     if [ -n "${RHDH_NODEJS_MAX_HEAP_SIZE}" ]; then
-        yq -i '.upstream.backstage.extraEnvVars |= . + [{"name": "NODE_OPTIONS", "value": "--max-old-space-size='"${RHDH_NODEJS_MAX_HEAP_SIZE}"'"}]' "$TMP_DIR/chart-values.yaml"
+        yq -i '.extraEnv |= . + [{"name": "NODE_OPTIONS", "value": "--max-old-space-size='"${RHDH_NODEJS_MAX_HEAP_SIZE}"'"}]' "$TMP_DIR/chart-values.yaml"
     fi
     if ${ENABLE_PROFILING}; then
         log_info "Setting up NodeJS Profiling"
-        yq -i '.upstream.backstage.command = ["node","--prof","--logfile=/tmp/rhdh-v8.log","--no-logfile-per-isolate","--heapsnapshot-signal=SIGUSR2","--diagnostic-dir=/tmp","--require","./instrumentation.js","packages/backend"]' "$TMP_DIR/chart-values.yaml"
-        yq -i '.upstream.backstage.args = ["--config", "app-config.yaml", "--config", "app-config.example.yaml", "--config", "app-config.example.production.yaml"] + (.upstream.backstage.args // [])' "$TMP_DIR/chart-values.yaml"
+        yq -i '.commandOverride = ["node","--prof","--logfile=/tmp/rhdh-v8.log","--no-logfile-per-isolate","--heapsnapshot-signal=SIGUSR2","--diagnostic-dir=/tmp","--require","./instrumentation.js","packages/backend"]' "$TMP_DIR/chart-values.yaml"
+        yq -i '.argsOverride = ["--config", "app-config.yaml", "--config", "app-config.example.yaml", "--config", "app-config.example.production.yaml"] + (.argsOverride // [])' "$TMP_DIR/chart-values.yaml"
     fi
 
     log_info "Setting up relaxed liveness/readiness probes for large LDAP sync tolerance"
     failureThreshold=$(bc -l <<<"scale=0; ($API_COUNT + $COMPONENT_COUNT + $BACKSTAGE_USER_COUNT + $GROUP_COUNT) / 2000")
-    yq -i '.upstream.backstage.readinessProbe |= {"httpGet":{"path":"/healthcheck","port":7007,"scheme":"HTTP"},"initialDelaySeconds":60,"timeoutSeconds":5,"periodSeconds":60,"successThreshold":1,"failureThreshold":'"$failureThreshold"'}' "$TMP_DIR/chart-values.yaml"
-    yq -i '.upstream.backstage.livenessProbe |= {"httpGet":{"path":"/healthcheck","port":7007,"scheme":"HTTP"},"initialDelaySeconds":60,"timeoutSeconds":5,"periodSeconds":60,"successThreshold":1,"failureThreshold":'"$failureThreshold"'}' "$TMP_DIR/chart-values.yaml"
+    yq -i '.readinessProbe |= {"httpGet":{"path":"/healthcheck","port":7007,"scheme":"HTTP"},"initialDelaySeconds":60,"timeoutSeconds":5,"periodSeconds":60,"successThreshold":1,"failureThreshold":'"$failureThreshold"'}' "$TMP_DIR/chart-values.yaml"
+    yq -i '.livenessProbe |= {"httpGet":{"path":"/healthcheck","port":7007,"scheme":"HTTP"},"initialDelaySeconds":60,"timeoutSeconds":5,"periodSeconds":60,"successThreshold":1,"failureThreshold":'"$failureThreshold"'}' "$TMP_DIR/chart-values.yaml"
 
     # RHDH database connection
-    yq -i '.upstream.backstage.appConfig.database.connection.host = "'"${POSTGRES_HOST}"'"' "$TMP_DIR/chart-values.yaml"
+    yq -i '.externalDatabase.host = "'"${POSTGRES_HOST}"'"' "$TMP_DIR/chart-values.yaml"
+    yq -i '.externalDatabase.port = "'"${POSTGRES_PORT}"'"' "$TMP_DIR/chart-values.yaml"
+    yq -i '.externalDatabase.user = "'"${POSTGRES_USER}"'"' "$TMP_DIR/chart-values.yaml"
 
     # Initial RHDH replicas to 1 before scaling up
-    yq -i '.upstream.backstage.replicas = 1' "$TMP_DIR/chart-values.yaml"
+    yq -i '.replicaCount = 1' "$TMP_DIR/chart-values.yaml"
 
     # Install RHDH Helm chart
     #shellcheck disable=SC2086
@@ -847,9 +844,6 @@ install_rhdh_with_helm() {
 }
 
 install_rhdh_with_olm() {
-    $clin create secret generic rhdh-backend-secret --from-literal=BACKEND_SECRET="$(mktemp -u XXXXXXXXXXX)"
-    mark_resource_for_rhdh secret rhdh-backend-secret
-
     $clin create cm app-config-backend-secret --from-file=template/backstage/olm/app-config.rhdh.backend-secret.yaml
     mark_resource_for_rhdh cm app-config-backend-secret
 
@@ -986,6 +980,7 @@ backstage_install() {
     if [ "$INSTALL_METHOD" == "olm" ]; then
         mark_resource_for_rhdh configmap app-config-rhdh
     fi
+    $clin create secret generic rhdh-backend-secret --from-literal=BACKEND_SECRET="$(mktemp -u XXXXXXXXXXX)"
     if ${ENABLE_RBAC}; then
         if ${RBAC_POLICY_UPLOAD_TO_GITHUB}; then
             log_info "RBAC policy will be generated and uploaded to GitHub"

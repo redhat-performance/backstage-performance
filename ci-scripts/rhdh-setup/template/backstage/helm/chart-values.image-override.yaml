@@ -1,7 +1,7 @@
 global:
   clusterRouterBase: ${OPENSHIFT_APP_DOMAIN}
   imagePullSecrets:
-    - rhdh-pull-secret
+    - name: rhdh-pull-secret
   dynamic:
     includes:
       - dynamic-plugins.default.yaml

@@ -1,104 +1,92 @@
 global:
-  clusterRouterBase: ${OPENSHIFT_APP_DOMAIN}
   imagePullSecrets:
-    - rhdh-pull-secret
-  dynamic:
-    includes:
-      - dynamic-plugins.default.yaml
-    plugins:
-      - package: ./dynamic-plugins/dist/backstage-community-plugin-catalog-backend-module-keycloak-dynamic
-        disabled: false
-      - package: ./dynamic-plugins/dist/backstage-community-plugin-analytics-provider-segment
-        disabled: true
-      - package: oci://quay.io/backstage-performance/backstage-plugin-catalog-backend-module-ldap-dynamic:phase1-reviewfix
-        disabled: false
+    - name: rhdh-pull-secret
+
+openshift:
+  clusterRouterBase: ${OPENSHIFT_APP_DOMAIN}
+
+dynamicPlugins:
+  plugins:
+    - package: ./dynamic-plugins/dist/backstage-community-plugin-catalog-backend-module-keycloak-dynamic
+      disabled: false
+    - package: ./dynamic-plugins/dist/backstage-community-plugin-analytics-provider-segment
+      disabled: true
+    - package: oci://quay.io/backstage-performance/backstage-plugin-catalog-backend-module-ldap-dynamic:phase1-reviewfix
+      disabled: false
+
 orchestrator:
   enabled: false
-upstream:
-  backstage:
-    appConfig:
-      auth:
-        externalAccess:
-          - type: legacy
-            options:
-              secret: ${BACKEND_SECRET}
-              subject: legacy-catalog
-      backend:
-        database:
-          connection:
-            host: "${POSTGRES_HOST}"
-            port: "${POSTGRES_PORT}"
-            user: "${POSTGRES_USER}"
-            password: "${POSTGRES_PASSWORD}"
-          knexConfig:
-            pool:
-              min: 10
-              max: 50
-              acquireTimeoutMillis: 60000
-    containerPorts:
-      backend: 7007
-    extraAppConfig:
-      - configMapRef: app-config-rhdh
-        filename: app-config.rhdh.yaml
-    extraEnvVarsSecrets:
-      - "rhdh-db-credentials"
-    extraEnvVars:
-      - name: BACKEND_SECRET
-        valueFrom:
-          secretKeyRef:
-            key: backend-secret
-            name: '{{ include "janus-idp.backend-secret-name" $ }}'
-      - name: GITHUB_TOKEN
-        valueFrom:
-          secretKeyRef:
-            key: github.token
-            name: "{{ .Release.Name }}-plugin-secrets"
-      - name: KEYCLOAK_BASE_URL
-        value: "https://keycloak-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}"
-      - name: KEYCLOAK_LOGIN_REALM
-        value: "backstage"
-      - name: KEYCLOAK_REALM
-        value: "backstage"
-      - name: LDAP_TARGET_URL
-        value: "ldap://rhdh-ldap:389"
-      - name: LDAP_BIND_DN
-        value: "cn=admin,dc=test,dc=com"
-      - name: LDAP_BIND_SECRET
-        value: "admin"
-      - name: LDAP_USERS_DN
-        value: "ou=users,dc=test,dc=com"
-      - name: LDAP_USER_FILTER
-        value: "(&(objectClass=inetOrgPerson)(uid=*))"
-      - name: LDAP_GROUPS_DN
-        value: "ou=groups,dc=test,dc=com"
-      - name: LDAP_GROUP_FILTER
-        value: "(&(objectClass=groupOfNames)(cn=*))"
-      - name: CLIENT_ID
-        valueFrom:
-          secretKeyRef:
-            key: CLIENT_ID
-            name: keycloak-client-secret-backstage
-      - name: CLIENT_SECRET
-        valueFrom:
-          secretKeyRef:
-            key: CLIENT_SECRET
-            name: keycloak-client-secret-backstage
-      - name: LOG_LEVEL
-        value: "${RHDH_LOG_LEVEL}"
-      - name: NODE_TLS_REJECT_UNAUTHORIZED
-        value: "0"
-    replicas: 1
-  postgresql:
-    enabled: false
-    auth:
-      existingSecret: rhdh-db-credentials
-  metrics:
-    serviceMonitor:
-      enabled: ${RHDH_METRIC}
-      path: /metrics
-  service:
-    ports:
-      backend: 7007
-      name: http-backend
-      targetPort: backend
-    type: ClusterIP
+
+appConfig:
+  backend:
+    database:
+      knexConfig:
+        pool:
+          min: 10
+          max: 50
+          acquireTimeoutMillis: 60000
+
+extraAppConfig:
+  - configMapRef: app-config-rhdh
+    filename: app-config.rhdh.yaml
+
+extraEnvFrom:
+  - secretRef:
+      name: rhdh-db-credentials
+
+extraEnv:
+  - name: GITHUB_TOKEN
+    valueFrom:
+      secretKeyRef:
+        key: github.token
+        name: "{{ .Release.Name }}-plugin-secrets"
+  - name: KEYCLOAK_BASE_URL
+    value: "https://keycloak-${RHDH_NAMESPACE}.${OPENSHIFT_APP_DOMAIN}"
+  - name: KEYCLOAK_LOGIN_REALM
+    value: "backstage"
+  - name: KEYCLOAK_REALM
+    value: "backstage"
+  - name: LDAP_TARGET_URL
+    value: "ldap://rhdh-ldap:389"
+  - name: LDAP_BIND_DN
+    value: "cn=admin,dc=test,dc=com"
+  - name: LDAP_BIND_SECRET
+    value: "admin"
+  - name: LDAP_USERS_DN
+    value: "ou=users,dc=test,dc=com"
+  - name: LDAP_USER_FILTER
+    value: "(&(objectClass=inetOrgPerson)(uid=*))"
+  - name: LDAP_GROUPS_DN
+    value: "ou=groups,dc=test,dc=com"
+  - name: LDAP_GROUP_FILTER
+    value: "(&(objectClass=groupOfNames)(cn=*))"
+  - name: CLIENT_ID
+    valueFrom:
+      secretKeyRef:
+        key: CLIENT_ID
+        name: keycloak-client-secret-backstage
+  - name: CLIENT_SECRET
+    valueFrom:
+      secretKeyRef:
+        key: CLIENT_SECRET
+        name: keycloak-client-secret-backstage
+  - name: LOG_LEVEL
+    value: "${RHDH_LOG_LEVEL}"
+  - name: NODE_TLS_REJECT_UNAUTHORIZED
+    value: "0"
+
+replicaCount: 1
+
+service:
+  port: 7007
+
+postgresql:
+  enabled: false
+
+externalDatabase:
+  host: "${POSTGRES_HOST}"
+  port: "${POSTGRES_PORT}"
+  user: "${POSTGRES_USER}"
+  existingSecretRef:
+    name: rhdh-db-credentials
+    key: POSTGRES_PASSWORD
