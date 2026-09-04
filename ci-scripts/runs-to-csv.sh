@@ -48,12 +48,18 @@ RHDH_DB_CPU_Avg,\
 RHDH_DB_CPU_Max,\
 RHDH_DB_Memory_Avg,\
 RHDH_DB_Memory_Max,\
-RHDH_DB_Populate_Storage_Used,\
-RHDH_DB_Populate_Storage_Available,\
-RHDH_DB_Populate_Storage_Capacity,\
-RHDH_DB_Test_Storage_Used,\
-RHDH_DB_Test_Storage_Available,\
-RHDH_DB_Test_Storage_Capacity,\
+RHDH_DB_Populate_Storage_Used_PGDATA,\
+RHDH_DB_Populate_Storage_Available_PGDATA,\
+RHDH_DB_Populate_Storage_Capacity_PGDATA,\
+RHDH_DB_Populate_Storage_Used_REPO,\
+RHDH_DB_Populate_Storage_Available_REPO,\
+RHDH_DB_Populate_Storage_Capacity_REPO,\
+RHDH_DB_Test_Storage_Used_PGDATA,\
+RHDH_DB_Test_Storage_Available_PGDATA,\
+RHDH_DB_Test_Storage_Capacity_PGDATA,\
+RHDH_DB_Test_Storage_Used_REPO,\
+RHDH_DB_Test_Storage_Available_REPO,\
+RHDH_DB_Test_Storage_Capacity_REPO,\
 RPS_Avg,\
 RPS_Max,\
 Failures,\
@@ -152,12 +158,18 @@ find "${1:-.}" -name benchmark.json -print0 | while IFS= read -r -d '' filename;
         .measurements."rhdh-postgresql".cpu.max,
         .measurements."rhdh-postgresql".memory.mean,
         .measurements."rhdh-postgresql".memory.max,
-        .measurements.cluster.pv_stats.populate."rhdh-postgresql".used_bytes.max,
-        .measurements.cluster.pv_stats.populate."rhdh-postgresql".available_bytes.min,
-        .measurements.cluster.pv_stats.populate."rhdh-postgresql".capacity_bytes.max,
-        .measurements.cluster.pv_stats.test."rhdh-postgresql".used_bytes.max,
-        .measurements.cluster.pv_stats.test."rhdh-postgresql".available_bytes.min,
-        .measurements.cluster.pv_stats.test."rhdh-postgresql".capacity_bytes.max,
+        .measurements.cluster.pv_stats.populate."rhdh-postgresql".pgdata.used_bytes.max,
+        .measurements.cluster.pv_stats.populate."rhdh-postgresql".pgdata.available_bytes.min,
+        .measurements.cluster.pv_stats.populate."rhdh-postgresql".pgdata.capacity_bytes.max,
+        .measurements.cluster.pv_stats.populate."rhdh-postgresql".repo.used_bytes.max,
+        .measurements.cluster.pv_stats.populate."rhdh-postgresql".repo.available_bytes.min,
+        .measurements.cluster.pv_stats.populate."rhdh-postgresql".repo.capacity_bytes.max,
+        .measurements.cluster.pv_stats.test."rhdh-postgresql".pgdata.used_bytes.max,
+        .measurements.cluster.pv_stats.test."rhdh-postgresql".pgdata.available_bytes.min,
+        .measurements.cluster.pv_stats.test."rhdh-postgresql".pgdata.capacity_bytes.max,
+        .measurements.cluster.pv_stats.test."rhdh-postgresql".repo.used_bytes.max,
+        .measurements.cluster.pv_stats.test."rhdh-postgresql".repo.available_bytes.min,
+        .measurements.cluster.pv_stats.test."rhdh-postgresql".repo.capacity_bytes.max,
         .results.Aggregated.locust_requests_current_rps.mean,
         .results.Aggregated.locust_requests_current_rps.max,
         .results.Aggregated.locust_requests_num_failures.max,

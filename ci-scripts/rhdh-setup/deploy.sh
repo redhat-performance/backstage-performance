@@ -1104,11 +1104,12 @@ ensure_entity_count() {
     timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
     while true; do
         b_count=$(get_catalog_entity_count "$entity_type")
+        timeout_remaining=$(( timeout_timestamp - $(date "+%s") ))
         if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
             log_error "Timeout waiting on '$entity_log' count"
             exit 1
         else
-            log_entity_count "$entity_type" "$e_count" "$b_count" "$timeout"
+            log_entity_count "$entity_type" "$e_count" "$b_count" "$timeout_remaining"
             if [[ "$last_count" != "$b_count" ]]; then # reset the timeout if current count changes
                 log_info "The current '$entity_log' count changed, resetting waiting timeout to $timeout seconds"
                 timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
@@ -1119,7 +1120,7 @@ ensure_entity_count() {
                 break
             fi
         fi
-        log_info "Waiting for the '$entity_log' count to be ${e_count} (current: ${b_count})"
+        log_info "Waiting ($timeout_remaining seconds remaining) for the '$entity_log' count to be ${e_count} (current: ${b_count})"
         sleep 10s
     done
 }
