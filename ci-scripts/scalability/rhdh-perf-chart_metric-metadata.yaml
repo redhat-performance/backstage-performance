@@ -99,17 +99,29 @@ metrics:
     label: "Response Time"
     units: "ms"
 
-  RHDH_DB_Populate_Storage_Used:
-    title: "RHDH DB Storage Usage"
+  RHDH_DB_Populate_Storage_Used_PGDATA:
+    title: "RHDH DB PGDATA Storage Usage"
     subtitle: "Populate"
     label: "Storage Used"
-    units: "MiB"
+    units: "GiB"
 
-  RHDH_DB_Test_Storage_Used:
-    title: "RHDH DB Storage Usage"
+  RHDH_DB_Populate_Storage_Used_REPO:
+    title: "RHDH DB REPO Storage Usage"
+    subtitle: "Populate"
+    label: "Storage Used"
+    units: "GiB"
+
+  RHDH_DB_Test_Storage_Used_PGDATA:
+    title: "RHDH DB PGDATA Storage Usage"
     subtitle: "Test"
     label: "Storage Used"
-    units: "MiB"
+    units: "GiB"
+
+  RHDH_DB_Test_Storage_Used_REPO:
+    title: "RHDH DB REPO Storage Usage"
+    subtitle: "Test"
+    label: "Storage Used"
+    units: "GiB"
 
   DeployDuration:
     title: "RHDH Deploy Duration"

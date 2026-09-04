@@ -11,4 +11,5 @@
   monitoring_step: 15
 {%- endmacro %}
 
-{{ pv_stats('rhdh-postgresql', 'data-(rhdh|backstage)-(postgresql|psql)-(primary|developer-hub)-0') }}
+{{ pv_stats('rhdh-postgresql.pgdata', 'rhdh-postgresql-cluster-primary-.*-pgdata') }}
+{{ pv_stats('rhdh-postgresql.repo', 'rhdh-postgresql-cluster-repo1') }}

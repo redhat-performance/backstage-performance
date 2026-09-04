@@ -42,8 +42,10 @@ Components_Response_Time_Avg \
 Components_Response_Time_Max \
 ComponentsOwnedByUserGroup_Response_Time_Avg \
 ComponentsOwnedByUserGroup_Response_Time_Max \
-RHDH_DB_Populate_Storage_Used \
-RHDH_DB_Test_Storage_Used \
+RHDH_DB_Populate_Storage_Used_PGDATA \
+RHDH_DB_Populate_Storage_Used_REPO \
+RHDH_DB_Test_Storage_Used_PGDATA \
+RHDH_DB_Test_Storage_Used_REPO \
 DeployDuration \
 PopulateDuration \
 PopulateCatalogDuration \
