@@ -801,11 +801,11 @@ install_rhdh_with_helm() {
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.backstage |= . + load("template/backstage/helm/oauth2-container-patch.yaml")' "$TMP_DIR/chart-values.temp.yaml"; fi
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.service.ports.targetPort = "oauth2-proxy"' "$TMP_DIR/chart-values.temp.yaml"; fi
     if [ "${AUTH_PROVIDER}" == "keycloak" ]; then yq -i '.upstream.service.ports.backend = 4180' "$TMP_DIR/chart-values.temp.yaml"; fi
-    if [ "${AUTH_PROVIDER}" == "keycloak" ]; then
-        log_info "Enabling oauth2-proxy auth backend dynamic plugin"
-        envsubst <template/backstage/helm/oauth2-proxy-auth-plugin-patch.yaml >"$TMP_DIR/oauth2-proxy-auth-plugin-patch.yaml"
-        yq -i '.global.dynamic.plugins |= . + load("'"$TMP_DIR/oauth2-proxy-auth-plugin-patch.yaml"'")' "$TMP_DIR/chart-values.temp.yaml"
-    fi
+    # if [ "${AUTH_PROVIDER}" == "keycloak" ]; then
+    #     log_info "Enabling oauth2-proxy auth backend dynamic plugin"
+    #     envsubst <template/backstage/helm/oauth2-proxy-auth-plugin-patch.yaml >"$TMP_DIR/oauth2-proxy-auth-plugin-patch.yaml"
+    #     yq -i '.global.dynamic.plugins |= . + load("'"$TMP_DIR/oauth2-proxy-auth-plugin-patch.yaml"'")' "$TMP_DIR/chart-values.temp.yaml"
+    # fi
 
     # RBAC
     if ${ENABLE_RBAC}; then
