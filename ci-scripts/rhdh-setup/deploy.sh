@@ -1104,7 +1104,7 @@ ensure_entity_count() {
     timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
     while true; do
         b_count=$(get_catalog_entity_count "$entity_type")
-        timeout_remaining=$(( timeout_timestamp - $(date "+%s") ))
+        timeout_remaining=$((timeout_timestamp - $(date "+%s")))
         if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
             log_error "Timeout waiting on '$entity_log' count"
             exit 1
