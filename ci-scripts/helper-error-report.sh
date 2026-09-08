@@ -45,57 +45,57 @@ function show_errors() {
 
 # Why this fifo? See https://jhutar.blogspot.com/2024/12/bash-while-read-line-without-subshell.html
 trap 'rm -rf "$TMPFIFODIR"' EXIT
-TMPFIFODIR=$( mktemp -d )
+TMPFIFODIR=$(mktemp -d)
 mkfifo "$TMPFIFODIR/mypipe"
 ###cat /tmp/error-report.txt > $TMPFIFODIR/mypipe &
-curl -s "$log_url" > "$TMPFIFODIR/mypipe" &
+curl -s "$log_url" >"$TMPFIFODIR/mypipe" &
 
 while IFS=$'\n' read -r line; do
     case "$line" in
-        /logs/artifacts/*)
-            [[ -n "$heading" ]] && show_errors
-            heading="$line"
-            cleanup_errors
+    /logs/artifacts/*)
+        [[ -n "$heading" ]] && show_errors
+        heading="$line"
+        cleanup_errors
         ;;
-        *"504 Server Error: Gateway Time-out for url: "*)
-            # shellcheck disable=SC2206
-            numbers=( ${line//[!0-9]/ } )
-            count=${numbers[0]}
-            (( error_504+=count ))
+    *"504 Server Error: Gateway Time-out for url: "*)
+        # shellcheck disable=SC2206
+        numbers=(${line//[!0-9]/ })
+        count=${numbers[0]}
+        ((error_504 += count))
         ;;
-        *"503 Server Error: Service Unavailable for url: "*)
-            # shellcheck disable=SC2206
-            numbers=( ${line//[!0-9]/ } )
-            count=${numbers[0]}
-            (( error_503+=count ))
+    *"503 Server Error: Service Unavailable for url: "*)
+        # shellcheck disable=SC2206
+        numbers=(${line//[!0-9]/ })
+        count=${numbers[0]}
+        ((error_503 += count))
         ;;
-        *"502 Server Error: Bad Gateway for url: "*)
-            # shellcheck disable=SC2206
-            numbers=( ${line//[!0-9]/ } )
-            count="${numbers[0]}"
-            (( error_502+=count ))
+    *"502 Server Error: Bad Gateway for url: "*)
+        # shellcheck disable=SC2206
+        numbers=(${line//[!0-9]/ })
+        count="${numbers[0]}"
+        ((error_502 += count))
         ;;
-        *"401 Client Error: Unauthorized for url: "*)
-            # shellcheck disable=SC2206
-            numbers=( ${line//[!0-9]/ } )
-            count="${numbers[0]}"
-            (( error_401+=count ))
+    *"401 Client Error: Unauthorized for url: "*)
+        # shellcheck disable=SC2206
+        numbers=(${line//[!0-9]/ })
+        count="${numbers[0]}"
+        ((error_401 += count))
         ;;
-        *"Remote end closed connection without response"*)
-            # shellcheck disable=SC2206
-            numbers=( ${line//[!0-9]/ } )
-            count="${numbers[0]}"
-            (( error_remoteclose+=count ))
+    *"Remote end closed connection without response"*)
+        # shellcheck disable=SC2206
+        numbers=(${line//[!0-9]/ })
+        count="${numbers[0]}"
+        ((error_remoteclose += count))
         ;;
-        "---"* | "" | "# occurrences"* | "Error report" | "No errors found!")
-            true
+    "---"* | "" | "# occurrences"* | "Error report" | "No errors found!")
+        true
         ;;
-        *)
-            echo "What shall we do with a drunken sailor? '$line'"
-            (( error_unknown+=1 ))
+    *)
+        echo "What shall we do with a drunken sailor? '$line'"
+        ((error_unknown += 1))
         ;;
     esac
-done < "$TMPFIFODIR/mypipe"
+done <"$TMPFIFODIR/mypipe"
 
 show_errors
 

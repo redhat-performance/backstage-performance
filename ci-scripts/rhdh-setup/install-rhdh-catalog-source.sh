@@ -41,11 +41,11 @@ RHDH_OLM_OPERATOR_RESOURCES_MEMORY_LIMITS=${RHDH_OLM_OPERATOR_RESOURCES_MEMORY_L
 RHDH_OLM_OPERATOR_RESOURCES_EPHEMERAL_STORAGE_REQUESTS=${RHDH_OLM_OPERATOR_RESOURCES_EPHEMERAL_STORAGE_REQUESTS:-}
 
 errorf() {
-  echo -e "${RED}$1${NC}"
+    echo -e "${RED}$1${NC}"
 }
 
 usage() {
-  echo "
+    echo "
 This script streamlines testing IIB images by configuring an OpenShift cluster to enable it to use the specified IIB image
 as a catalog source. The CatalogSource is created in the openshift-marketplace namespace,
 and is named 'operatorName-channelName', eg., rhdh-fast
@@ -71,24 +71,24 @@ Examples:
 }
 
 if [[ "$#" -lt 1 ]]; then
-  usage
-  exit 0
+    usage
+    exit 0
 fi
 
 # minimum requirements
 if [[ ! $(command -v oc) ]]; then
-  errorf "Please install oc 4.10+ from an RPM or https://mirror.openshift.com/pub/openshift-v4/clients/ocp/"
-  exit 1
+    errorf "Please install oc 4.10+ from an RPM or https://mirror.openshift.com/pub/openshift-v4/clients/ocp/"
+    exit 1
 fi
 if [[ ! $(command -v jq) ]]; then
-  errorf "Please install jq 1.2+ from an RPM or https://pypi.org/project/jq/"
-  exit 1
+    errorf "Please install jq 1.2+ from an RPM or https://pypi.org/project/jq/"
+    exit 1
 fi
 
 # Check we're logged into a cluster
 if ! oc whoami >/dev/null 2>&1; then
-  errorf "Not logged into an OpenShift cluster"
-  exit 1
+    errorf "Not logged into an OpenShift cluster"
+    exit 1
 fi
 
 # log into your OCP cluster before running this or you'll get null values for OCP vars!
@@ -99,37 +99,37 @@ if [[ $OCP_ARCH == "amd64" ]]; then OCP_ARCH="x86_64"; fi
 UPSTREAM_IIB="${UPSTREAM_IIB:-${OLM_INDEX_IMAGE_BASE:-quay.io/rhdh/iib:latest}-${OCP_VER}-${OCP_ARCH}}"
 
 while [[ "$#" -gt 0 ]]; do
-  case $1 in
-  '--install-operator')
-    # Create project if necessary
-    if ! oc get project "$NAMESPACE_SUBSCRIPTION" >/dev/null 2>&1; then
-      echo "Project $NAMESPACE_SUBSCRIPTION does not exist; creating it"
-      oc create namespace "$NAMESPACE_SUBSCRIPTION"
-    fi
-    TO_INSTALL="$2"
+    case $1 in
+    '--install-operator')
+        # Create project if necessary
+        if ! oc get project "$NAMESPACE_SUBSCRIPTION" >/dev/null 2>&1; then
+            echo "Project $NAMESPACE_SUBSCRIPTION does not exist; creating it"
+            oc create namespace "$NAMESPACE_SUBSCRIPTION"
+        fi
+        TO_INSTALL="$2"
+        shift 1
+        ;;
+    '--next' | '--latest')
+        # if logged in, this should return something like latest-v4.12-x86_64 or next-v4.12-x86_64
+        UPSTREAM_IIB="quay.io/rhdh/iib:${1/--/}-${OCP_VER}-$OCP_ARCH"
+        ;;
+    '-h' | '--help')
+        usage
+        exit 0
+        ;;
+    *)
+        echo "[ERROR] Unknown parameter is used: $1."
+        usage
+        exit 1
+        ;;
+    esac
     shift 1
-    ;;
-  '--next' | '--latest')
-    # if logged in, this should return something like latest-v4.12-x86_64 or next-v4.12-x86_64
-    UPSTREAM_IIB="quay.io/rhdh/iib:${1/--/}-${OCP_VER}-$OCP_ARCH"
-    ;;
-  '-h' | '--help')
-    usage
-    exit 0
-    ;;
-  *)
-    echo "[ERROR] Unknown parameter is used: $1."
-    usage
-    exit 1
-    ;;
-  esac
-  shift 1
 done
 
 # check if the IIB we're going to install as a catalog source exists before trying to install it
 if [[ ! $(command -v skopeo) ]]; then
-  errorf "Please install skopeo 1.11+"
-  exit 1
+    errorf "Please install skopeo 1.11+"
+    exit 1
 fi
 
 # TMPDIR=$(mktemp -d)
@@ -144,11 +144,11 @@ trap "rm -rvf $authfile" EXIT
 UPSTREAM_IIB_MANIFEST="$(skopeo inspect "docker://${UPSTREAM_IIB}" --raw --authfile "$authfile" || exit 2)"
 # echo "Got: $UPSTREAM_IIB_MANIFEST"
 if [[ $UPSTREAM_IIB_MANIFEST == *"Error parsing image name "* ]] || [[ $UPSTREAM_IIB_MANIFEST == *"manifest unknown"* ]]; then
-  echo "$UPSTREAM_IIB_MANIFEST"
-  exit 3
+    echo "$UPSTREAM_IIB_MANIFEST"
+    exit 3
 else
-  echo "[INFO] Using iib from image $UPSTREAM_IIB"
-  IIB_IMAGE="${UPSTREAM_IIB}"
+    echo "[INFO] Using iib from image $UPSTREAM_IIB"
+    IIB_IMAGE="${UPSTREAM_IIB}"
 fi
 
 # shellcheck disable=SC2064
@@ -224,12 +224,12 @@ DISPLAY_NAME_SUFFIX="${TO_INSTALL}"
 
 # Add CatalogSource for the IIB
 if [ -z "$TO_INSTALL" ]; then
-  IIB_NAME="${UPSTREAM_IIB##*:}"
-  IIB_NAME="${IIB_NAME//_/-}"
-  IIB_NAME="${IIB_NAME//./-}"
-  IIB_NAME="$(echo "$IIB_NAME" | tr '[:upper:]' '[:lower:]')"
-  CATALOGSOURCE_NAME="rhdh-iib-${IIB_NAME}-${OLM_CHANNEL//[._]/-}"
-  DISPLAY_NAME_SUFFIX="${IIB_NAME}"
+    IIB_NAME="${UPSTREAM_IIB##*:}"
+    IIB_NAME="${IIB_NAME//_/-}"
+    IIB_NAME="${IIB_NAME//./-}"
+    IIB_NAME="$(echo "$IIB_NAME" | tr '[:upper:]' '[:lower:]')"
+    CATALOGSOURCE_NAME="rhdh-iib-${IIB_NAME}-${OLM_CHANNEL//[._]/-}"
+    DISPLAY_NAME_SUFFIX="${IIB_NAME}"
 fi
 until envsubst <template/backstage/secret-rhdh-pull-secret.yaml | oc -n openshift-marketplace apply -f -; do oc -n openshift-marketplace delete secret rhdh-pull-secret --ignore-not-found=true; done
 echo "apiVersion: operators.coreos.com/v1alpha1
@@ -247,8 +247,8 @@ spec:
 " >"$TMPDIR"/CatalogSource.yml && oc apply -f "$TMPDIR"/CatalogSource.yml
 
 if [ -z "$TO_INSTALL" ]; then
-  echo "Done. Now log into the OCP web console as an admin, then go to Operators > OperatorHub, search for Red Hat Developer Hub, and install the Red Hat Developer Hub Operator."
-  exit 0
+    echo "Done. Now log into the OCP web console as an admin, then go to Operators > OperatorHub, search for Red Hat Developer Hub, and install the Red Hat Developer Hub Operator."
+    exit 0
 fi
 
 # Create OperatorGroup to allow installing all-namespaces operators in $NAMESPACE_SUBSCRIPTION
@@ -286,12 +286,12 @@ if [ -n "${RHDH_OLM_OPERATOR_RESOURCES_MEMORY_REQUESTS}" ]; then yq -i '.spec.co
 if [ -n "${RHDH_OLM_OPERATOR_RESOURCES_MEMORY_LIMITS}" ]; then yq -i '.spec.config.resources.limits.memory = "'"${RHDH_OLM_OPERATOR_RESOURCES_MEMORY_LIMITS}"'"' "$subscription"; fi
 if [ -n "${RHDH_OLM_OPERATOR_RESOURCES_EPHEMERAL_STORAGE_REQUESTS}" ]; then yq -i '.spec.config.resources.requests.ephemeral-storage = "'"${RHDH_OLM_OPERATOR_RESOURCES_EPHEMERAL_STORAGE_REQUESTS}"'"' "$subscription"; fi
 if [ -n "${RHDH_OLM_OPERATOR_VERSION:-}" ]; then
-  yq -i '.spec.startingCSV = "rhdh-operator.v'"${RHDH_OLM_OPERATOR_VERSION}"'"' "$subscription"
-  yq -i '.spec.installPlanApproval = "Manual"' "$subscription"
+    yq -i '.spec.startingCSV = "rhdh-operator.v'"${RHDH_OLM_OPERATOR_VERSION}"'"' "$subscription"
+    yq -i '.spec.installPlanApproval = "Manual"' "$subscription"
 fi
 
 oc apply -f "$subscription"
 
 if [ -n "${RHDH_OLM_OPERATOR_VERSION:-}" ]; then
-  wait_and_approve_install_plans "$NAMESPACE_SUBSCRIPTION" 300 "rhdh-operator.v${RHDH_OLM_OPERATOR_VERSION}" "install plan for $TO_INSTALL"
+    wait_and_approve_install_plans "$NAMESPACE_SUBSCRIPTION" 300 "rhdh-operator.v${RHDH_OLM_OPERATOR_VERSION}" "install plan for $TO_INSTALL"
 fi
