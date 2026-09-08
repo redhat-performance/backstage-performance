@@ -21,339 +21,339 @@ kc_lockfile="$TMP_DIR/kc.lockfile"
 COOKIE="$TMP_DIR/cookie.jar"
 
 keycloak_url() {
-  f="$TMP_DIR/keycloak.url"
-  if command -v flock >/dev/null 2>&1; then
-    exec 4>"$kc_lockfile"
-    flock 4 || {
-      echo "Failed to acquire lock"
-      exit 1
-    }
+    f="$TMP_DIR/keycloak.url"
+    if command -v flock >/dev/null 2>&1; then
+        exec 4>"$kc_lockfile"
+        flock 4 || {
+            echo "Failed to acquire lock"
+            exit 1
+        }
 
-    if [ ! -f "$f" ]; then
-      echo -n "https://$(oc get routes keycloak -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')" >"$f"
-    fi
-    flock -u 4
-  elif command -v shlock >/dev/null 2>&1; then
-    LOCKFILE="$TMP_DIR/kc_lockfile"
-    trap 'rm -f "$LOCKFILE"' EXIT
+        if [ ! -f "$f" ]; then
+            echo -n "https://$(oc get routes keycloak -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')" >"$f"
+        fi
+        flock -u 4
+    elif command -v shlock >/dev/null 2>&1; then
+        LOCKFILE="$TMP_DIR/kc_lockfile"
+        trap 'rm -f "$LOCKFILE"' EXIT
 
-    if ! shlock -f "$LOCKFILE" -p $$; then
-      echo "Failed to acquire lock"
-      exit 1
-    fi
+        if ! shlock -f "$LOCKFILE" -p $$; then
+            echo "Failed to acquire lock"
+            exit 1
+        fi
 
-    if [ ! -f "$f" ]; then
-      echo -n "https://$(oc get routes keycloak -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')" >"$f"
+        if [ ! -f "$f" ]; then
+            echo -n "https://$(oc get routes keycloak -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')" >"$f"
+        fi
+    else
+        echo "Either flock or shlock must exist"
+        return 1
     fi
-  else
-    echo "Either flock or shlock must exist"
-    return 1
-  fi
-  cat "$f"
+    cat "$f"
 }
 
 bs_lockfile="$TMP_DIR/bs.lockfile"
 
 backstage_url() {
-  f="$TMP_DIR/backstage.url"
-  if command -v flock >/dev/null 2>&1; then
-    exec 5>"$bs_lockfile"
-    flock 5 || {
-      echo "Failed to acquire lock"
-      exit 1
-    }
-    if [[ ! -f "$f" ]]; then
-      if [ "$RHDH_INSTALL_METHOD" == "helm" ]; then
-        rhdh_route="$(oc -n "${RHDH_NAMESPACE}" get routes -l app.kubernetes.io/instance="${RHDH_HELM_RELEASE_NAME}" -o jsonpath='{.items[0].metadata.name}')"
-      else
-        if [ "$AUTH_PROVIDER" == "keycloak" ]; then
-          rhdh_route="rhdh"
-        else
-          rhdh_route="backstage-developer-hub"
-        fi
-      fi
-      echo -n "https://$(oc get routes "${rhdh_route}" -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')" >"$f"
-    fi
-    flock -u 5
-  elif command -v shlock >/dev/null 2>&1; then
     f="$TMP_DIR/backstage.url"
-    LOCKFILE="$TMP_DIR/bs_lockfile"
-    trap 'rm -f "$LOCKFILE"' EXIT
-
-    if ! shlock -f "$LOCKFILE" -p $$; then
-      echo "Failed to acquire lock"
-      exit 1
-    fi
-
-    if [[ ! -f "$f" ]]; then
-      if [ "$RHDH_INSTALL_METHOD" == "helm" ]; then
-        rhdh_route="$(oc -n "${RHDH_NAMESPACE}" get routes -l app.kubernetes.io/instance="${RHDH_HELM_RELEASE_NAME}" -o jsonpath='{.items[0].metadata.name}')"
-      else
-        if [ "$AUTH_PROVIDER" == "keycloak" ]; then
-          rhdh_route="rhdh"
-        else
-          rhdh_route="backstage-developer-hub"
+    if command -v flock >/dev/null 2>&1; then
+        exec 5>"$bs_lockfile"
+        flock 5 || {
+            echo "Failed to acquire lock"
+            exit 1
+        }
+        if [[ ! -f "$f" ]]; then
+            if [ "$RHDH_INSTALL_METHOD" == "helm" ]; then
+                rhdh_route="$(oc -n "${RHDH_NAMESPACE}" get routes -l app.kubernetes.io/instance="${RHDH_HELM_RELEASE_NAME}" -o jsonpath='{.items[0].metadata.name}')"
+            else
+                if [ "$AUTH_PROVIDER" == "keycloak" ]; then
+                    rhdh_route="rhdh"
+                else
+                    rhdh_route="backstage-developer-hub"
+                fi
+            fi
+            echo -n "https://$(oc get routes "${rhdh_route}" -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')" >"$f"
         fi
-      fi
-      echo -n "https://$(oc get routes "${rhdh_route}" -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')" >"$f"
+        flock -u 5
+    elif command -v shlock >/dev/null 2>&1; then
+        f="$TMP_DIR/backstage.url"
+        LOCKFILE="$TMP_DIR/bs_lockfile"
+        trap 'rm -f "$LOCKFILE"' EXIT
+
+        if ! shlock -f "$LOCKFILE" -p $$; then
+            echo "Failed to acquire lock"
+            exit 1
+        fi
+
+        if [[ ! -f "$f" ]]; then
+            if [ "$RHDH_INSTALL_METHOD" == "helm" ]; then
+                rhdh_route="$(oc -n "${RHDH_NAMESPACE}" get routes -l app.kubernetes.io/instance="${RHDH_HELM_RELEASE_NAME}" -o jsonpath='{.items[0].metadata.name}')"
+            else
+                if [ "$AUTH_PROVIDER" == "keycloak" ]; then
+                    rhdh_route="rhdh"
+                else
+                    rhdh_route="backstage-developer-hub"
+                fi
+            fi
+            echo -n "https://$(oc get routes "${rhdh_route}" -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')" >"$f"
+        fi
+    else
+        echo "Either flock or shlock must exist"
+        exit 1
     fi
-  else
-    echo "Either flock or shlock must exist"
-    exit 1
-  fi
-  cat "$f"
+    cat "$f"
 }
 
 create_per_grp() {
-  log_info "Creating entity YAML files"
-  varname=$2
-  obj_count=${!varname}
-  if [[ -z ${!varname} ]]; then
-    echo "$varname is not set: Skipping $1 "
-    exit 1
-  fi
-  iter_count=$(echo "(${obj_count}/${GROUP_COUNT})" | bc)
-  mod=$(echo "(${obj_count}%${GROUP_COUNT})" | bc)
+    log_info "Creating entity YAML files"
+    varname=$2
+    obj_count=${!varname}
+    if [[ -z ${!varname} ]]; then
+        echo "$varname is not set: Skipping $1 "
+        exit 1
+    fi
+    iter_count=$(echo "(${obj_count}/${GROUP_COUNT})" | bc)
+    mod=$(echo "(${obj_count}%${GROUP_COUNT})" | bc)
 
-  if [[ ! ${mod} -eq 0 ]]; then
-    iter_count=$(echo "${iter_count}+1" | bc)
-  fi
-  indx=0
-  shard_index=0
-  for _ in $(seq 1 "${iter_count}"); do
-    for g in $(seq 1 "${GROUP_COUNT}"); do
-      indx=$((1 + indx))
-      [[ ${obj_count} -lt $indx ]] && break
-      g_indx="$g"
-      if [[ "$RBAC_POLICY" == "$RBAC_POLICY_NESTED_GROUPS" ]]; then
-        if [[ $g -gt 1 ]] && [[ $g -le "$RBAC_POLICY_SIZE" ]]; then
-          g_indx="$((g - 1))_1"
-        fi
-      fi
-      $1 "$g_indx" "$indx" "$shard_index"
-      if [ "$(echo "(${indx}%${COMPONENT_SHARD_SIZE})" | bc)" == "0" ]; then
-        shard_index=$((shard_index + 1))
-      fi
+    if [[ ! ${mod} -eq 0 ]]; then
+        iter_count=$(echo "${iter_count}+1" | bc)
+    fi
+    indx=0
+    shard_index=0
+    for _ in $(seq 1 "${iter_count}"); do
+        for g in $(seq 1 "${GROUP_COUNT}"); do
+            indx=$((1 + indx))
+            [[ ${obj_count} -lt $indx ]] && break
+            g_indx="$g"
+            if [[ "$RBAC_POLICY" == "$RBAC_POLICY_NESTED_GROUPS" ]]; then
+                if [[ $g -gt 1 ]] && [[ $g -le "$RBAC_POLICY_SIZE" ]]; then
+                    g_indx="$((g - 1))_1"
+                fi
+            fi
+            $1 "$g_indx" "$indx" "$shard_index"
+            if [ "$(echo "(${indx}%${COMPONENT_SHARD_SIZE})" | bc)" == "0" ]; then
+                shard_index=$((shard_index + 1))
+            fi
+        done
     done
-  done
-  if [[ 'create_cmp' == "${1}" ]]; then clone_and_upload "component-*.yaml"; fi
-  if [[ 'create_api' == "${1}" ]]; then clone_and_upload "api-*.yaml"; fi
+    if [[ 'create_cmp' == "${1}" ]]; then clone_and_upload "component-*.yaml"; fi
+    if [[ 'create_api' == "${1}" ]]; then clone_and_upload "api-*.yaml"; fi
 }
 
 clone_and_upload() {
-  log_info "Uploading entities to GitHub"
-  git_str="${GITHUB_USER}:${GITHUB_TOKEN}@github.com"
-  base_name=$(basename "$GITHUB_REPO")
-  git_dir=$TMP_DIR/${base_name}
-  git_repo=${GITHUB_REPO//github.com/${git_str}}
-  [[ -d "${git_dir}" ]] && rm -rf "${git_dir}"
-  git clone "$git_repo" "$git_dir"
-  pushd "$git_dir" || return
-  git config user.name "rhdh-performance-bot"
-  git config user.email rhdh-performance-bot@redhat.com
-  tmp_branch=$(mktemp -u XXXXXXXXXX)
-  git checkout -b "$tmp_branch"
-  out=$(python3 -c "import subprocess; print(subprocess.check_output('find \"$TMP_DIR\" -name \"$1\"', shell=True).decode())")
+    log_info "Uploading entities to GitHub"
+    git_str="${GITHUB_USER}:${GITHUB_TOKEN}@github.com"
+    base_name=$(basename "$GITHUB_REPO")
+    git_dir=$TMP_DIR/${base_name}
+    git_repo=${GITHUB_REPO//github.com/${git_str}}
+    [[ -d "${git_dir}" ]] && rm -rf "${git_dir}"
+    git clone "$git_repo" "$git_dir"
+    pushd "$git_dir" || return
+    git config user.name "rhdh-performance-bot"
+    git config user.email rhdh-performance-bot@redhat.com
+    tmp_branch=$(mktemp -u XXXXXXXXXX)
+    git checkout -b "$tmp_branch"
+    out=$(python3 -c "import subprocess; print(subprocess.check_output('find \"$TMP_DIR\" -name \"$1\"', shell=True).decode())")
 
-  files=()
-  while IFS= read -r line; do
-    files+=("$line")
-  done <<<"$out"
+    files=()
+    while IFS= read -r line; do
+        files+=("$line")
+    done <<<"$out"
 
-  for filename in "${files[@]}"; do
-    cp -vf "$filename" "$(basename "$filename")"
-    git add "$(basename "$filename")"
-  done
-  git commit -a -m "commit objects"
-  git push -f --set-upstream origin "$tmp_branch"
-  cd ..
-  sleep 5
-  output="${TMP_DIR}/locations.yaml"
-  if [ ! -f "$output" ]; then
-    echo "locations: []" >"$output"
-  fi
-  for filename in "${files[@]}"; do
-    upload_url="${GITHUB_REPO%.*}/blob/${tmp_branch}/$(basename "$filename")"
-    yq -i '.locations |= . + {"target": "'"$upload_url"'", "type": "url"}' "$output"
-  done
-  for filename in "${files[@]}"; do
-    rm -vf "$filename"
-  done
-  popd || return
+    for filename in "${files[@]}"; do
+        cp -vf "$filename" "$(basename "$filename")"
+        git add "$(basename "$filename")"
+    done
+    git commit -a -m "commit objects"
+    git push -f --set-upstream origin "$tmp_branch"
+    cd ..
+    sleep 5
+    output="${TMP_DIR}/locations.yaml"
+    if [ ! -f "$output" ]; then
+        echo "locations: []" >"$output"
+    fi
+    for filename in "${files[@]}"; do
+        upload_url="${GITHUB_REPO%.*}/blob/${tmp_branch}/$(basename "$filename")"
+        yq -i '.locations |= . + {"target": "'"$upload_url"'", "type": "url"}' "$output"
+    done
+    for filename in "${files[@]}"; do
+        rm -vf "$filename"
+    done
+    popd || return
 }
 
 # shellcheck disable=SC2016
 create_api() {
-  export grp_indx=$1
-  export api_indx=$2
-  export shard_indx=${3:-0}
-  envsubst '${grp_indx} ${api_indx}' <"$WORKDIR/template/component/api.template" >>"$TMP_DIR/api-$shard_indx.yaml"
+    export grp_indx=$1
+    export api_indx=$2
+    export shard_indx=${3:-0}
+    envsubst '${grp_indx} ${api_indx}' <"$WORKDIR/template/component/api.template" >>"$TMP_DIR/api-$shard_indx.yaml"
 }
 
 # shellcheck disable=SC2016
 create_cmp() {
-  export grp_indx=$1
-  export cmp_indx=$2
-  export shard_indx=${3:-0}
-  envsubst '${grp_indx} ${cmp_indx}' <"$WORKDIR/template/component/component.template" >>"$TMP_DIR/component-$shard_indx.yaml"
+    export grp_indx=$1
+    export cmp_indx=$2
+    export shard_indx=${3:-0}
+    envsubst '${grp_indx} ${cmp_indx}' <"$WORKDIR/template/component/component.template" >>"$TMP_DIR/component-$shard_indx.yaml"
 }
 
 get_group_path_by_name() {
-  local input="$1"
+    local input="$1"
 
-  local group_name="$input"
-  token=$(get_token)
+    local group_name="$input"
+    token=$(get_token)
 
-  response=$(curl -s -k --location --request GET "$(keycloak_url)/admin/realms/backstage/groups?search=${group_name}&populateHierarchy=false" \
-    -H 'Content-Type: application/json' \
-    -H "Authorization: Bearer $token" 2>&1)
+    response=$(curl -s -k --location --request GET "$(keycloak_url)/admin/realms/backstage/groups?search=${group_name}&populateHierarchy=false" \
+        -H 'Content-Type: application/json' \
+        -H "Authorization: Bearer $token" 2>&1)
 
-  if [[ "$response" == "["* ]] && [[ "$response" != "[]" ]]; then
-    group_path=$(echo "$response" | jq -r '.[0].path // empty')
-    if [ -n "$group_path" ] && [ "$group_path" != "null" ]; then
-      echo "$group_path"
-      return 0
+    if [[ "$response" == "["* ]] && [[ "$response" != "[]" ]]; then
+        group_path=$(echo "$response" | jq -r '.[0].path // empty')
+        if [ -n "$group_path" ] && [ "$group_path" != "null" ]; then
+            echo "$group_path"
+            return 0
+        fi
     fi
-  fi
-  return 1
+    return 1
 }
 
 get_group_id_by_name() {
-  group_name="$1"
-  token=$(get_token)
+    group_name="$1"
+    token=$(get_token)
 
-  response=$(curl -s -k --location --request GET "$(keycloak_url)/admin/realms/backstage/groups?search=${group_name}&populateHierarchy=false" \
-    -H 'Content-Type: application/json' \
-    -H "Authorization: Bearer $token" 2>&1)
+    response=$(curl -s -k --location --request GET "$(keycloak_url)/admin/realms/backstage/groups?search=${group_name}&populateHierarchy=false" \
+        -H 'Content-Type: application/json' \
+        -H "Authorization: Bearer $token" 2>&1)
 
-  if [[ "$response" == "["* ]] && [[ "$response" != "[]" ]]; then
-    group_id=$(echo "$response" | jq -r '.[0].id // empty')
-    if [ -n "$group_id" ] && [ "$group_id" != "null" ]; then
-      echo "$group_id"
-      return 0
+    if [[ "$response" == "["* ]] && [[ "$response" != "[]" ]]; then
+        group_id=$(echo "$response" | jq -r '.[0].id // empty')
+        if [ -n "$group_id" ] && [ "$group_id" != "null" ]; then
+            echo "$group_id"
+            return 0
+        fi
     fi
-  fi
-  return 1
+    return 1
 }
 
 assign_parent_group() {
-  local idx="${1}"
-  if [ "$idx" -eq 2 ]; then
-    parent_group_name="g1"
-  else
-    parent_group_name="g$((idx - 2))_1"
-  fi
-  child_name="g$((idx - 1))_1"
-
-  max_attempts=5
-  attempt=1
-  parent_id=""
-  while ((attempt <= max_attempts)); do
-    parent_id="$(get_group_id_by_name "$parent_group_name")"
-    [ -n "$parent_id" ] && [ "$parent_id" != "null" ] && break
-    log_warn "Parent $parent_group_name not found (attempt $attempt). Waiting..." >>"$TMP_DIR/create_group.log"
-    ((attempt++))
-  done
-  if [ -z "$parent_id" ] || [ "$parent_id" = "null" ]; then
-    log_error "Parent $parent_group_name missing after $max_attempts attempts; cannot create $child_name" 2>&1 | tee -a "$TMP_DIR/create_group.log"
-    return 1
-  fi
-
-  attempt=1
-  while ((attempt <= max_attempts)); do
-    token=$(get_token)
-    response="$(curl -s -k --location --request POST "$(keycloak_url)/admin/realms/backstage/groups/${parent_id}/children" \
-      -H 'Content-Type: application/json' -H "Authorization: Bearer $token" \
-      --data-raw '{"name":"'"${child_name}"'"}' 2>&1)"
-    if [ "${PIPESTATUS[0]}" -eq 0 ] && ! echo "$response" | grep -q 'error' >&/dev/null; then
-      log_info "Group $child_name created under parent $parent_group_name" >>"$TMP_DIR/create_group.log"
-      return 0
+    local idx="${1}"
+    if [ "$idx" -eq 2 ]; then
+        parent_group_name="g1"
+    else
+        parent_group_name="g$((idx - 2))_1"
     fi
-    log_warn "Unable to create child $child_name under $parent_group_name at attempt $attempt. [$response]" >>"$TMP_DIR/create_group.log"
-    ((attempt++))
-  done
-  log_error "Unable to create child $child_name under $parent_group_name in $max_attempts attempts" 2>&1 | tee -a "$TMP_DIR/create_group.log"
-  return 1
+    child_name="g$((idx - 1))_1"
+
+    max_attempts=5
+    attempt=1
+    parent_id=""
+    while ((attempt <= max_attempts)); do
+        parent_id="$(get_group_id_by_name "$parent_group_name")"
+        [ -n "$parent_id" ] && [ "$parent_id" != "null" ] && break
+        log_warn "Parent $parent_group_name not found (attempt $attempt). Waiting..." >>"$TMP_DIR/create_group.log"
+        ((attempt++))
+    done
+    if [ -z "$parent_id" ] || [ "$parent_id" = "null" ]; then
+        log_error "Parent $parent_group_name missing after $max_attempts attempts; cannot create $child_name" 2>&1 | tee -a "$TMP_DIR/create_group.log"
+        return 1
+    fi
+
+    attempt=1
+    while ((attempt <= max_attempts)); do
+        token=$(get_token)
+        response="$(curl -s -k --location --request POST "$(keycloak_url)/admin/realms/backstage/groups/${parent_id}/children" \
+            -H 'Content-Type: application/json' -H "Authorization: Bearer $token" \
+            --data-raw '{"name":"'"${child_name}"'"}' 2>&1)"
+        if [ "${PIPESTATUS[0]}" -eq 0 ] && ! echo "$response" | grep -q 'error' >&/dev/null; then
+            log_info "Group $child_name created under parent $parent_group_name" >>"$TMP_DIR/create_group.log"
+            return 0
+        fi
+        log_warn "Unable to create child $child_name under $parent_group_name at attempt $attempt. [$response]" >>"$TMP_DIR/create_group.log"
+        ((attempt++))
+    done
+    log_error "Unable to create child $child_name under $parent_group_name in $max_attempts attempts" 2>&1 | tee -a "$TMP_DIR/create_group.log"
+    return 1
 }
 
 create_group() {
-  local idx="${1}"
-  max_attempts=5
-  attempt=1
-
-  if [[ "$RBAC_POLICY" == "$RBAC_POLICY_NESTED_GROUPS" ]]; then
-    N="${RBAC_POLICY_SIZE:-$GROUP_COUNT}"
-    [ "$N" -gt "$GROUP_COUNT" ] && N="$GROUP_COUNT"
-
-    if [[ "$idx" -eq 1 || "$idx" -gt "$N" ]]; then
-      groupname="g${idx}"
-      while ((attempt <= max_attempts)); do
-        token=$(get_token)
-        response="$(curl -s -k --location --request POST "$(keycloak_url)/admin/realms/backstage/groups" \
-          -H 'Content-Type: application/json' -H "Authorization: Bearer $token" \
-          --data-raw '{"name":"'"${groupname}"'"}' 2>&1)"
-        if [ "${PIPESTATUS[0]}" -eq 0 ] && ! echo "$response" | grep -q 'error' >&/dev/null; then
-          log_info "Group $groupname created" >>"$TMP_DIR/create_group.log"
-          return
-        fi
-        log_warn "Unable to create $groupname at attempt $attempt. [$response]" >>"$TMP_DIR/create_group.log"
-        ((attempt++))
-      done
-      log_error "Unable to create the $groupname group in $max_attempts attempts, giving up!" 2>&1 | tee -a "$TMP_DIR/create_group.log"
-      return 1
-    else
-      groupname="g$((idx - 1))_1"
-      assign_parent_group "$idx" && return
-      log_warn "Nested group $groupname creation failed; retrying..." >>"$TMP_DIR/create_group.log"
-      return 1
-    fi
-  elif [[ "$RBAC_POLICY" == "$RBAC_POLICY_ALL_GROUPS_ADMIN_INHERITED" ]]; then
-    groupname="g${idx}"
-    parent_id=""
-    while ((attempt <= max_attempts)); do
-      parent_id="$(get_group_id_by_name "admin_parent")"
-      [ -n "$parent_id" ] && [ "$parent_id" != "null" ] && break
-      log_warn "Parent admin_parent not found (attempt $attempt). Waiting..." >>"$TMP_DIR/create_group.log"
-      sleep 2
-      ((attempt++))
-    done
-    if [ -z "$parent_id" ] || [ "$parent_id" = "null" ]; then
-      log_error "Parent admin_parent missing after $max_attempts attempts; cannot create $groupname" 2>&1 | tee -a "$TMP_DIR/create_group.log"
-      return 1
-    fi
+    local idx="${1}"
+    max_attempts=5
     attempt=1
-    while ((attempt <= max_attempts)); do
-      token=$(get_token)
-      response="$(curl -s -k --location --request POST "$(keycloak_url)/admin/realms/backstage/groups/${parent_id}/children" \
-        -H 'Content-Type: application/json' -H "Authorization: Bearer $token" \
-        --data-raw '{"name":"'"${groupname}"'"}' 2>&1)"
-      if [ "${PIPESTATUS[0]}" -eq 0 ] && ! echo "$response" | grep -q 'error' >&/dev/null; then
-        log_info "Group $groupname created under parent admin_parent" >>"$TMP_DIR/create_group.log"
-        return 0
-      fi
-      log_warn "Unable to create child $groupname under admin_parent at attempt $attempt. [$response]" >>"$TMP_DIR/create_group.log"
-      ((attempt++))
-    done
-    log_error "Unable to create child $groupname under admin_parent in $max_attempts attempts" 2>&1 | tee -a "$TMP_DIR/create_group.log"
-    return 1
-  else
-    # Non-nested: simple top-level groups
-    groupname="g${idx}"
-    while ((attempt <= max_attempts)); do
-      token=$(get_token)
-      response="$(curl -s -k --location --request POST "$(keycloak_url)/admin/realms/backstage/groups" \
-        -H 'Content-Type: application/json' -H "Authorization: Bearer $token" \
-        --data-raw '{"name":"'"${groupname}"'"}' 2>&1)"
-      if [ "${PIPESTATUS[0]}" -eq 0 ] && ! echo "$response" | grep -q 'error' >&/dev/null; then
-        log_info "Group $groupname created" >>"$TMP_DIR/create_group.log"
-        return
-      fi
-      log_warn "Unable to create $groupname at attempt $attempt. [$response]" >>"$TMP_DIR/create_group.log"
-      ((attempt++))
-    done
-    log_error "Unable to create the $groupname group in $max_attempts attempts, giving up!" 2>&1 | tee -a "$TMP_DIR/create_group.log"
-    return 1
-  fi
+
+    if [[ "$RBAC_POLICY" == "$RBAC_POLICY_NESTED_GROUPS" ]]; then
+        N="${RBAC_POLICY_SIZE:-$GROUP_COUNT}"
+        [ "$N" -gt "$GROUP_COUNT" ] && N="$GROUP_COUNT"
+
+        if [[ "$idx" -eq 1 || "$idx" -gt "$N" ]]; then
+            groupname="g${idx}"
+            while ((attempt <= max_attempts)); do
+                token=$(get_token)
+                response="$(curl -s -k --location --request POST "$(keycloak_url)/admin/realms/backstage/groups" \
+                    -H 'Content-Type: application/json' -H "Authorization: Bearer $token" \
+                    --data-raw '{"name":"'"${groupname}"'"}' 2>&1)"
+                if [ "${PIPESTATUS[0]}" -eq 0 ] && ! echo "$response" | grep -q 'error' >&/dev/null; then
+                    log_info "Group $groupname created" >>"$TMP_DIR/create_group.log"
+                    return
+                fi
+                log_warn "Unable to create $groupname at attempt $attempt. [$response]" >>"$TMP_DIR/create_group.log"
+                ((attempt++))
+            done
+            log_error "Unable to create the $groupname group in $max_attempts attempts, giving up!" 2>&1 | tee -a "$TMP_DIR/create_group.log"
+            return 1
+        else
+            groupname="g$((idx - 1))_1"
+            assign_parent_group "$idx" && return
+            log_warn "Nested group $groupname creation failed; retrying..." >>"$TMP_DIR/create_group.log"
+            return 1
+        fi
+    elif [[ "$RBAC_POLICY" == "$RBAC_POLICY_ALL_GROUPS_ADMIN_INHERITED" ]]; then
+        groupname="g${idx}"
+        parent_id=""
+        while ((attempt <= max_attempts)); do
+            parent_id="$(get_group_id_by_name "admin_parent")"
+            [ -n "$parent_id" ] && [ "$parent_id" != "null" ] && break
+            log_warn "Parent admin_parent not found (attempt $attempt). Waiting..." >>"$TMP_DIR/create_group.log"
+            sleep 2
+            ((attempt++))
+        done
+        if [ -z "$parent_id" ] || [ "$parent_id" = "null" ]; then
+            log_error "Parent admin_parent missing after $max_attempts attempts; cannot create $groupname" 2>&1 | tee -a "$TMP_DIR/create_group.log"
+            return 1
+        fi
+        attempt=1
+        while ((attempt <= max_attempts)); do
+            token=$(get_token)
+            response="$(curl -s -k --location --request POST "$(keycloak_url)/admin/realms/backstage/groups/${parent_id}/children" \
+                -H 'Content-Type: application/json' -H "Authorization: Bearer $token" \
+                --data-raw '{"name":"'"${groupname}"'"}' 2>&1)"
+            if [ "${PIPESTATUS[0]}" -eq 0 ] && ! echo "$response" | grep -q 'error' >&/dev/null; then
+                log_info "Group $groupname created under parent admin_parent" >>"$TMP_DIR/create_group.log"
+                return 0
+            fi
+            log_warn "Unable to create child $groupname under admin_parent at attempt $attempt. [$response]" >>"$TMP_DIR/create_group.log"
+            ((attempt++))
+        done
+        log_error "Unable to create child $groupname under admin_parent in $max_attempts attempts" 2>&1 | tee -a "$TMP_DIR/create_group.log"
+        return 1
+    else
+        # Non-nested: simple top-level groups
+        groupname="g${idx}"
+        while ((attempt <= max_attempts)); do
+            token=$(get_token)
+            response="$(curl -s -k --location --request POST "$(keycloak_url)/admin/realms/backstage/groups" \
+                -H 'Content-Type: application/json' -H "Authorization: Bearer $token" \
+                --data-raw '{"name":"'"${groupname}"'"}' 2>&1)"
+            if [ "${PIPESTATUS[0]}" -eq 0 ] && ! echo "$response" | grep -q 'error' >&/dev/null; then
+                log_info "Group $groupname created" >>"$TMP_DIR/create_group.log"
+                return
+            fi
+            log_warn "Unable to create $groupname at attempt $attempt. [$response]" >>"$TMP_DIR/create_group.log"
+            ((attempt++))
+        done
+        log_error "Unable to create the $groupname group in $max_attempts attempts, giving up!" 2>&1 | tee -a "$TMP_DIR/create_group.log"
+        return 1
+    fi
 }
 
 export RBAC_POLICY_ALL_GROUPS_ADMIN="all_groups_admin" #default
@@ -366,13 +366,13 @@ export RBAC_POLICY_ALL_GROUPS_ADMIN_INHERITED="all_groups_admin_inherited"
 # Generate RBAC policy CSV file and upload to GitHub
 # Sets RBAC_POLICY_FILE_URL to the raw GitHub URL
 create_and_upload_rbac_policy_csv() {
-  policy="${1:-$RBAC_POLICY_ALL_GROUPS_ADMIN}"
-  log_info "Generating RBAC policy CSV file for policy: $policy"
+    policy="${1:-$RBAC_POLICY_ALL_GROUPS_ADMIN}"
+    log_info "Generating RBAC policy CSV file for policy: $policy"
 
-  csv_file="$TMP_DIR/rbac-policy.csv"
+    csv_file="$TMP_DIR/rbac-policy.csv"
 
-  # Start with base policy rules
-  cat >"$csv_file" <<'EOF'
+    # Start with base policy rules
+    cat >"$csv_file" <<'EOF'
 p, role:default/a, kubernetes.proxy, use, allow
 p, role:default/a, catalog-entity, read, allow
 p, role:default/a, catalog.entity.create, create, allow
@@ -384,294 +384,294 @@ g, user:default/guru, role:default/a
 g, user:development/guest, role:default/a
 EOF
 
-  # Add complex policy rules if needed
-  if [[ $policy == "$RBAC_POLICY_COMPLEX" ]]; then
-    sed 's/^    //' "$WORKDIR/template/backstage/complex-rbac-config.csv" >>"$csv_file"
-  fi
-
-  # Add orchestrator rules if needed
-  if [[ "$INSTALL_METHOD" == "helm" ]] && ${ENABLE_ORCHESTRATOR:-false}; then
-    sed 's/^    //' "$WORKDIR/template/backstage/helm/orchestrator-rbac-patch.csv" >>"$csv_file"
+    # Add complex policy rules if needed
     if [[ $policy == "$RBAC_POLICY_COMPLEX" ]]; then
-      sed 's/^    //' "$WORKDIR/template/backstage/helm/complex-orchestrator-rbac-patch.csv" >>"$csv_file"
+        sed 's/^    //' "$WORKDIR/template/backstage/complex-rbac-config.csv" >>"$csv_file"
     fi
-  fi
 
-  # Add group/user-specific policy rules
-  case $policy in
-  "$RBAC_POLICY_ALL_GROUPS_ADMIN")
-    for i in $(seq 1 "$GROUP_COUNT"); do
-      echo "g, group:default/g${i}, role:default/a" >>"$csv_file"
-    done
-    ;;
-  "$RBAC_POLICY_USER_IN_MULTIPLE_GROUPS")
-    group_condition="group in ["
-    for g in $(seq 1 "${RBAC_POLICY_SIZE:-$GROUP_COUNT}"); do
-      if [ "$g" -gt 1 ]; then
-        group_condition="$group_condition,"
-      fi
-      group_condition="$group_condition'g$g'"
-    done
-    group_condition="$group_condition]"
-    for u in $(seq 1 "$BACKSTAGE_USER_COUNT"); do
-      if [ "$u" -eq 1 ]; then
-        echo "g, user:default/t${u}, role:default/a, $group_condition" >>"$csv_file"
-      else
-        echo "g, user:default/t${u}, role:default/a" >>"$csv_file"
-      fi
-    done
-    ;;
-  "$RBAC_POLICY_STATIC")
-    for i in $(seq 1 "${RBAC_POLICY_SIZE:-$GROUP_COUNT}"); do
-      echo "g, group:default/g${i}, role:default/a" >>"$csv_file"
-    done
-    ;;
-  "$RBAC_POLICY_NESTED_GROUPS")
-    N="${RBAC_POLICY_SIZE:-$GROUP_COUNT}"
-    [ "$N" -gt "$GROUP_COUNT" ] && N="$GROUP_COUNT"
+    # Add orchestrator rules if needed
+    if [[ "$INSTALL_METHOD" == "helm" ]] && ${ENABLE_ORCHESTRATOR:-false}; then
+        sed 's/^    //' "$WORKDIR/template/backstage/helm/orchestrator-rbac-patch.csv" >>"$csv_file"
+        if [[ $policy == "$RBAC_POLICY_COMPLEX" ]]; then
+            sed 's/^    //' "$WORKDIR/template/backstage/helm/complex-orchestrator-rbac-patch.csv" >>"$csv_file"
+        fi
+    fi
 
-    for i in $(seq 1 "$N"); do
-      if [ "$i" -eq 1 ] || [ "$i" -gt "$RBAC_POLICY_SIZE" ]; then
-        echo "g, group:default/g1, role:default/a" >>"$csv_file"
-      else
-        echo "g, group:default/g$((i - 1))_1, role:default/a" >>"$csv_file"
-      fi
-    done
-    ;;
-  "$RBAC_POLICY_COMPLEX")
-    ROLES=("platform_admin" "engineering_lead" "senior_engineer" "backend_engineer" "frontend_engineer" "product_manager" "QA_engineer" "external_contractor" "compliance_security" "on_call_team")
-    ROLES_LEN=${#ROLES[@]}
-    for i in $(seq 1 "$GROUP_COUNT"); do
-      echo "g, group:default/g${i}, role:default/${ROLES[$(((i - 1) % ROLES_LEN))]}" >>"$csv_file"
-    done
-    ;;
-  "$RBAC_POLICY_ALL_GROUPS_ADMIN_INHERITED")
-    echo "g, group:default/admin_parent, role:default/a" >>"$csv_file"
-    ;;
-  *)
-    log_error "Invalid RBAC policy: ${policy}"
-    return 1
-    ;;
-  esac
+    # Add group/user-specific policy rules
+    case $policy in
+    "$RBAC_POLICY_ALL_GROUPS_ADMIN")
+        for i in $(seq 1 "$GROUP_COUNT"); do
+            echo "g, group:default/g${i}, role:default/a" >>"$csv_file"
+        done
+        ;;
+    "$RBAC_POLICY_USER_IN_MULTIPLE_GROUPS")
+        group_condition="group in ["
+        for g in $(seq 1 "${RBAC_POLICY_SIZE:-$GROUP_COUNT}"); do
+            if [ "$g" -gt 1 ]; then
+                group_condition="$group_condition,"
+            fi
+            group_condition="$group_condition'g$g'"
+        done
+        group_condition="$group_condition]"
+        for u in $(seq 1 "$BACKSTAGE_USER_COUNT"); do
+            if [ "$u" -eq 1 ]; then
+                echo "g, user:default/t${u}, role:default/a, $group_condition" >>"$csv_file"
+            else
+                echo "g, user:default/t${u}, role:default/a" >>"$csv_file"
+            fi
+        done
+        ;;
+    "$RBAC_POLICY_STATIC")
+        for i in $(seq 1 "${RBAC_POLICY_SIZE:-$GROUP_COUNT}"); do
+            echo "g, group:default/g${i}, role:default/a" >>"$csv_file"
+        done
+        ;;
+    "$RBAC_POLICY_NESTED_GROUPS")
+        N="${RBAC_POLICY_SIZE:-$GROUP_COUNT}"
+        [ "$N" -gt "$GROUP_COUNT" ] && N="$GROUP_COUNT"
 
-  log_info "RBAC policy CSV file generated: $csv_file"
+        for i in $(seq 1 "$N"); do
+            if [ "$i" -eq 1 ] || [ "$i" -gt "$RBAC_POLICY_SIZE" ]; then
+                echo "g, group:default/g1, role:default/a" >>"$csv_file"
+            else
+                echo "g, group:default/g$((i - 1))_1, role:default/a" >>"$csv_file"
+            fi
+        done
+        ;;
+    "$RBAC_POLICY_COMPLEX")
+        ROLES=("platform_admin" "engineering_lead" "senior_engineer" "backend_engineer" "frontend_engineer" "product_manager" "QA_engineer" "external_contractor" "compliance_security" "on_call_team")
+        ROLES_LEN=${#ROLES[@]}
+        for i in $(seq 1 "$GROUP_COUNT"); do
+            echo "g, group:default/g${i}, role:default/${ROLES[$(((i - 1) % ROLES_LEN))]}" >>"$csv_file"
+        done
+        ;;
+    "$RBAC_POLICY_ALL_GROUPS_ADMIN_INHERITED")
+        echo "g, group:default/admin_parent, role:default/a" >>"$csv_file"
+        ;;
+    *)
+        log_error "Invalid RBAC policy: ${policy}"
+        return 1
+        ;;
+    esac
 
-  # Upload to GitHub
-  upload_rbac_policy_to_github "$csv_file"
+    log_info "RBAC policy CSV file generated: $csv_file"
+
+    # Upload to GitHub
+    upload_rbac_policy_to_github "$csv_file"
 }
 
 upload_rbac_policy_to_github() {
-  local csv_file="$1"
-  log_info "Uploading RBAC policy CSV to GitHub"
+    local csv_file="$1"
+    log_info "Uploading RBAC policy CSV to GitHub"
 
-  git_str="${GITHUB_USER}:${GITHUB_TOKEN}@github.com"
-  base_name=$(basename "$GITHUB_REPO")
-  git_dir=$TMP_DIR/${base_name}-rbac
-  git_repo=${GITHUB_REPO//github.com/${git_str}}
+    git_str="${GITHUB_USER}:${GITHUB_TOKEN}@github.com"
+    base_name=$(basename "$GITHUB_REPO")
+    git_dir=$TMP_DIR/${base_name}-rbac
+    git_repo=${GITHUB_REPO//github.com/${git_str}}
 
-  [[ -d "${git_dir}" ]] && rm -rf "${git_dir}"
-  git clone "$git_repo" "$git_dir"
-  pushd "$git_dir" || return 1
+    [[ -d "${git_dir}" ]] && rm -rf "${git_dir}"
+    git clone "$git_repo" "$git_dir"
+    pushd "$git_dir" || return 1
 
-  git config user.name "rhdh-performance-bot"
-  git config user.email rhdh-performance-bot@redhat.com
+    git config user.name "rhdh-performance-bot"
+    git config user.email rhdh-performance-bot@redhat.com
 
-  # Use a dedicated branch for RBAC policy
-  rbac_branch="rbac-policy-$(date +%Y%m%d%H%M%S)"
-  git checkout -b "$rbac_branch"
+    # Use a dedicated branch for RBAC policy
+    rbac_branch="rbac-policy-$(date +%Y%m%d%H%M%S)"
+    git checkout -b "$rbac_branch"
 
-  cp -vf "$csv_file" "rbac-policy.csv"
-  git add "rbac-policy.csv"
-  git commit -a -m "Upload RBAC policy CSV"
-  git push -f --set-upstream origin "$rbac_branch"
+    cp -vf "$csv_file" "rbac-policy.csv"
+    git add "rbac-policy.csv"
+    git commit -a -m "Upload RBAC policy CSV"
+    git push -f --set-upstream origin "$rbac_branch"
 
-  popd || return 1
+    popd || return 1
 
-  sleep 5
+    sleep 5
 
-  # Set the raw GitHub URL for the RBAC policy file
-  # Convert https://github.com/user/repo to https://raw.githubusercontent.com/user/repo
-  raw_base_url="${GITHUB_REPO/github.com/raw.githubusercontent.com}"
-  raw_base_url="${raw_base_url%.git}"
-  export RBAC_POLICY_FILE_URL="${raw_base_url}/${rbac_branch}/rbac-policy.csv"
+    # Set the raw GitHub URL for the RBAC policy file
+    # Convert https://github.com/user/repo to https://raw.githubusercontent.com/user/repo
+    raw_base_url="${GITHUB_REPO/github.com/raw.githubusercontent.com}"
+    raw_base_url="${raw_base_url%.git}"
+    export RBAC_POLICY_FILE_URL="${raw_base_url}/${rbac_branch}/rbac-policy.csv"
 
-  log_info "RBAC policy uploaded to GitHub. URL: $RBAC_POLICY_FILE_URL"
+    log_info "RBAC policy uploaded to GitHub. URL: $RBAC_POLICY_FILE_URL"
 
-  # Clean up local copy
-  # rm -vf "$csv_file"
+    # Clean up local copy
+    # rm -vf "$csv_file"
 }
 
 create_rbac_policy() {
-  policy="${1:-$RBAC_POLICY_ALL_GROUPS_ADMIN}"
-  log_info "Generating RBAC policy: $policy"
-  case $policy in
-  "$RBAC_POLICY_ALL_GROUPS_ADMIN")
-    for i in $(seq 1 "$GROUP_COUNT"); do
-      echo "    g, group:default/g${i}, role:default/a" >>"$TMP_DIR/group-rbac.yaml"
-    done
-    ;;
-  "$RBAC_POLICY_USER_IN_MULTIPLE_GROUPS")
-    group_condition="group in ["
-    for g in $(seq 1 "${RBAC_POLICY_SIZE:-$GROUP_COUNT}"); do
-      if [ "$g" -gt 1 ]; then
-        group_condition="$group_condition,"
-      fi
-      group_condition="$group_condition'g$g'"
-    done
-    group_condition="$group_condition]"
-    for u in $(seq 1 "$BACKSTAGE_USER_COUNT"); do
-      if [ "$u" -eq 1 ]; then
-        echo "    g, user:default/t${u}, role:default/a, $group_condition" >>"$TMP_DIR/group-rbac.yaml"
-      else
-        echo "    g, user:default/t${u}, role:default/a" >>"$TMP_DIR/group-rbac.yaml"
-      fi
-    done
-    ;;
-  "$RBAC_POLICY_STATIC")
-    for i in $(seq 1 "${RBAC_POLICY_SIZE:-$GROUP_COUNT}"); do
-      echo "    g, group:default/g${i}, role:default/a" >>"$TMP_DIR/group-rbac.yaml"
-    done
-    ;;
-  "$RBAC_POLICY_NESTED_GROUPS")
-    N="${RBAC_POLICY_SIZE:-$GROUP_COUNT}"
-    [ "$N" -gt "$GROUP_COUNT" ] && N="$GROUP_COUNT"
+    policy="${1:-$RBAC_POLICY_ALL_GROUPS_ADMIN}"
+    log_info "Generating RBAC policy: $policy"
+    case $policy in
+    "$RBAC_POLICY_ALL_GROUPS_ADMIN")
+        for i in $(seq 1 "$GROUP_COUNT"); do
+            echo "    g, group:default/g${i}, role:default/a" >>"$TMP_DIR/group-rbac.yaml"
+        done
+        ;;
+    "$RBAC_POLICY_USER_IN_MULTIPLE_GROUPS")
+        group_condition="group in ["
+        for g in $(seq 1 "${RBAC_POLICY_SIZE:-$GROUP_COUNT}"); do
+            if [ "$g" -gt 1 ]; then
+                group_condition="$group_condition,"
+            fi
+            group_condition="$group_condition'g$g'"
+        done
+        group_condition="$group_condition]"
+        for u in $(seq 1 "$BACKSTAGE_USER_COUNT"); do
+            if [ "$u" -eq 1 ]; then
+                echo "    g, user:default/t${u}, role:default/a, $group_condition" >>"$TMP_DIR/group-rbac.yaml"
+            else
+                echo "    g, user:default/t${u}, role:default/a" >>"$TMP_DIR/group-rbac.yaml"
+            fi
+        done
+        ;;
+    "$RBAC_POLICY_STATIC")
+        for i in $(seq 1 "${RBAC_POLICY_SIZE:-$GROUP_COUNT}"); do
+            echo "    g, group:default/g${i}, role:default/a" >>"$TMP_DIR/group-rbac.yaml"
+        done
+        ;;
+    "$RBAC_POLICY_NESTED_GROUPS")
+        N="${RBAC_POLICY_SIZE:-$GROUP_COUNT}"
+        [ "$N" -gt "$GROUP_COUNT" ] && N="$GROUP_COUNT"
 
-    for i in $(seq 1 "$N"); do
-      if [ "$i" -eq 1 ] || [ "$i" -gt "$RBAC_POLICY_SIZE" ]; then
-        echo "    g, group:default/g1, role:default/a" >>"$TMP_DIR/group-rbac.yaml"
-      else
-        echo "    g, group:default/g$((i - 1))_1, role:default/a" >>"$TMP_DIR/group-rbac.yaml"
-      fi
-    done
-    ;;
-  "$RBAC_POLICY_COMPLEX")
-    ROLES=("platform_admin" "engineering_lead" "senior_engineer" "backend_engineer" "frontend_engineer" "product_manager" "QA_engineer" "external_contractor" "compliance_security" "on_call_team")
-    ROLES_LEN=${#ROLES[@]}
-    for i in $(seq 1 "$GROUP_COUNT"); do
-      echo "    g, group:default/g${i}, role:default/${ROLES[$(((i - 1) % ROLES_LEN))]}" >>"$TMP_DIR/group-rbac.yaml"
-    done
-    ;;
-  "$RBAC_POLICY_ALL_GROUPS_ADMIN_INHERITED")
-    echo "    g, group:default/admin_parent, role:default/a" >>"$TMP_DIR/group-rbac.yaml"
-    ;;
-  \?)
-    log_error "Invalid RBAC policy: ${policy}"
-    exit 1
-    ;;
-  esac
+        for i in $(seq 1 "$N"); do
+            if [ "$i" -eq 1 ] || [ "$i" -gt "$RBAC_POLICY_SIZE" ]; then
+                echo "    g, group:default/g1, role:default/a" >>"$TMP_DIR/group-rbac.yaml"
+            else
+                echo "    g, group:default/g$((i - 1))_1, role:default/a" >>"$TMP_DIR/group-rbac.yaml"
+            fi
+        done
+        ;;
+    "$RBAC_POLICY_COMPLEX")
+        ROLES=("platform_admin" "engineering_lead" "senior_engineer" "backend_engineer" "frontend_engineer" "product_manager" "QA_engineer" "external_contractor" "compliance_security" "on_call_team")
+        ROLES_LEN=${#ROLES[@]}
+        for i in $(seq 1 "$GROUP_COUNT"); do
+            echo "    g, group:default/g${i}, role:default/${ROLES[$(((i - 1) % ROLES_LEN))]}" >>"$TMP_DIR/group-rbac.yaml"
+        done
+        ;;
+    "$RBAC_POLICY_ALL_GROUPS_ADMIN_INHERITED")
+        echo "    g, group:default/admin_parent, role:default/a" >>"$TMP_DIR/group-rbac.yaml"
+        ;;
+    \?)
+        log_error "Invalid RBAC policy: ${policy}"
+        exit 1
+        ;;
+    esac
 }
 
 keycloak_token() {
-  curl -s -k "$(keycloak_url)/realms/master/protocol/openid-connect/token" \
-    -d username=temp-admin \
-    -d "password=$1" \
-    -d 'grant_type=password' \
-    -d 'client_id=admin-cli' | jq -r ".expires_in_timestamp = $(python3 -c 'from datetime import datetime, timedelta; t_add=int(30); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))')"
+    curl -s -k "$(keycloak_url)/realms/master/protocol/openid-connect/token" \
+        -d username=temp-admin \
+        -d "password=$1" \
+        -d 'grant_type=password' \
+        -d 'client_id=admin-cli' | jq -r ".expires_in_timestamp = $(python3 -c 'from datetime import datetime, timedelta; t_add=int(30); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))')"
 }
 
 rhdh_token() {
-  REDIRECT_URL="$(backstage_url)/oauth2/callback"
-  REFRESH_URL="$(backstage_url)/api/auth/oauth2Proxy/refresh"
-  USERNAME="guru"
-  PASSWORD=$(oc -n "${RHDH_NAMESPACE}" get secret perf-test-secrets -o template --template='{{.data.keycloak_user_pass}}' | base64 -d)
-  REALM="backstage"
-  CLIENTID="backstage"
+    REDIRECT_URL="$(backstage_url)/oauth2/callback"
+    REFRESH_URL="$(backstage_url)/api/auth/oauth2Proxy/refresh"
+    USERNAME="guru"
+    PASSWORD=$(oc -n "${RHDH_NAMESPACE}" get secret perf-test-secrets -o template --template='{{.data.keycloak_user_pass}}' | base64 -d)
+    REALM="backstage"
+    CLIENTID="backstage"
 
-  if [[ "${AUTH_PROVIDER}" != "keycloak" ]]; then
-    # Corrected jq command for non-keycloak provider
-    ACCESS_TOKEN=$(curl -s -k --cookie "$COOKIE" --cookie-jar "$COOKIE" "$(backstage_url)/api/auth/guest/refresh" | jq -r ".backstageIdentity | .expires_in_timestamp = $(python3 -c 'from datetime import datetime, timedelta; t_add=int(50*60); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))')")
+    if [[ "${AUTH_PROVIDER}" != "keycloak" ]]; then
+        # Corrected jq command for non-keycloak provider
+        ACCESS_TOKEN=$(curl -s -k --cookie "$COOKIE" --cookie-jar "$COOKIE" "$(backstage_url)/api/auth/guest/refresh" | jq -r ".backstageIdentity | .expires_in_timestamp = $(python3 -c 'from datetime import datetime, timedelta; t_add=int(50*60); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))')")
+        echo "$ACCESS_TOKEN"
+        return
+    fi
+
+    LOGIN_URL=$(curl -I -k -sSL --dump-header "$TMP_DIR/login_url_headers.log" --cookie "$COOKIE" --cookie-jar "$COOKIE" "$REFRESH_URL")
+    state=$(echo "$LOGIN_URL" | tr -d '\r' | grep -oE 'state=[^&]+' | grep -oE '[^=]+$' | sed 's/%2F/\//g;s/%3A/:/g')
+
+    AUTH_URL=$(curl -k -sSL --dump-header "$TMP_DIR/auth_url_headers.log" --get --cookie "$COOKIE" --cookie-jar "$COOKIE" \
+        --data-urlencode "client_id=${CLIENTID}" \
+        --data-urlencode "state=${state}" \
+        --data-urlencode "redirect_uri=${REDIRECT_URL}" \
+        --data-urlencode "scope=openid email profile" \
+        --data-urlencode "response_type=code" \
+        "$(keycloak_url)/realms/$REALM/protocol/openid-connect/auth" 2>&1 | tee "$TMP_DIR/auth_url.log" | grep -oE 'action="[^"]+"' | grep -oE '"[^"]+"' | tr -d '"')
+
+    execution=$(echo "$AUTH_URL" | grep -oE 'execution=[^&]+' | grep -oE '[^=]+$')
+    tab_id=$(echo "$AUTH_URL" | grep -oE 'tab_id=[^&]+' | grep -oE '[^=]+$')
+    # shellcheck disable=SC2001
+    AUTHENTICATE_URL=$(echo "$AUTH_URL" | sed -e 's/\&amp;/\&/g')
+
+    CODE_URL=$(curl -k -sS --dump-header "$TMP_DIR/code_url_headers.log" --cookie "$COOKIE" --cookie-jar "$COOKIE" \
+        --data-raw "username=${USERNAME}&password=${PASSWORD}&credentialId=" \
+        --data-urlencode "client_id=${CLIENTID}" \
+        --data-urlencode "tab_id=${tab_id}" \
+        --data-urlencode "execution=${execution}" \
+        --write-out "%{redirect_url}" \
+        "$AUTHENTICATE_URL" 2>&1 | tee "$TMP_DIR/code_url.log")
+
+    code=$(echo "$CODE_URL" | grep -oE 'code=[^&]+' | grep -oE '[^=]+$')
+    session_state=$(echo "$CODE_URL" | grep -oE 'session_state=[^&]+' | grep -oE '[^=]+$')
+
+    # shellcheck disable=SC2001
+    CODE_URL=$(echo "$CODE_URL" | sed -e 's/\&amp;/\&/g')
+
+    ACCESS_TOKEN=$(curl -k -sSL --dump-header "$TMP_DIR/get_rhdh_token_headers.log" --cookie "$COOKIE" --cookie-jar "$COOKIE" \
+        --data-urlencode "code=$code" \
+        --data-urlencode "session_state=$session_state" \
+        --data-urlencode "state=$state" \
+        "$CODE_URL" | tee -a "$TMP_DIR/get_rhdh_token.log" | jq ".backstageIdentity | .expires_in_timestamp = $(python3 -c 'from datetime import datetime, timedelta; t_add=int(30*60); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))')")
+    echo "" >>"$TMP_DIR/get_rhdh_token.log"
     echo "$ACCESS_TOKEN"
-    return
-  fi
-
-  LOGIN_URL=$(curl -I -k -sSL --dump-header "$TMP_DIR/login_url_headers.log" --cookie "$COOKIE" --cookie-jar "$COOKIE" "$REFRESH_URL")
-  state=$(echo "$LOGIN_URL" | tr -d '\r' | grep -oE 'state=[^&]+' | grep -oE '[^=]+$' | sed 's/%2F/\//g;s/%3A/:/g')
-
-  AUTH_URL=$(curl -k -sSL --dump-header "$TMP_DIR/auth_url_headers.log" --get --cookie "$COOKIE" --cookie-jar "$COOKIE" \
-    --data-urlencode "client_id=${CLIENTID}" \
-    --data-urlencode "state=${state}" \
-    --data-urlencode "redirect_uri=${REDIRECT_URL}" \
-    --data-urlencode "scope=openid email profile" \
-    --data-urlencode "response_type=code" \
-    "$(keycloak_url)/realms/$REALM/protocol/openid-connect/auth" 2>&1 | tee "$TMP_DIR/auth_url.log" | grep -oE 'action="[^"]+"' | grep -oE '"[^"]+"' | tr -d '"')
-
-  execution=$(echo "$AUTH_URL" | grep -oE 'execution=[^&]+' | grep -oE '[^=]+$')
-  tab_id=$(echo "$AUTH_URL" | grep -oE 'tab_id=[^&]+' | grep -oE '[^=]+$')
-  # shellcheck disable=SC2001
-  AUTHENTICATE_URL=$(echo "$AUTH_URL" | sed -e 's/\&amp;/\&/g')
-
-  CODE_URL=$(curl -k -sS --dump-header "$TMP_DIR/code_url_headers.log" --cookie "$COOKIE" --cookie-jar "$COOKIE" \
-    --data-raw "username=${USERNAME}&password=${PASSWORD}&credentialId=" \
-    --data-urlencode "client_id=${CLIENTID}" \
-    --data-urlencode "tab_id=${tab_id}" \
-    --data-urlencode "execution=${execution}" \
-    --write-out "%{redirect_url}" \
-    "$AUTHENTICATE_URL" 2>&1 | tee "$TMP_DIR/code_url.log")
-
-  code=$(echo "$CODE_URL" | grep -oE 'code=[^&]+' | grep -oE '[^=]+$')
-  session_state=$(echo "$CODE_URL" | grep -oE 'session_state=[^&]+' | grep -oE '[^=]+$')
-
-  # shellcheck disable=SC2001
-  CODE_URL=$(echo "$CODE_URL" | sed -e 's/\&amp;/\&/g')
-
-  ACCESS_TOKEN=$(curl -k -sSL --dump-header "$TMP_DIR/get_rhdh_token_headers.log" --cookie "$COOKIE" --cookie-jar "$COOKIE" \
-    --data-urlencode "code=$code" \
-    --data-urlencode "session_state=$session_state" \
-    --data-urlencode "state=$state" \
-    "$CODE_URL" | tee -a "$TMP_DIR/get_rhdh_token.log" | jq ".backstageIdentity | .expires_in_timestamp = $(python3 -c 'from datetime import datetime, timedelta; t_add=int(30*60); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))')")
-  echo "" >>"$TMP_DIR/get_rhdh_token.log"
-  echo "$ACCESS_TOKEN"
 }
 
 # shellcheck disable=SC2120
 get_token() {
-  local service="$1"
-  local token_file token_field token_type token_timeout token_lockfile
+    local service="$1"
+    local token_file token_field token_type token_timeout token_lockfile
 
-  if [[ ${service} == 'rhdh' ]]; then
-    token_file="$TMP_DIR/rhdh_token.json"
-    token_field=".token"
-    token_type="RHDH"
-    token_timeout="${2:-3600}"
-    token_lockfile="$TMP_DIR/rhdh_token.lockfile"
-  else
-    token_file="$TMP_DIR/keycloak_token.json"
-    token_field=".access_token"
-    token_type="Keycloak"
-    token_timeout="${2:-60}"
-    token_lockfile="$TMP_DIR/kc_token.lockfile"
-  fi
-  while ! mkdir "$token_lockfile" 2>/dev/null; do
-    sleep 0.5s
-  done
-  #shellcheck disable=SC2064
-  trap "rm -rf $token_lockfile; exit" INT TERM EXIT HUP
-
-  log_token_info "Attempting to get '$token_type' token for up to '$token_timeout' seconds"
-  local timeout_timestamp
-  timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$token_timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
-  while [ ! -f "$token_file" ] || [ ! -s "$token_file" ] || [ -z "$(jq -rc '.expires_in_timestamp' "$token_file")" ] || [ "$(date +%s)" -gt "$(jq -rc '.expires_in_timestamp' "$token_file")" ] || [ "$(jq -rc "$token_field" "$token_file")" == "null" ]; do
-    if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
-      log_token_err "Timeout getting $token_type token"
-      exit 1
-    fi
-    log_token_info "Refreshing $token_type token"
     if [[ ${service} == 'rhdh' ]]; then
-      [[ -f "$token_file" ]] && rm -rf "$token_file" && rm -rf "$TMP_DIR/cookie.jar"
-      if ! rhdh_token >"$token_file" || [ "$(jq -rc "$token_field" "$token_file")" == "null" ]; then
-        log_token_err "Unable to get $token_type token, re-attempting"
-      fi
+        token_file="$TMP_DIR/rhdh_token.json"
+        token_field=".token"
+        token_type="RHDH"
+        token_timeout="${2:-3600}"
+        token_lockfile="$TMP_DIR/rhdh_token.lockfile"
     else
-      keycloak_pass=$(oc -n "${RHDH_NAMESPACE}" get secret rhdh-keycloak-initial-admin -o template --template='{{.data.password}}' | base64 -d)
-      if ! keycloak_token "$keycloak_pass" >"$token_file"; then
-        log_token_err "Unable to get $token_type token, re-attempting"
-      fi
+        token_file="$TMP_DIR/keycloak_token.json"
+        token_field=".access_token"
+        token_type="Keycloak"
+        token_timeout="${2:-60}"
+        token_lockfile="$TMP_DIR/kc_token.lockfile"
     fi
-    sleep 5s
-  done
+    while ! mkdir "$token_lockfile" 2>/dev/null; do
+        sleep 0.5s
+    done
+    #shellcheck disable=SC2064
+    trap "rm -rf $token_lockfile; exit" INT TERM EXIT HUP
 
-  jq -rc "$token_field" "$token_file"
-  rm -rf "$token_lockfile"
+    log_token_info "Attempting to get '$token_type' token for up to '$token_timeout' seconds"
+    local timeout_timestamp
+    timeout_timestamp=$(python3 -c "from datetime import datetime, timedelta; t_add=int('$token_timeout'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))")
+    while [ ! -f "$token_file" ] || [ ! -s "$token_file" ] || [ -z "$(jq -rc '.expires_in_timestamp' "$token_file")" ] || [ "$(date +%s)" -gt "$(jq -rc '.expires_in_timestamp' "$token_file")" ] || [ "$(jq -rc "$token_field" "$token_file")" == "null" ]; do
+        if [ "$(date "+%s")" -gt "$timeout_timestamp" ]; then
+            log_token_err "Timeout getting $token_type token"
+            exit 1
+        fi
+        log_token_info "Refreshing $token_type token"
+        if [[ ${service} == 'rhdh' ]]; then
+            [[ -f "$token_file" ]] && rm -rf "$token_file" && rm -rf "$TMP_DIR/cookie.jar"
+            if ! rhdh_token >"$token_file" || [ "$(jq -rc "$token_field" "$token_file")" == "null" ]; then
+                log_token_err "Unable to get $token_type token, re-attempting"
+            fi
+        else
+            keycloak_pass=$(oc -n "${RHDH_NAMESPACE}" get secret rhdh-keycloak-initial-admin -o template --template='{{.data.password}}' | base64 -d)
+            if ! keycloak_token "$keycloak_pass" >"$token_file"; then
+                log_token_err "Unable to get $token_type token, re-attempting"
+            fi
+        fi
+        sleep 5s
+    done
+
+    jq -rc "$token_field" "$token_file"
+    rm -rf "$token_lockfile"
 }
 
 export -f keycloak_url backstage_url get_token keycloak_token rhdh_token create_rbac_policy create_and_upload_rbac_policy_csv upload_rbac_policy_to_github log log_info log_warn log_error log_token log_token_info log_token_err get_group_id_by_name assign_parent_group get_group_path_by_name

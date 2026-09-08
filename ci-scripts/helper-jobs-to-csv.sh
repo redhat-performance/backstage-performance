@@ -27,7 +27,7 @@ set -e -u -o pipefail
 
 function log() {
     local text="${1}"
-    echo "$( date -u -Ins ) ${text}"
+    echo "$(date -u -Ins) ${text}"
 }
 
 function assert_int() {
@@ -46,14 +46,14 @@ function assert_json() {
     fi
 }
 
-files_dir="$( mktemp -d )"
+files_dir="$(mktemp -d)"
 trap 'rm -rf "${files_dir}"' EXIT
 
 for url in "$@"; do
     log "DEBUG Processing URL ${url}"
-    pr_number="$( echo "${url}" | cut -d '/' -f 10 )"
+    pr_number="$(echo "${url}" | cut -d '/' -f 10)"
     assert_int "$pr_number"
-    job_id="$( echo "${url}" | cut -d '/' -f 12 )"
+    job_id="$(echo "${url}" | cut -d '/' -f 12)"
     assert_int "$pr_number"
     bench_url="https://gcsweb-ci.apps.ci.l2s4.p1.openshiftapps.com/gcs/test-platform-results/pr-logs/pull/redhat-performance_backstage-performance/${pr_number}/pull-ci-redhat-performance-backstage-performance-main-mvp/${job_id}/artifacts/mvp/redhat-performance-backstage-performance/artifacts/benchmark.json"
     bench_file="${files_dir}/${job_id}/benchmark.json"
@@ -64,6 +64,6 @@ for url in "$@"; do
     log "INFO Downloaded to ${bench_file}"
 done
 
-output="$( mktemp runs-to-csv-XXXXXX.csv )"
+output="$(mktemp runs-to-csv-XXXXXX.csv)"
 log "INFO Storing resulting CSV as '${output}'"
 ci-scripts/runs-to-csv.sh "${files_dir}" | tee "${output}"

@@ -334,6 +334,10 @@ shellcheck:
 	fi; \
 	find . -name '*.sh' -exec shellcheck {} +
 
+.PHONY: pre-commit
+pre-commit:
+	pre-commit run --all-files
+
 ## Run all linters
 .PHONY: lint
 lint: shellcheck

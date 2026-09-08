@@ -60,7 +60,7 @@ gather_pod_logs() {
 }
 
 # Collect locust logs if not a local test
-if [  ! -d "${TMP_DIR}/local-test" ]; then
+if [ ! -d "${TMP_DIR}/local-test" ]; then
     pods="$(oc -n "$LOCUST_NAMESPACE" get pods -o json | jq -r '.items[] | select(.metadata.name | contains("locust-operator")).metadata.name')"
     pods="$pods $(oc -n "$LOCUST_NAMESPACE" get pods -o json | jq -r '.items[] | select(.metadata.name | contains("test-worker")).metadata.name')"
     pods="$pods $(oc -n "$LOCUST_NAMESPACE" get pods -o json | jq -r '.items[] | select(.metadata.name | contains("test-master")).metadata.name')"
@@ -89,10 +89,10 @@ if [ "${ENABLE_PROFILING:-false}" == "true" ]; then
 fi
 echo "$(date -u -Ins) Collecting RHDH must-gather for namespaces ${must_gather_namespaces}"
 $cli adm must-gather \
-  --image=registry.access.redhat.com/rhdh/rhdh-must-gather-rhel9:1.10 \
-  --dest-dir="$must_gather_dir" \
-  -- /usr/bin/gather "${must_gather_args[@]}" \
-  || echo "WARNING: RHDH must-gather failed"
+    --image=registry.access.redhat.com/rhdh/rhdh-must-gather-rhel9:1.10 \
+    --dest-dir="$must_gather_dir" \
+    -- /usr/bin/gather "${must_gather_args[@]}" ||
+    echo "WARNING: RHDH must-gather failed"
 
 if [ "$ENABLE_ORCHESTRATOR" == "true" ]; then
     pods=$($clin get pods -l app.kubernetes.io/component=serverless-workflow -o jsonpath='{.items[*].metadata.name}')
@@ -320,17 +320,17 @@ if [ "$UPLOAD_TO_OPENSEARCH" == "true" ]; then
             MIN_HUNTER_COUNT=10
 
             COUNT=$(curl -s -X GET \
-              "${ES_SERVER}/${ES_BENCHMARK_INDEX}/_count" \
-              -H "Content-Type: application/json" | jq '.count')
+                "${ES_SERVER}/${ES_BENCHMARK_INDEX}/_count" \
+                -H "Content-Type: application/json" | jq '.count')
 
             cp config/orion/mvp-regression.yaml "${ARTIFACT_DIR}/regression/mvp-regression.yaml"
             cp config/orion/mvp-anomaly-catch.yaml "${ARTIFACT_DIR}/regression/mvp-anomaly-catch.yaml"
 
             orion --config "${ARTIFACT_DIR}/regression/mvp-anomaly-catch.yaml" \
-            --anomaly-detection \
-            --lookback-size $MIN_HUNTER_COUNT \
-            --display git_commit,build_id,rhdh_release_tag \
-            -o json --save-output-path "${ARTIFACT_DIR}/regression/anomaly-results.json" || true
+                --anomaly-detection \
+                --lookback-size $MIN_HUNTER_COUNT \
+                --display git_commit,build_id,rhdh_release_tag \
+                -o json --save-output-path "${ARTIFACT_DIR}/regression/anomaly-results.json" || true
 
             anomaly_json=$(find "${ARTIFACT_DIR}/regression" -maxdepth 1 -type f -name 'anomaly-results*.json' -print -quit)
             if [ -n "${anomaly_json}" ]; then
@@ -376,7 +376,7 @@ if [ "$UPLOAD_TO_OPENSEARCH" == "true" ]; then
             title=$(basename "$file" _viz.html | tr '_.-' '   ')
             echo "Updating title of $(basename "$file") -> ${title}"
             sed "s|<head><meta charset=\"utf-8\" /></head>|<head><meta charset=\"utf-8\" /><title>${title}</title></head>|" \
-                "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+                "$file" >"${file}.tmp" && mv "${file}.tmp" "$file"
         done
     fi
 fi
