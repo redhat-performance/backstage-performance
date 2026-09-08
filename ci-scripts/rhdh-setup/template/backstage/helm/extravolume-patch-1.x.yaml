@@ -61,7 +61,7 @@ initContainers:
       - name: MAX_ENTRY_SIZE
         value: "40000000"
       - name: CATALOG_INDEX_IMAGE
-        value: '{{ .Values.global.catalogIndex.image.registry }}/{{ .Values.global.catalogIndex.image.repository }}:{{ .Values.global.catalogIndex.image.tag }}'
+        value: '{{ with .Values.global }}{{ with .catalogIndex }}{{ with .image }}{{ .registry }}/{{ .repository }}:{{ .tag }}{{ end }}{{ end }}{{ end }}'
       - name: CATALOG_ENTITIES_EXTRACT_DIR
         value: '/extensions'
     imagePullPolicy: Always
