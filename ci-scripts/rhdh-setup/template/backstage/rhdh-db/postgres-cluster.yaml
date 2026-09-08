@@ -39,18 +39,6 @@ spec:
                   matchLabels:
                     postgres-operator.crunchydata.com/cluster: rhdh-postgresql-cluster
                     postgres-operator.crunchydata.com/instance-set: primary
-  backups:
-    pgbackrest:
-      image: registry.connect.redhat.com/crunchydata/crunchy-pgbackrest@sha256:1c7f0a3a31916f8f8658f0d22a019aaf7832a21027e90679fe5ce3c75638f1ea
-      repos:
-        - name: repo1
-          volume:
-            volumeClaimSpec:
-              accessModes:
-                - "ReadWriteOnce"
-              resources:
-                requests:
-                  storage: ${RHDH_DB_STORAGE}
   proxy:
     pgBouncer:
       replicas: ${PGBOUNCER_REPLICAS}
