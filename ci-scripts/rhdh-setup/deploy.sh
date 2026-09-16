@@ -667,7 +667,7 @@ restart_rhdh_deployment() {
     elif [ "$INSTALL_METHOD" == "olm" ]; then
         rhdh_deployment="backstage-developer-hub"
     fi
-    wait_to_exist "${RHDH_NAMESPACE}" "deployment" "${rhdh_deployment}" 300
+    wait_to_exist "${RHDH_NAMESPACE}" "deployment" "${rhdh_deployment}$" 300
     $clin scale deployment "$rhdh_deployment" --replicas=0
     for ((replicas = 1; replicas <= replica_count; replicas++)); do
         log_info "Scaling developer-hub deployment to $replicas/$replica_count replicas"
@@ -828,13 +828,15 @@ install_rhdh_with_helm() {
     #shellcheck disable=SC2086
     helm upgrade "${RHDH_HELM_RELEASE_NAME}" -i "${RHDH_HELM_REPO}" ${version_arg} -n "${RHDH_NAMESPACE}" --values "$TMP_DIR/chart-values.yaml"
 
+    wait_to_start deployment "${RHDH_HELM_RELEASE_NAME}-developer-hub-ia-okp" 300 300
+
     if ${ENABLE_ORCHESTRATOR}; then
         wait_to_start deployment "sonataflow-platform-data-index-service" 300 300
         wait_to_start deployment "sonataflow-platform-jobs-service" 300 300
         install_workflows
     fi
 
-    wait_to_exist "${RHDH_NAMESPACE}" "deployment" "${RHDH_HELM_RELEASE_NAME}-developer-hub" 300
+    wait_to_exist "${RHDH_NAMESPACE}" "deployment" "${RHDH_HELM_RELEASE_NAME}-developer-hub$" 300
 
     # Patch deployment strategy to start replicas one by one
     log_info "Patching RHDH deployment strategy for sequential replica startup"
