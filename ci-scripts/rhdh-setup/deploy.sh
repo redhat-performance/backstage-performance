@@ -382,25 +382,6 @@ keycloak_install() {
     # Wait up to 1 minute for completion realm generation
     $clin wait --for=condition=Done keycloakrealmimport/backstage-realm-import --timeout=60s
     assign_roles_to_client
-
-    # Print Keycloak temp-admin (initial admin) credentials
-    {
-        echo "==============================================="
-        echo " Keycloak Admin Console Credentials"
-        echo "==============================================="
-        echo "Username: $($clin get secret rhdh-keycloak-initial-admin -o json | jq -r '.data.username' | base64 -d)"
-        echo "Password: $($clin get secret rhdh-keycloak-initial-admin -o json | jq -r '.data.password' | base64 -d)"
-        echo "Login at: https://$($clin get route keycloak -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')/admin/"
-        echo
-    } | tee "${TMP_DIR}/keycloak_admin_credentials.log" # Print guru user credentials
-    {
-        echo "==============================================="
-        echo " 'guru' Backstage/Keycloak Test User"
-        echo "Username: guru"
-        echo "Password: ${KEYCLOAK_USER_PASS}"
-        echo "Login via Backstage (Keycloak auth) or Keycloak portal."
-        echo
-    } | tee "${TMP_DIR}/keycloak_guru_credentials.log"
 }
 
 ###############################################################################
