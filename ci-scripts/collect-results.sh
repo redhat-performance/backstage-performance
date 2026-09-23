@@ -392,6 +392,11 @@ fi
 echo "$(date -u -Ins) Generating summary CSV"
 ./ci-scripts/runs-to-csv.sh "$ARTIFACT_DIR" >"$ARTIFACT_DIR/summary.csv"
 
+if [ "${benchmark_scenario:-}" == "ui-browser-metrics" ] && [ -f "$monitoring_collection_data" ]; then
+    echo "$(date -u -Ins) Generating UI browser metrics report"
+    python3 ci-scripts/generate-ui-browser-report.py "$monitoring_collection_data"
+fi
+
 echo "$(date -u -Ins) Generating summary charts"
 ./ci-scripts/generate-charts.sh "$ARTIFACT_DIR"
 
