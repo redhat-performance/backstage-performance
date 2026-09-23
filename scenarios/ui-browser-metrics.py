@@ -159,8 +159,8 @@ class UIBrowserMetricsTest(RHDHBrowserUser):
                     catalog_tab_n.click()
                     self.wait_for_clickable_element(
                         By.XPATH, "//td[normalize-space()='Valgi da Cunha']")
-                    self._collect_network_metrics("catalog_tab")
-                    self._collect_web_vitals("catalog_tab")
+                    self._collect_network_metrics("catalog_tab_n")
+                    self._collect_web_vitals("catalog_tab_n")
 
                 if self.page_n_count > 0:
                     page_1 = self.wait_for_clickable_element(

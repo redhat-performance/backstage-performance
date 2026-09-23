@@ -39,8 +39,8 @@
   monitoring_step: 15
 {%- endmacro %}
 
-{%- set pages_all    = ['home', 'catalog', 'component', 'catalog_tab', 'page_n'] -%}
-{%- set pages_vitals = ['home', 'catalog', 'component', 'catalog_tab', 'page_n'] -%}
+{%- set pages_all    = ['home', 'catalog', 'component', 'catalog_tab_n', 'page_n'] -%}
+{%- set pages_vitals = ['home', 'catalog', 'component', 'catalog_tab_n', 'page_n'] -%}
 {%- set mimes        = ['application/json', 'application/javascript', 'text/css', 'text/html', 'application/octet-stream'] -%}
 
 {% for page in pages_all %}{% for mime in mimes %}
