@@ -9,11 +9,9 @@ openshift:
 
 dynamicPlugins:
   plugins:
-    - package: ./dynamic-plugins/dist/backstage-community-plugin-catalog-backend-module-keycloak-dynamic
+    - package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/backstage-community-plugin-catalog-backend-module-keycloak:bs_1.54.6__3.23.1
       disabled: false
-    - package: ./dynamic-plugins/dist/backstage-community-plugin-analytics-provider-segment
-      disabled: true
-    - package: oci://quay.io/backstage-performance/backstage-plugin-catalog-backend-module-ldap-dynamic:phase1-reviewfix
+    - package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/backstage-plugin-catalog-backend-module-ldap:bs_1.54.6__0.12.8!backstage-plugin-catalog-backend-module-ldap
       disabled: false
 
 orchestrator:
