@@ -309,9 +309,20 @@ endif
 	@echo "Getting locust master log:"
 	kubectl logs --namespace $(LOCUST_NAMESPACE) -f -l performance-test-pod-name=$(SCENARIO)-test-master | tee load-test.log
 	date -u -Ins>$(TMP_DIR)/benchmark-after
-	mkdir -p $(TMP_DIR)/rhdh-db-logs
-	for ss in $$(oc -n $(RHDH_NAMESPACE) get statefulset -o name | grep rhdh-postgresql-cluster-primary | sed 's/statefulset.apps\///'); do oc -n $(RHDH_NAMESPACE) exec $${ss}-0 -- sh -c 'cat /pgdata/pg16/log/postgresql*.log' > $(TMP_DIR)/rhdh-db-logs/postgresql-$${ss}.log; done
 	@echo "All done!!!"
+
+
+## Collect RHDH database logs
+.PHONY: get-rhdh-db-logs
+get-rhdh-db-logs:
+	@echo "Collecting RHDH DB logs:"
+	mkdir -p $(TMP_DIR)/rhdh-db-logs
+	statefulsets=$$(oc -n $(RHDH_NAMESPACE) get statefulset -o name) || exit 1; \
+	statefulsets=$$(echo -e "$${statefulsets}\n" | grep rhdh-postgresql-cluster-primary | sed 's/statefulset.apps\///') || exit 1; \
+	[ -n "$${statefulsets}" ] || { echo "No matching StatefulSet found" >&2; exit 1; }; \
+	for ss in $${statefulsets}; do \
+		oc -n $(RHDH_NAMESPACE) exec $${ss}-0 -- sh -c 'cat /pgdata/pg18/log/postgresql*.log' > $(TMP_DIR)/rhdh-db-logs/postgresql-$${ss}.log || exit 1; \
+	done
 
 ## Run the scalability test
 ## Run `make test-scalability SCENARIO=...` to run a specific scenario

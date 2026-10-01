@@ -30,6 +30,8 @@ ENABLE_ORCHESTRATOR="${ENABLE_ORCHESTRATOR:-false}"
 UPLOAD_TO_OPENSEARCH="${UPLOAD_TO_OPENSEARCH:-false}"
 PERFORM_REGRESSION="${PERFORM_REGRESSION:-false}"
 
+RHDH_BASE_VERSION=${RHDH_BASE_VERSION:-2.1}
+
 cli="oc"
 clin="$cli -n $RHDH_NAMESPACE"
 
@@ -89,7 +91,7 @@ if [ "${ENABLE_PROFILING:-false}" == "true" ]; then
 fi
 echo "$(date -u -Ins) Collecting RHDH must-gather for namespaces ${must_gather_namespaces}"
 $cli adm must-gather \
-    --image=registry.access.redhat.com/rhdh/rhdh-must-gather-rhel9:1.10 \
+    --image="quay.io/rhdh/rhdh-must-gather-rhel10:${RHDH_BASE_VERSION}" \
     --dest-dir="$must_gather_dir" \
     -- /usr/bin/gather "${must_gather_args[@]}" ||
     echo "WARNING: RHDH must-gather failed"
@@ -98,6 +100,8 @@ if [ "$ENABLE_ORCHESTRATOR" == "true" ]; then
     pods=$($clin get pods -l app.kubernetes.io/component=serverless-workflow -o jsonpath='{.items[*].metadata.name}')
     gather_pod_logs "${ARTIFACT_DIR}/workflow-logs" "$pods" "$RHDH_NAMESPACE"
 fi
+
+make get-rhdh-db-logs
 
 monitoring_collection_data=$ARTIFACT_DIR/benchmark.json
 monitoring_collection_log=$ARTIFACT_DIR/monitoring-collection.log
