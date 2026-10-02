@@ -301,8 +301,12 @@ endif
 		fi; \
 	  BASE_HOST="https://$$(oc get routes "$$rhdh_route" -n "$$RHDH_NAMESPACE" -o jsonpath='{.spec.host}')"; \
 	fi; \
-	envsubst < locust-test-template.yaml | tee $(TMP_DIR)/locust-test.yaml | kubectl apply --namespace $(LOCUST_NAMESPACE) -f -
-	kubectl create --namespace $(LOCUST_NAMESPACE) configmap locust.$(SCENARIO) --from-file scenarios/$(SCENARIO).py --dry-run=client -o yaml | kubectl apply --namespace $(LOCUST_NAMESPACE) -f -
+	envsubst < locust-test-template.yaml | tee $(TMP_DIR)/locust-test.yaml | kubectl apply --namespace $(LOCUST_NAMESPACE) -f - ; \
+	if [[ "$(SCENARIO)" == *"ui"* ]]; then \
+		kubectl create --namespace $(LOCUST_NAMESPACE) configmap locust.$(SCENARIO) --from-file scenarios/$(SCENARIO).py $(addprefix --from-file ,$(wildcard scenarios/ui_shared.py)) --dry-run=client -o yaml | kubectl apply --namespace $(LOCUST_NAMESPACE) -f - ; \
+	else \
+		kubectl create --namespace $(LOCUST_NAMESPACE) configmap locust.$(SCENARIO) --from-file scenarios/$(SCENARIO).py --dry-run=client -o yaml | kubectl apply --namespace $(LOCUST_NAMESPACE) -f - ; \
+	fi
 	date -u -Ins>$(TMP_DIR)/benchmark-before
 	timeout=$$(python3 -c "from datetime import datetime, timedelta;t_add=int('680'); print(int((datetime.now() + timedelta(seconds=t_add)).timestamp()))"); while [ -z "$$(kubectl get --namespace $(LOCUST_NAMESPACE) pod -l performance-test-pod-name=$(SCENARIO)-test-master -o name)" ]; do if [ "$$(date "+%s")" -gt "$$timeout" ]; then echo "ERROR: Timeout waiting for locust master pod to start"; exit 1; else echo "Waiting for locust master pod to start..."; sleep 5s; fi; done
 	kubectl wait --namespace $(LOCUST_NAMESPACE) --for=condition=Ready=true $$(kubectl get --namespace $(LOCUST_NAMESPACE) pod -l performance-test-pod-name=$(SCENARIO)-test-master -o name) --timeout=60s

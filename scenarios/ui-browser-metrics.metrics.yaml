@@ -1,0 +1,53 @@
+# Metrics for the ui-browser-metrics scenario.
+# net:    call count and avg latency per MIME type per page
+# size:   total bytes transferred per MIME type per page (stored as avg_response_time)
+# vitals: LCP (home page only — initial full load), long tasks, and JS heap per page
+
+{%macro net_scenario(page, mime) -%}
+{%- set label = mime | replace('/', '_') | replace('+', '_') -%}
+- name: results.net_{{page}}_{{label}}.call_count
+  monitoring_query: sum(locust_requests_num_requests{method="net:{{page}}", name="{{mime}}", namespace="${LOCUST_NAMESPACE}", job="${SCENARIO}-test-master"})
+  monitoring_step: 15
+- name: results.net_{{page}}_{{label}}.avg_latency_ms
+  monitoring_query: max(locust_requests_avg_response_time{method="net:{{page}}", name="{{mime}}", namespace="${LOCUST_NAMESPACE}", job="${SCENARIO}-test-master"})
+  monitoring_step: 15
+{%- endmacro %}
+
+{%macro size_scenario(page, mime) -%}
+{%- set label = mime | replace('/', '_') | replace('+', '_') -%}
+- name: results.size_{{page}}_{{label}}.bytes_transferred
+  monitoring_query: max(locust_requests_avg_response_time{method="size:{{page}}", name="{{mime}}", namespace="${LOCUST_NAMESPACE}", job="${SCENARIO}-test-master"})
+  monitoring_step: 15
+- name: results.size_{{page}}_{{label}}.request_count
+  monitoring_query: sum(locust_requests_num_requests{method="size:{{page}}", name="{{mime}}", namespace="${LOCUST_NAMESPACE}", job="${SCENARIO}-test-master"})
+  monitoring_step: 15
+{%- endmacro %}
+
+{%macro vitals_scenario(page) -%}
+{% if page == 'home' %}
+- name: results.vitals_{{page}}_lcp_ms.locust_requests_avg_response_time
+  monitoring_query: max(locust_requests_avg_response_time{method="vitals:{{page}}", name="lcp_ms", namespace="${LOCUST_NAMESPACE}", job="${SCENARIO}-test-master"})
+  monitoring_step: 15
+{% endif %}
+{% for metric in ['long_task_count', 'long_task_ms', 'heap_used_mb'] %}
+- name: results.vitals_{{page}}_{{metric}}.locust_requests_avg_response_time
+  monitoring_query: max(locust_requests_avg_response_time{method="vitals:{{page}}", name="{{metric}}", namespace="${LOCUST_NAMESPACE}", job="${SCENARIO}-test-master"})
+  monitoring_step: 15
+{% endfor %}
+- name: results.vitals_{{page}}_heap_used_mb.call_count
+  monitoring_query: sum(locust_requests_num_requests{method="vitals:{{page}}", name="heap_used_mb", namespace="${LOCUST_NAMESPACE}", job="${SCENARIO}-test-master"})
+  monitoring_step: 15
+{%- endmacro %}
+
+{%- set pages_all    = ['home', 'catalog', 'component', 'catalog_tab', 'page_n'] -%}
+{%- set pages_vitals = ['home', 'catalog', 'component', 'catalog_tab', 'page_n'] -%}
+{%- set mimes        = ['application/json', 'application/javascript', 'text/css', 'text/html', 'application/octet-stream'] -%}
+
+{% for page in pages_all %}{% for mime in mimes %}
+{{ net_scenario(page, mime) }}
+{{ size_scenario(page, mime) }}
+{% endfor %}{% endfor %}
+
+{% for page in pages_vitals %}
+{{ vitals_scenario(page) }}
+{% endfor %}
