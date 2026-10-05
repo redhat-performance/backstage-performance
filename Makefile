@@ -354,6 +354,11 @@ pre-commit:
 lint: shellcheck
 	find . -name '*.sh' -exec shellcheck {} +
 
+## Compare local overlay plugin OCI tags with rhdh-plugin-export-overlays
+.PHONY: check-plugins
+check-plugins:
+	./ci-scripts/check-plugins.sh
+
 ##	=== CI ===
 
 ## Run the load test in CI end to end
