@@ -1,0 +1,250 @@
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import (
+    InvalidSessionIdException,
+    NoSuchWindowException,
+)
+from selenium.webdriver.chrome.service import Service
+from selenium import webdriver
+from locust.exception import LocustError
+from locust.runners import MasterRunner, WorkerRunner
+from locust import User, events
+import concurrent.futures
+import os
+import uuid
+
+
+os.environ.setdefault(
+    "SE_CACHE_PATH",
+    os.path.join(os.environ.get("TMPDIR", "/tmp"), "selenium-cache"),
+)
+
+_CHROME_BIN_CANDIDATES = (
+    "/usr/local/bin/chromium",
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+)
+_CHROMEDRIVER_CANDIDATES = (
+    "/usr/local/bin/chromedriver",
+    "/usr/bin/chromedriver",
+)
+
+
+def _is_executable(path: str) -> bool:
+    return bool(path and os.path.isfile(path) and os.access(path, os.X_OK))
+
+
+def _first_executable(candidates: tuple) -> str | None:
+    for p in candidates:
+        if _is_executable(p):
+            return p
+    return None
+
+
+def _resolved_chrome_bin() -> str | None:
+    env = os.environ.get("CHROME_BIN", "").strip()
+    if env:
+        return env
+    return _first_executable(_CHROME_BIN_CANDIDATES)
+
+
+def _resolved_chromedriver_path() -> str | None:
+    env = os.environ.get("CHROMEDRIVER_PATH", "").strip()
+    if env:
+        return env
+    return _first_executable(_CHROMEDRIVER_CANDIDATES)
+
+
+def _env_truthy(name: str) -> bool:
+    return str(os.environ.get(name, "")).lower() in ("1", "true", "yes", "on")
+
+usernames = []
+
+
+@events.init_command_line_parser.add_listener
+def _(parser):
+    parser.add_argument("--page-n-count", type=int, default=0)
+    parser.add_argument("--catalog-tab-n-count", type=int, default=0)
+    parser.add_argument("--keycloak-host", type=str, default="")
+    parser.add_argument("--keycloak-password", is_secret=True, default="")
+    parser.add_argument("--debug", type=bool, default=False)
+
+
+def setup_test_users(environment, msg, **kwargs):
+    usernames.extend(map(lambda u: u, msg.data))
+    print(f"Usernames: {usernames}")
+
+
+@events.init.add_listener
+def on_locust_init(environment, **_kwargs):
+    if isinstance(environment.runner, WorkerRunner):
+        environment.runner.register_message("test_users", setup_test_users)
+
+
+@events.test_start.add_listener
+def on_test_start(environment, **_kwargs):
+    if isinstance(environment.runner, MasterRunner):
+        users = []
+        for i in range(1, int(environment.runner.target_user_count) + 1):
+            users.append(f"t_{i}")
+
+        worker_count = environment.runner.worker_count
+        chunk_size = int(len(users) / worker_count)
+        chunk_leftover = int(len(users) % worker_count)
+
+        for i, worker in enumerate(environment.runner.clients):
+            start_index = i * chunk_size
+            end_index = start_index + chunk_size
+            data = users[start_index:end_index]
+            if chunk_leftover > 0 and chunk_leftover > i:
+                data.append(users[worker_count * chunk_size + i])
+            print(f"Setting up test users {data}...")
+            environment.runner.send_message("test_users", data, worker)
+
+class RHDHBrowserUser(User):
+    abstract = True
+    timeout = 60
+
+    baseUrl = ""
+    driver = None
+
+    page_n_count = 0
+    catalog_tab_n_count = 0
+    user_password = ""
+    user_name = ""
+
+    _dead_session_errors = (NoSuchWindowException, InvalidSessionIdException)
+
+    def __init__(self, environment):
+        super().__init__(environment)
+        self.baseUrl = environment.host
+        opts = environment.parsed_options
+        self.page_n_count = opts.page_n_count
+        self.catalog_tab_n_count = opts.catalog_tab_n_count
+        self.user_password = opts.keycloak_password
+        if len(usernames) > 0:
+            self.user_name = usernames.pop()
+        else:
+            self.user_name = "t_1"
+
+    def _chrome_options(self):
+        opts = webdriver.ChromeOptions()
+        opts.add_argument("--headless=new")
+        opts.add_argument("--window-size=1920,1080")
+        opts.add_argument("--window-position=0,0")
+        opts.add_argument("--ignore-ssl-errors=yes")
+        opts.add_argument("--ignore-certificate-errors")
+        opts.set_capability("acceptInsecureCerts", True)
+        profile_id = uuid.uuid4().hex[:16]
+        opts.add_argument(f"--user-data-dir=/tmp/chrome-user-data-{profile_id}")
+        opts.add_argument(f"--disk-cache-dir=/tmp/chrome-cache-{profile_id}")
+        crash_dir = f"/tmp/chrome-crash-{profile_id}"
+        try:
+            os.makedirs(crash_dir, mode=0o755, exist_ok=True)
+        except OSError:
+            pass
+        opts.add_argument(f"--crash-dumps-dir={crash_dir}")
+        opts.add_argument("--no-sandbox")
+        opts.add_argument("--disable-dev-shm-usage")
+        opts.add_argument("--disable-gpu")
+        opts.add_argument("--remote-allow-origins=*")
+        opts.add_argument("--ozone-platform=headless")
+        opts.add_argument("--disable-breakpad")
+        opts.add_argument("--disable-crash-reporter")
+        opts.add_argument("--disable-features=CrashReporting,OptimizationHints")
+        opts.add_argument("--disable-setuid-sandbox")
+        opts.add_argument("--disable-hang-monitor")
+        opts.add_argument("--disable-background-networking")
+        opts.add_argument("--disable-sync")
+        opts.add_argument("--password-store=basic")
+        opts.add_argument("--use-mock-keychain")
+        opts.set_capability("goog:loggingPrefs", {"performance": "ALL"})
+        if _env_truthy("CHROME_SINGLE_PROCESS"):
+            opts.add_argument("--single-process")
+        chrome_bin = _resolved_chrome_bin()
+        if chrome_bin:
+            opts.binary_location = chrome_bin
+        return opts
+
+    def _dispose_driver(self):
+        if self.driver is not None:
+            try:
+                self.driver.quit()
+            except Exception:
+                pass
+            self.driver = None
+
+    def _new_chrome_webdriver(self):
+        opts = self._chrome_options()
+        driver_path = _resolved_chromedriver_path()
+        service_kwargs = {}
+        if driver_path:
+            service_kwargs["executable_path"] = driver_path
+        service = Service(**service_kwargs)
+        return webdriver.Chrome(service=service, options=opts)
+
+    def _ensure_driver(self):
+        if self.driver is not None:
+            return
+        timeout_s = int(os.environ.get("CHROME_STARTUP_TIMEOUT", "120"))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(self._new_chrome_webdriver)
+            try:
+                self.driver = future.result(timeout=timeout_s)
+            except concurrent.futures.TimeoutError:
+                raise LocustError(
+                    f"Chrome/WebDriver did not start within {timeout_s}s "
+                    "(check CHROME_BIN + CHROMEDRIVER_PATH or "
+                    "/usr/local/bin vs /usr/bin paths for your image; "
+                    "CHROME_STARTUP_TIMEOUT; worker logs)"
+                ) from None
+
+    def on_stop(self):
+        self._dispose_driver()
+
+    def wait_for_clickable_element(self, by, value, timeout=-1):
+        if timeout < 0:
+            timeout = self.timeout
+        return WebDriverWait(self.driver, timeout).until(
+            EC.element_to_be_clickable((by, value))
+        )
+
+    def wait_for_url(self, url_contains):
+        return WebDriverWait(self.driver, self.timeout).until(
+            EC.url_contains(url_contains)
+        )
+
+    def _page_debug(self, snippet_len=2000):
+        url = title = snippet = ""
+        try:
+            url = self.driver.current_url
+        except Exception:
+            pass
+        try:
+            title = self.driver.title
+        except Exception:
+            pass
+        try:
+            src = self.driver.page_source or ""
+            snippet = src[:snippet_len].replace("\n", " ")
+        except Exception:
+            pass
+        return f"url={url!r} title={title!r} page_source={snippet!r}"
+
+    def _report_success(self, category, name, response_time):
+        events.request.fire(
+            request_type=category,
+            name=name,
+            response_time=response_time,
+            response_length=0,
+            exception=None,
+        )
+
+    def _report_failure(self, category, name, response_time, msg):
+        events.request.fire(
+            request_type=category,
+            name=name,
+            response_time=response_time,
+            response_length=0,
+            exception=LocustError(msg),
+        )
