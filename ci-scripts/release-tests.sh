@@ -64,10 +64,14 @@ export SCALE_COMBINED='${SCALE_COMBINED:-}'
 export LOCUST_EXTRA_CMD=${LOCUST_EXTRA_CMD:---reset-stats}
 export PAGE_N_COUNT=${PAGE_N_COUNT:-0}
 export CATALOG_TAB_N_COUNT=${CATALOG_TAB_N_COUNT:-0}
-export ENSURE_CATALOG_POPULATION_TIMEOUT=${ENSURE_CATALOG_POPULATION_TIMEOUT:-7200}
-export CATALOG_REFRESH_INTERVAL_MINUTES=${CATALOG_REFRESH_INTERVAL_MINUTES:-10080}
-export RHDH_STARTUP_TIMEOUT_SECONDS=${RHDH_STARTUP_TIMEOUT_SECONDS:-7200}
+export ENSURE_CATALOG_POPULATION_TIMEOUT=${ENSURE_CATALOG_POPULATION_TIMEOUT:-3600}
+export CATALOG_REFRESH_INTERVAL_MINUTES=${CATALOG_REFRESH_INTERVAL_MINUTES:-50}
+export LDAP_SCHEDULE_TIMEOUT_MINUTES=${LDAP_SCHEDULE_TIMEOUT_MINUTES:-50}
+export RHDH_STARTUP_TIMEOUT_SECONDS=${RHDH_STARTUP_TIMEOUT_SECONDS:-3600}
 export RHDH_NODEJS_MAX_HEAP_SIZE=${RHDH_NODEJS_MAX_HEAP_SIZE:-2048}
+export RHDH_IMAGE_REGISTRY=${RHDH_IMAGE_REGISTRY:-}
+export RHDH_IMAGE_REPO=${RHDH_IMAGE_REPO:-}
+export RHDH_IMAGE_TAG=${RHDH_IMAGE_TAG:-}
 " >test.env
     git commit -am "chore($ticket): $testname on $branch"
     git push -fu origin "$branch"
@@ -154,11 +158,17 @@ function _test() {
     branch_old="test-$VERSION_NEW-$nick-$VERSION_OLD"
     export RHDH_HELM_CHART_VERSION="$RHDH_HELM_CHART_VERSION_OLD"
     export SOURCE_BRANCH="$SOURCE_BRANCH_OLD"
+    export RHDH_IMAGE_REGISTRY="$RHDH_IMAGE_REGISTRY_OLD"
+    export RHDH_IMAGE_REPO="$RHDH_IMAGE_REPO_OLD"
+    export RHDH_IMAGE_TAG="$RHDH_IMAGE_TAG_OLD"
     configure_run "$ticket" "$branch_old" "$name"
 
     branch_new="test-$VERSION_NEW-$nick-$VERSION_NEW"
     export RHDH_HELM_CHART_VERSION="$RHDH_HELM_CHART_VERSION_NEW"
     export SOURCE_BRANCH="$SOURCE_BRANCH_NEW"
+    export RHDH_IMAGE_REGISTRY="$RHDH_IMAGE_REGISTRY_NEW"
+    export RHDH_IMAGE_REPO="$RHDH_IMAGE_REPO_NEW"
+    export RHDH_IMAGE_TAG="$RHDH_IMAGE_TAG_NEW"
     configure_run "$ticket" "$branch_new" "$name"
 }
 
@@ -181,7 +191,7 @@ function mvp_compare_test() {
     export SCALE_DB_STORAGES="20Gi"
     export SCALE_CPU_REQUESTS_LIMITS=":"
     export SCALE_MEMORY_REQUESTS_LIMITS="${memory_limits:-:}"
-    export SCALE_COMBINED="10:2:1000:10000:2500:2500 10:2:1000:10000:2500:2500 10:2:1000:10000:2500:2500 10:2:1000:10000:2500:2500 10:2:1000:10000:2500:2500"
+    export SCALE_COMBINED="10:1:1000:10000:1250:1250 10:1:1000:10000:1250:1250 10:1:1000:10000:1250:1250 10:1:1000:10000:1250:1250 10:1:1000:10000:1250:1250"
 
     _test "$name" "$nick" "$ticket"
 }
@@ -205,7 +215,7 @@ function mvp_memory_scale_test() {
     export SCALE_DB_STORAGES="20Gi"
     export SCALE_CPU_REQUESTS_LIMITS=":"
     export SCALE_MEMORY_REQUESTS_LIMITS="${memory_limits:-:}"
-    export SCALE_COMBINED="10:2:1000:10000:2500:2500 50:5:5000:50000:12500:12500 100:10:10000:150000:25000:25000"
+    export SCALE_COMBINED="10:1:1000:10000:1250:1250 50:5:5000:50000:12500:12500 100:10:10000:150000:25000:25000"
 
     _test "$name" "$nick" "$ticket"
 }
@@ -223,7 +233,6 @@ function mvp_replicas_scale_test() {
     export ENABLE_ORCHESTRATOR=false
     export SCENARIO=mvp
     export ALWAYS_CLEANUP=true
-
     export SCALE_RBAC_POLICY_SIZE="1000"
     export SCALE_REPLICAS="1:1 3:3 5:5"
     export SCALE_DB_STORAGES="20Gi"
@@ -261,9 +270,9 @@ function storage_limit_compare_test() {
     export SCALE_DB_STORAGES="1Gi"
     export SCALE_MEMORY_REQUESTS_LIMITS="${memory_limits:-:}"
 
-    export ENSURE_CATALOG_POPULATION_TIMEOUT=14400
-    export CATALOG_REFRESH_INTERVAL_MINUTES=10080
-    export RHDH_STARTUP_TIMEOUT_SECONDS=14400
+    export ENSURE_CATALOG_POPULATION_TIMEOUT=3600
+    export CATALOG_REFRESH_INTERVAL_MINUTES=50
+    export RHDH_STARTUP_TIMEOUT_SECONDS=7200
 
     _test "$name" "$nick" "$ticket"
 }
@@ -408,10 +417,13 @@ function ui_baseline_compare_test() {
     export SCALE_DB_STORAGES="20Gi"
     export SCALE_CPU_REQUESTS_LIMITS=":"
     export SCALE_MEMORY_REQUESTS_LIMITS="${memory_limits:-:}"
-    export SCALE_COMBINED="1:1:1000:10000:2500:2500 1:1:1000:10000:2500:2500 1:1:1000:10000:2500:2500 1:1:1000:10000:2500:2500 1:1:1000:10000:2500:2500"
+    export SCALE_COMBINED="1:1:1000:10000:1250:1250 1:1:1000:10000:1250:1250 1:1:1000:10000:1250:1250 1:1:1000:10000:1250:1250 1:1:1000:10000:1250:1250"
 
     export PAGE_N_COUNT=0
     export CATALOG_TAB_N_COUNT=0
+    export ENSURE_CATALOG_POPULATION_TIMEOUT=3600
+    export CATALOG_REFRESH_INTERVAL_MINUTES=120
+    export RHDH_STARTUP_TIMEOUT_SECONDS=3600
 
     _test "$name" "$nick" "$ticket"
 }
@@ -435,10 +447,13 @@ function ui_dynamic_plugins_compare_test() {
     export SCALE_DB_STORAGES="20Gi"
     export SCALE_CPU_REQUESTS_LIMITS=":"
     export SCALE_MEMORY_REQUESTS_LIMITS="${memory_limits:-:}"
-    export SCALE_COMBINED="1:1:1000:10000:2500:2500 1:1:1000:10000:2500:2500 1:1:1000:10000:2500:2500 1:1:1000:10000:2500:2500 1:1:1000:10000:2500:2500"
+    export SCALE_COMBINED="1:1:1000:10000:1250:1250 1:1:1000:10000:1250:1250 1:1:1000:10000:1250:1250 1:1:1000:10000:1250:1250 1:1:1000:10000:1250:1250"
 
     export PAGE_N_COUNT=100
     export CATALOG_TAB_N_COUNT=100
+    export ENSURE_CATALOG_POPULATION_TIMEOUT=3600
+    export CATALOG_REFRESH_INTERVAL_MINUTES=120
+    export RHDH_STARTUP_TIMEOUT_SECONDS=3600
 
     _test "$name" "$nick" "$ticket"
 }
@@ -467,9 +482,9 @@ function large_scale_xs_compare_test() {
     export PAGE_N_COUNT=0
     export CATALOG_TAB_N_COUNT=0
 
-    export ENSURE_CATALOG_POPULATION_TIMEOUT=18000
-    export CATALOG_REFRESH_INTERVAL_MINUTES=10080
-    export RHDH_STARTUP_TIMEOUT_SECONDS=18000
+    export ENSURE_CATALOG_POPULATION_TIMEOUT=7200
+    export CATALOG_REFRESH_INTERVAL_MINUTES=120
+    export RHDH_STARTUP_TIMEOUT_SECONDS=3600
 
     _test "$name" "$nick" "$ticket"
 }
@@ -498,9 +513,9 @@ function large_scale_s_compare_test() {
     export PAGE_N_COUNT=0
     export CATALOG_TAB_N_COUNT=0
 
-    export ENSURE_CATALOG_POPULATION_TIMEOUT=18000
-    export CATALOG_REFRESH_INTERVAL_MINUTES=10080
-    export RHDH_STARTUP_TIMEOUT_SECONDS=18000
+    export ENSURE_CATALOG_POPULATION_TIMEOUT=7200
+    export CATALOG_REFRESH_INTERVAL_MINUTES=120
+    export RHDH_STARTUP_TIMEOUT_SECONDS=3600
 
     _test "$name" "$nick" "$ticket"
 }
@@ -529,9 +544,9 @@ function large_scale_m_compare_test() {
     export PAGE_N_COUNT=0
     export CATALOG_TAB_N_COUNT=0
 
-    export ENSURE_CATALOG_POPULATION_TIMEOUT=18000
-    export CATALOG_REFRESH_INTERVAL_MINUTES=10080
-    export RHDH_STARTUP_TIMEOUT_SECONDS=18000
+    export ENSURE_CATALOG_POPULATION_TIMEOUT=7200
+    export CATALOG_REFRESH_INTERVAL_MINUTES=120
+    export RHDH_STARTUP_TIMEOUT_SECONDS=7200
 
     _test "$name" "$nick" "$ticket"
 }
@@ -671,33 +686,39 @@ function complex_rbac_replicas_scale_test() {
 }
 
 # !!! Configure here !!!
-VERSION_OLD="1.9"
-VERSION_NEW="1.10"
-RHDH_HELM_CHART_VERSION_OLD=1.9.4
-RHDH_HELM_CHART_VERSION_NEW=1.10-128-CI
-SOURCE_BRANCH_OLD=rhdh-v1.9.x
-SOURCE_BRANCH_NEW=main
+VERSION_OLD="${VERSION_OLD:-1.10}"
+VERSION_NEW="${VERSION_NEW:-2.1}"
+RHDH_HELM_CHART_VERSION_OLD="${RHDH_HELM_CHART_VERSION_OLD:-1.10.5}"
+RHDH_HELM_CHART_VERSION_NEW="${RHDH_HELM_CHART_VERSION_NEW:-2.1-130-CI}"
+SOURCE_BRANCH_OLD="${SOURCE_BRANCH_OLD:-rhdh-v1.10.x}"
+SOURCE_BRANCH_NEW="${SOURCE_BRANCH_NEW:-main}"
+RHDH_IMAGE_REGISTRY_OLD="${RHDH_IMAGE_REGISTRY_OLD:-quay.io}"
+RHDH_IMAGE_REPO_OLD="${RHDH_IMAGE_REPO_OLD:-rhdh/rhdh-hub-rhel9}"
+RHDH_IMAGE_TAG_OLD="${RHDH_IMAGE_TAG_OLD:-1.10-206}"
+RHDH_IMAGE_REGISTRY_NEW="${RHDH_IMAGE_REGISTRY_NEW:-quay.io}"
+RHDH_IMAGE_REPO_NEW="${RHDH_IMAGE_REPO_NEW:-rhdh/rhdh-hub-rhel10}"
+RHDH_IMAGE_TAG_NEW="${RHDH_IMAGE_NEW:-2.1-114}"
 
 run_mvp_compare() {
-    mvp_compare_test "RHIDP-13652" "$@"
+    mvp_compare_test "RHIDP-15715" "$@"
 }
 run_mvp_memory_scale() {
-    mvp_memory_scale_test "RHIDP-XXXX" "$@"
+    mvp_memory_scale_test "RHIDP-15715" "$@"
 }
 run_mvp_replicas_scale() {
-    mvp_replicas_scale_test "RHIDP-XXXX" "$@"
+    mvp_replicas_scale_test "RHIDP-15715" "$@"
 }
 
 run_entity_burden_compare() {
-    entity_burden_compare_test "RHIDP-13652" "$@"
+    entity_burden_compare_test "RHIDP-15715" "$@"
 }
 
 run_storage_limit_compare() {
-    storage_limit_compare_test "RHIDP-13652" "$@"
+    storage_limit_compare_test "RHIDP-15715" "$@"
 }
 
 run_orchestrator_compare() {
-    orchestrator_compare_test "RHIDP-13652" "$@"
+    orchestrator_compare_test "RHIDP-15715" "$@"
 }
 run_orchestrator_memory_scale() {
     orchestrator_memory_scale_test "RHIDP-XXXX" "$@"
