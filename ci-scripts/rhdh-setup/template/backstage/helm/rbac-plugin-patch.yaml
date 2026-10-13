@@ -1,3 +1,3 @@
 ---
 - package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/backstage-community-plugin-rbac:bs_1.54.6__2.3.1
-  disabled: false
+  enabled: true

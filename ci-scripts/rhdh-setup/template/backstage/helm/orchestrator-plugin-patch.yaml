@@ -1,6 +1,6 @@
 ---
 - package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/red-hat-developer-hub-backstage-plugin-orchestrator:bs_1.54.6__6.2.1
-  disabled: false
+  enabled: true
   pluginConfig:
     dynamicPlugins:
       frontend:
@@ -38,20 +38,20 @@
                   anyOf:
                     - hasAnnotation: orchestrator.io/workflows
 - package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/red-hat-developer-hub-backstage-plugin-orchestrator-backend:bs_1.54.6__8.13.1
-  disabled: false
+  enabled: true
   pluginConfig:
     orchestrator:
       dataIndexService:
         url: http://sonataflow-platform-data-index-service.${RHDH_NAMESPACE}
 - package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/red-hat-developer-hub-backstage-plugin-orchestrator-form-widgets:bs_1.54.6__2.2.0
-  disabled: false
+  enabled: true
   pluginConfig:
     dynamicPlugins:
       frontend:
         red-hat-developer-hub.backstage-plugin-orchestrator-form-widgets:
           pluginModule: Legacy
 - package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/red-hat-developer-hub-backstage-plugin-scaffolder-backend-module-orchestrator:bs_1.54.6__1.8.1
-  disabled: false
+  enabled: true
   pluginConfig:
     orchestrator:
       dataIndexService:
