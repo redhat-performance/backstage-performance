@@ -484,6 +484,7 @@ function large_scale_xs_compare_test() {
 
     export ENSURE_CATALOG_POPULATION_TIMEOUT=7200
     export CATALOG_REFRESH_INTERVAL_MINUTES=120
+    export LDAP_SCHEDULE_TIMEOUT_MINUTES=120
     export RHDH_STARTUP_TIMEOUT_SECONDS=3600
 
     _test "$name" "$nick" "$ticket"
@@ -515,6 +516,7 @@ function large_scale_s_compare_test() {
 
     export ENSURE_CATALOG_POPULATION_TIMEOUT=7200
     export CATALOG_REFRESH_INTERVAL_MINUTES=120
+    export LDAP_SCHEDULE_TIMEOUT_MINUTES=120
     export RHDH_STARTUP_TIMEOUT_SECONDS=3600
 
     _test "$name" "$nick" "$ticket"
@@ -546,6 +548,7 @@ function large_scale_m_compare_test() {
 
     export ENSURE_CATALOG_POPULATION_TIMEOUT=7200
     export CATALOG_REFRESH_INTERVAL_MINUTES=120
+    export LDAP_SCHEDULE_TIMEOUT_MINUTES=120
     export RHDH_STARTUP_TIMEOUT_SECONDS=7200
 
     _test "$name" "$nick" "$ticket"
@@ -576,7 +579,8 @@ function large_scale_l_compare_test() {
     export CATALOG_TAB_N_COUNT=0
 
     export ENSURE_CATALOG_POPULATION_TIMEOUT=18000
-    export CATALOG_REFRESH_INTERVAL_MINUTES=10080
+    export CATALOG_REFRESH_INTERVAL_MINUTES=120
+    export LDAP_SCHEDULE_TIMEOUT_MINUTES=120
     export RHDH_STARTUP_TIMEOUT_SECONDS=18000
 
     _test "$name" "$nick" "$ticket"
@@ -599,15 +603,16 @@ function large_scale_xl_compare_test() {
     export SCALE_REPLICAS="3:1"
     export SCALE_DB_STORAGES="100Gi"
     export SCALE_CPU_REQUESTS_LIMITS="3:3"
-    export SCALE_MEMORY_REQUESTS_LIMITS="32Gi:31Gi"
-    export RHDH_NODEJS_MAX_HEAP_SIZE=30720
+    export SCALE_MEMORY_REQUESTS_LIMITS="8Gi:8Gi"
+    export RHDH_NODEJS_MAX_HEAP_SIZE=6144
     export SCALE_COMBINED="300:30:30000:500000:35000:35000" # Format "activeusers:spawnrate:users:groups:apis:components"
 
     export PAGE_N_COUNT=0
     export CATALOG_TAB_N_COUNT=0
 
     export ENSURE_CATALOG_POPULATION_TIMEOUT=18000
-    export CATALOG_REFRESH_INTERVAL_MINUTES=10080
+    export CATALOG_REFRESH_INTERVAL_MINUTES=120
+    export LDAP_SCHEDULE_TIMEOUT_MINUTES=120
     export RHDH_STARTUP_TIMEOUT_SECONDS=18000
 
     _test "$name" "$nick" "$ticket"
@@ -697,7 +702,7 @@ RHDH_IMAGE_REPO_OLD="${RHDH_IMAGE_REPO_OLD:-rhdh/rhdh-hub-rhel9}"
 RHDH_IMAGE_TAG_OLD="${RHDH_IMAGE_TAG_OLD:-1.10-206}"
 RHDH_IMAGE_REGISTRY_NEW="${RHDH_IMAGE_REGISTRY_NEW:-quay.io}"
 RHDH_IMAGE_REPO_NEW="${RHDH_IMAGE_REPO_NEW:-rhdh/rhdh-hub-rhel10}"
-RHDH_IMAGE_TAG_NEW="${RHDH_IMAGE_NEW:-2.1-114}"
+RHDH_IMAGE_TAG_NEW="${RHDH_IMAGE_NEW:-2.1-117}"
 
 run_mvp_compare() {
     mvp_compare_test "RHIDP-15715" "$@"
