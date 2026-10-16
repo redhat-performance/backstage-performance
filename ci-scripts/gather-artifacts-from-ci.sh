@@ -10,12 +10,12 @@ ARTIFACT_DIR=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))'
 mkdir -p "${ARTIFACT_DIR}"
 
 PRS="${PRS:-}"
-BRANCHES="${BRANCHES:-rhdh-v1.9.x main}"
+BRANCHES="${BRANCHES:-rhdh-v1.10.x main}"
 
-CURRENT_VERSION=${CURRENT_VERSION:-1.10-124-CI}
-PREVIOUS_VERSION=${PREVIOUS_VERSION:-1.9.4}
-CURRENT_BASE_VERSION=1.10
-PREVIOUS_BASE_VERSION=1.9
+CURRENT_VERSION=${CURRENT_VERSION:-2.1-130-CI}
+PREVIOUS_VERSION=${PREVIOUS_VERSION:-1.10.5}
+CURRENT_BASE_VERSION=2.1
+PREVIOUS_BASE_VERSION=1.10
 
 gather_artifacts_from_ci() {
     for PR_NUMBER in ${PRS}; do
@@ -30,7 +30,7 @@ gather_artifacts_from_ci() {
 
             JOB_NAME="pull-ci-${ORG}-${REPO}-${BRANCH}-${TEST_NAME}"
 
-            BASE_URL="https://gcsweb-ci.apps.ci.l2s4.p1.openshiftapps.com/gcs/test-platform-results/pr-logs/pull/${ORG}_${REPO}/${PR_NUMBER}/${JOB_NAME}"
+            BASE_URL="https://gcsweb-ci.apps.ci.l2s4.p1.openshiftapps.com/gcs/test-platform-results-public/pr-logs/pull/${ORG}_${REPO}/${PR_NUMBER}/${JOB_NAME}"
             LATEST_BUILD=$(curl -sSL "${BASE_URL}/latest-build.txt" |
                 grep -oE '[0-9]{19}' |
                 sort -un |
@@ -38,8 +38,8 @@ gather_artifacts_from_ci() {
 
             echo "Latest build ID: $LATEST_BUILD"
 
-            BASE_GS_ARTIFACTS="test-platform-results/pr-logs/pull/${ORG}_${REPO}/${PR_NUMBER}/${JOB_NAME}/${LATEST_BUILD}/artifacts/${TEST_NAME}/${ORG}-${REPO}-scalability/artifacts"
-            RHDH_VERSION=$(gcloud storage cat "gs://${BASE_GS_ARTIFACTS}/scalability/*/test/1/*/benchmark.json" | gunzip | jq -rc '.metadata.env.RHDH_HELM_CHART_VERSION') || continue
+            BASE_GS_ARTIFACTS="test-platform-results-public/pr-logs/pull/${ORG}_${REPO}/${PR_NUMBER}/${JOB_NAME}/${LATEST_BUILD}/artifacts/${TEST_NAME}/${ORG}-${REPO}-scalability/artifacts"
+            RHDH_VERSION=$(gcloud storage cat "gs://${BASE_GS_ARTIFACTS}/scalability/*/test/1/*/benchmark.json" | gunzip | tee "${ARTIFACT_DIR}/benchmark.json" | jq -rc '.metadata.image."konflux.additional-tags" | split(" ";"")[2]') || continue
             echo "RHDH version: $RHDH_VERSION"
 
             SCALABILITY_SCENARIO=$(curl -sSL "https://api.github.com/repos/${ORG}/${REPO}/pulls/${PR_NUMBER}" | jq -rc '.head.ref')
@@ -53,7 +53,7 @@ gather_artifacts_from_ci() {
             echo "$PR_NUMBER" >"$output/pr-number.txt"
             echo "$LATEST_BUILD" >"$output/latest-build.txt"
 
-            gcloud storage cp -r "gs://test-platform-results/pr-logs/pull/${ORG}_${REPO}/${PR_NUMBER}/${JOB_NAME}/${LATEST_BUILD}/artifacts/${TEST_NAME}/${ORG}-${REPO}-scalability/artifacts/summary.csv" "$output" || continue
+            gcloud storage cp -r "gs://test-platform-results-public/pr-logs/pull/${ORG}_${REPO}/${PR_NUMBER}/${JOB_NAME}/${LATEST_BUILD}/artifacts/${TEST_NAME}/${ORG}-${REPO}-scalability/artifacts/summary.csv" "$output" || continue
             echo "Artifacts gathered from PR ${PR_NUMBER} on branch ${BRANCH}"
         done
     done
