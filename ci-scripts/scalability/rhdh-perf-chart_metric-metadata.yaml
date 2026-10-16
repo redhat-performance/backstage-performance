@@ -316,3 +316,75 @@ metrics:
     subtitle: "E2E Duration"
     label: "Duration"
     units: "ms"
+  
+  HomePageLoadedWarmResponseTimeAvg:
+    title: "Home Page Load (warm) Duration"
+    subtitle: "Average"
+    label: "Duration"
+    units: "ms"
+
+  HomePageLoadedWarmResponseTimeMax:
+    title: "Home Page Load (warm) Duration"
+    subtitle: "Maximum"
+    label: "Duration"
+    units: "ms"
+
+  CatalogPageLoadedWarmResponseTimeAvg:
+    title: "Catalog Page Load (warm) Duration"
+    subtitle: "Average"
+    label: "Duration"
+    units: "ms"
+
+  CatalogPageLoadedWarmResponseTimeMax:
+    title: "Catalog Page Load (warm) Duration"
+    subtitle: "Maximum"
+    label: "Duration"
+    units: "ms"
+
+  ComponentPageLoadedWarmResponseTimeAvg:
+    title: "Component Page Load (warm) Duration"
+    subtitle: "Average"
+    label: "Duration"
+    units: "ms"
+
+  ComponentPageLoadedWarmResponseTimeMax:
+    title: "Component Page Load (warm) Duration"
+    subtitle: "Maximum"
+    label: "Duration"
+    units: "ms"
+
+  CatalogTabNLoadedWarmResponseTimeAvg:
+    title: "Catalog Tab N Load (warm) Duration"
+    subtitle: "Average"
+    label: "Duration"
+    units: "ms"
+
+  CatalogTabNLoadedWarmResponseTimeMax:
+    title: "Catalog Tab N Load (warm) Duration"
+    subtitle: "Maximum"
+    label: "Duration"
+    units: "ms"
+
+  PageNLoadedWarmResponseTimeAvg:
+    title: "Page N Load (warm) Duration"
+    subtitle: "Average"
+    label: "Duration" 
+    units: "ms"
+
+  PageNLoadedWarmResponseTimeMax:
+    title: "Page N Load (warm) Duration"
+    subtitle: "Maximum"
+    label: "Duration"
+    units: "ms"
+
+  E2EDurationWarmAvg:
+    title: "E2E Test (warm) Duration"
+    subtitle: "Average"
+    label: "Duration"
+    units: "ms"
+
+  E2EDurationWarmMax:
+    title: "E2E Test (warm) Duration"
+    subtitle: "E2E Duration"
+    label: "Duration"
+    units: "ms"
