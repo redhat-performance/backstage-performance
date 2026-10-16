@@ -24,7 +24,7 @@
 {%- endmacro %}
 
 {%macro vitals_scenario(page) -%}
-{% if page == 'home' %}
+{% if page == 'home' or page == 'home_warm' %}
 - name: results.vitals_{{page}}_lcp_ms.locust_requests_avg_response_time
   monitoring_query: max(locust_requests_avg_response_time{method="vitals:{{page}}", name="lcp_ms", namespace="${LOCUST_NAMESPACE}", job="${SCENARIO}-test-master"})
   monitoring_step: 15
@@ -39,8 +39,8 @@
   monitoring_step: 15
 {%- endmacro %}
 
-{%- set pages_all    = ['home', 'catalog', 'component', 'catalog_tab_n', 'page_n'] -%}
-{%- set pages_vitals = ['home', 'catalog', 'component', 'catalog_tab_n', 'page_n'] -%}
+{%- set pages_all    = ['home', 'catalog', 'component', 'catalog_tab_n', 'page_n', 'home_warm', 'catalog_warm', 'component_warm', 'catalog_tab_n_warm', 'page_n_warm'] -%}
+{%- set pages_vitals = ['home', 'catalog', 'component', 'catalog_tab_n', 'page_n', 'home_warm', 'catalog_warm', 'component_warm', 'catalog_tab_n_warm', 'page_n_warm'] -%}
 {%- set mimes        = ['application/json', 'application/javascript', 'text/css', 'text/html', 'application/octet-stream'] -%}
 
 {% for page in pages_all %}{% for mime in mimes %}

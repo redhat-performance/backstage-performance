@@ -102,7 +102,19 @@ CatalogTabNLoadedResponseTimeMax,\
 PageNLoadedResponseTimeAvg,\
 PageNLoadedResponseTimeMax,\
 E2EDurationAvg,\
-E2EDurationMax"
+E2EDurationMax,\
+HomePageLoadedWarmResponseTimeAvg,\
+HomePageLoadedWarmResponseTimeMax,\
+CatalogPageLoadedWarmResponseTimeAvg,\
+CatalogPageLoadedWarmResponseTimeMax,\
+ComponentPageLoadedWarmResponseTimeAvg,\
+ComponentPageLoadedWarmResponseTimeMax,\
+CatalogTabNLoadedWarmResponseTimeAvg,\
+CatalogTabNLoadedWarmResponseTimeMax,\
+PageNLoadedWarmResponseTimeAvg,\
+PageNLoadedWarmResponseTimeMax,\
+E2EDurationWarmAvg,\
+E2EDurationWarmMax"
 
 echo "$headers"
 
@@ -206,7 +218,19 @@ find "${1:-.}" -name benchmark.json -print0 | while IFS= read -r -d '' filename;
         .results.page_n_loaded.locust_requests_avg_response_time.mean,
         .results.page_n_loaded.locust_requests_avg_response_time.max,
         .results.duration.locust_requests_avg_response_time.mean,
-        .results.duration.locust_requests_avg_response_time.max
+        .results.duration.locust_requests_avg_response_time.max,
+        .results.home_page_loaded_warm.locust_requests_avg_response_time.mean,
+        .results.home_page_loaded_warm.locust_requests_avg_response_time.max,
+        .results.catalog_page_loaded_warm.locust_requests_avg_response_time.mean,
+        .results.catalog_page_loaded_warm.locust_requests_avg_response_time.max,
+        .results.component_page_loaded_warm.locust_requests_avg_response_time.mean,
+        .results.component_page_loaded_warm.locust_requests_avg_response_time.max,
+        .results.catalog_tab_n_loaded_warm.locust_requests_avg_response_time.mean,
+        .results.catalog_tab_n_loaded_warm.locust_requests_avg_response_time.max,
+        .results.page_n_loaded_warm.locust_requests_avg_response_time.mean,
+        .results.page_n_loaded_warm.locust_requests_avg_response_time.max,
+        .results.duration_warm.locust_requests_avg_response_time.mean,
+        .results.duration_warm.locust_requests_avg_response_time.max
         ] | @csv' &&
         rc=0 || rc=1
     if [[ "$rc" -ne 0 ]]; then

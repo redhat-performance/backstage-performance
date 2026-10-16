@@ -61,13 +61,16 @@ class UIBrowserMetricsTest(RHDHBrowserUser):
             """)
         except Exception:
             return
-        if page_name == "home" and data["lcp"] > 0:
+        if (page_name == "home" or page_name == "home_warm") and data["lcp"] > 0:
             self._report_success(f"vitals:{page_name}", "lcp_ms", data["lcp"])
         if data["long_tasks"] > 0:
-            self._report_success(f"vitals:{page_name}", "long_task_count", data["long_tasks"])
-            self._report_success(f"vitals:{page_name}", "long_task_ms",    data["long_task_ms"])
+            self._report_success(
+                f"vitals:{page_name}", "long_task_count", data["long_tasks"])
+            self._report_success(
+                f"vitals:{page_name}", "long_task_ms",    data["long_task_ms"])
         if data["heap_mb"] > 0:
-            self._report_success(f"vitals:{page_name}", "heap_used_mb", data["heap_mb"])
+            self._report_success(
+                f"vitals:{page_name}", "heap_used_mb", data["heap_mb"])
 
     def _collect_network_metrics(self, page_name):
         """Parse CDP logs and fire per-request timings (net:*) and per-MIME byte totals (size:*)."""
@@ -87,26 +90,30 @@ class UIBrowserMetricsTest(RHDHBrowserUser):
 
                 if method == "Network.responseReceived":
                     resp = params.get("response", {})
-                    mime = resp.get("mimeType", "unknown").split(";")[0].strip()
+                    mime = resp.get("mimeType", "unknown").split(";")[
+                        0].strip()
                     timing = resp.get("timing")
                     request_mime[params["requestId"]] = mime
                     if timing:
                         rt_ms = max(
-                            timing.get("receiveHeadersEnd", 0) - timing.get("sendStart", 0), 0
+                            timing.get("receiveHeadersEnd", 0) -
+                            timing.get("sendStart", 0), 0
                         )
                         self._report_success(f"net:{page_name}", mime, rt_ms)
 
                 elif method == "Network.loadingFinished":
                     req_id = params.get("requestId")
                     if req_id in request_mime:
-                        request_bytes[req_id] = params.get("encodedDataLength", 0)
+                        request_bytes[req_id] = params.get(
+                            "encodedDataLength", 0)
 
             except Exception:
                 continue
 
         mime_bytes = {}
         for rid, mime in request_mime.items():
-            mime_bytes[mime] = mime_bytes.get(mime, 0) + request_bytes.get(rid, 0)
+            mime_bytes[mime] = mime_bytes.get(
+                mime, 0) + request_bytes.get(rid, 0)
         for mime, total in mime_bytes.items():
             if total > 0:
                 events.request.fire(
@@ -119,32 +126,38 @@ class UIBrowserMetricsTest(RHDHBrowserUser):
 
     MAX_RETRIES = 2
 
-    @task
-    def user_activity(self) -> None:
+    def do_login(self) -> None:
+        username = self.wait_for_clickable_element(By.ID, "username")
+        password = self.wait_for_clickable_element(By.ID, "password")
+        login = self.wait_for_clickable_element(By.ID, "kc-login")
+        username.send_keys(self.user_name)
+        password.send_keys(self.user_password)
+        login.click()
+
+    def user_activity(self, warm_start: bool = False) -> None:
+        suffix = "_warm" if warm_start else ""
         for attempt in range(self.MAX_RETRIES):
+            retrying = False
             try:
                 self._ensure_driver()
                 self._inject_web_vitals_observer()
 
                 self.driver.get(self.baseUrl)
-                username = self.wait_for_clickable_element(By.ID, "username")
-                password = self.wait_for_clickable_element(By.ID, "password")
-                login = self.wait_for_clickable_element(By.ID, "kc-login")
-                username.send_keys(self.user_name)
-                password.send_keys(self.user_password)
-                login.click()
+                
+                if not warm_start:
+                    self.do_login()
 
                 catalog = self.wait_for_clickable_element(
                     By.XPATH, "//span[normalize-space()='Catalog']")
-                self._collect_network_metrics("home")
-                self._collect_web_vitals("home")
+                self._collect_network_metrics(f"home{suffix}")
+                self._collect_web_vitals(f"home{suffix}")
                 self._record_nav_start()
                 catalog.click()
 
                 self.wait_for_clickable_element(
                     By.XPATH, "//h2[contains(.,'All Components (')]")
-                self._collect_network_metrics("catalog")
-                self._collect_web_vitals("catalog")
+                self._collect_network_metrics(f"catalog{suffix}")
+                self._collect_web_vitals(f"catalog{suffix}")
 
                 if self.catalog_tab_n_count > 0:
                     component = self.wait_for_clickable_element(
@@ -153,14 +166,14 @@ class UIBrowserMetricsTest(RHDHBrowserUser):
                     component.click()
                     catalog_tab_n = self.wait_for_clickable_element(
                         By.XPATH, "//a[normalize-space(text())='Catalog Tab 1']")
-                    self._collect_network_metrics("component")
-                    self._collect_web_vitals("component")
+                    self._collect_network_metrics(f"component{suffix}")
+                    self._collect_web_vitals(f"component{suffix}")
                     self._record_nav_start()
                     catalog_tab_n.click()
                     self.wait_for_clickable_element(
                         By.XPATH, "//td[normalize-space()='Valgi da Cunha']")
-                    self._collect_network_metrics("catalog_tab_n")
-                    self._collect_web_vitals("catalog_tab_n")
+                    self._collect_network_metrics(f"catalog_tab_n{suffix}")
+                    self._collect_web_vitals(f"catalog_tab_n{suffix}")
 
                 if self.page_n_count > 0:
                     page_1 = self.wait_for_clickable_element(
@@ -169,23 +182,31 @@ class UIBrowserMetricsTest(RHDHBrowserUser):
                     page_1.click()
                     self.wait_for_clickable_element(
                         By.XPATH, "//td[normalize-space()='Valgi da Cunha']")
-                    self._collect_network_metrics("page_n")
-                    self._collect_web_vitals("page_n")
+                    self._collect_network_metrics(f"page_n{suffix}")
+                    self._collect_web_vitals(f"page_n{suffix}")
 
                 return
 
             except TimeoutException as e:
                 debug = self._page_debug()
                 if attempt == 0:
+                    retrying = True
                     continue
                 self._report_failure(
-                    "ui", "timeout", 0, f"{e.__class__.__name__}: {debug}")
+                    f"ui{suffix}", "timeout", 0, f"{e.__class__.__name__}: {debug}")
                 raise
             except (NoSuchWindowException, InvalidSessionIdException) as e:
                 self._dispose_driver()
                 if attempt == 0:
+                    retrying = True
                     continue
                 self._report_failure("login", "login_page", 0, str(e))
                 raise
             finally:
-                self._dispose_driver()
+                if warm_start and not retrying:
+                    self._dispose_driver()
+
+    @task
+    def do_it(self) -> None:
+        self.user_activity(warm_start=False)
+        self.user_activity(warm_start=True)
