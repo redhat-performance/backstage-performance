@@ -21,8 +21,8 @@ res     = data.get("results", {})
 env     = data.get("metadata", {}).get("env", {})
 benchmark_timing = data.get("measurements", {}).get("timings", {}).get("benchmark", {})
 
-PAGES        = ["home", "catalog", "component", "catalog_tab_n", "page_n"]
-PAGES_VITALS = ["home", "catalog", "component", "catalog_tab_n", "page_n"]
+PAGES        = ["home", "catalog", "component", "catalog_tab_n", "page_n", "home_warm", "catalog_warm", "component_warm", "catalog_tab_n_warm", "page_n_warm"]
+PAGES_VITALS = ["home", "catalog", "component", "catalog_tab_n", "page_n", "home_warm", "catalog_warm", "component_warm", "catalog_tab_n_warm", "page_n_warm"]
 
 def gv(key, field, sub="mean"):
     return (res.get(key) or {}).get(field, {}).get(sub)

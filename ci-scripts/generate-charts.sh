@@ -78,7 +78,19 @@ CatalogTabNLoadedResponseTimeMax \
 PageNLoadedResponseTimeAvg \
 PageNLoadedResponseTimeMax \
 E2EDurationAvg \
-E2EDurationMax"
+E2EDurationMax \
+HomePageLoadedWarmResponseTimeAvg \
+HomePageLoadedWarmResponseTimeMax \
+CatalogPageLoadedWarmResponseTimeAvg \
+CatalogPageLoadedWarmResponseTimeMax \
+ComponentPageLoadedWarmResponseTimeAvg \
+ComponentPageLoadedWarmResponseTimeMax \
+CatalogTabNLoadedWarmResponseTimeAvg \
+CatalogTabNLoadedWarmResponseTimeMax \
+PageNLoadedWarmResponseTimeAvg \
+PageNLoadedWarmResponseTimeMax \
+E2EDurationWarmAvg \
+E2EDurationWarmMax"
 
 rhdh_version=""
 
