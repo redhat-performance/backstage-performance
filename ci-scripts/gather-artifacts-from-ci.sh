@@ -39,7 +39,7 @@ gather_artifacts_from_ci() {
             echo "Latest build ID: $LATEST_BUILD"
 
             BASE_GS_ARTIFACTS="test-platform-results-public/pr-logs/pull/${ORG}_${REPO}/${PR_NUMBER}/${JOB_NAME}/${LATEST_BUILD}/artifacts/${TEST_NAME}/${ORG}-${REPO}-scalability/artifacts"
-            RHDH_VERSION=$(gcloud storage cat "gs://${BASE_GS_ARTIFACTS}/scalability/*/test/1/*/benchmark.json" |  gunzip | tee "${ARTIFACT_DIR}/benchmark.json" | jq -rc '.metadata.image."konflux.additional-tags" | split(" ";"")[2]') || continue
+            RHDH_VERSION=$(gcloud storage cat "gs://${BASE_GS_ARTIFACTS}/scalability/*/test/1/*/benchmark.json" | gunzip | tee "${ARTIFACT_DIR}/benchmark.json" | jq -rc '.metadata.image."konflux.additional-tags" | split(" ";"")[2]') || continue
             echo "RHDH version: $RHDH_VERSION"
 
             SCALABILITY_SCENARIO=$(curl -sSL "https://api.github.com/repos/${ORG}/${REPO}/pulls/${PR_NUMBER}" | jq -rc '.head.ref')
