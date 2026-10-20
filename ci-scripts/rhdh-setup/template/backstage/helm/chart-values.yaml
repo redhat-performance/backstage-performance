@@ -97,3 +97,65 @@ externalDatabase:
   existingSecretRef:
     name: rhdh-db-credentials
     key: POSTGRES_PASSWORD
+
+# Chart 2.1+ installs a default-deny NetworkPolicy. It allows DNS, HTTPS,
+# Postgres, and Redis. Catalog LDAP, the oauth2-proxy route port, and the
+# in-cluster Keycloak token endpoint are not included.
+extraDeploy:
+  - |
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: {{ include "rhdh.fullname" . }}-allow-ldap-egress
+      labels:
+        {{- include "rhdh.labels" . | nindent 8 }}
+    spec:
+      podSelector:
+        matchLabels:
+          {{- include "rhdh.selectorLabels" . | nindent 10 }}
+      policyTypes:
+        - Egress
+      egress:
+        - ports:
+            - port: 389
+              protocol: TCP
+            - port: 636
+              protocol: TCP
+  - |
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: {{ include "rhdh.fullname" . }}-allow-oauth2-proxy-ingress
+      labels:
+        {{- include "rhdh.labels" . | nindent 8 }}
+    spec:
+      podSelector:
+        matchLabels:
+          {{- include "rhdh.selectorLabels" . | nindent 10 }}
+      policyTypes:
+        - Ingress
+      ingress:
+        - from:
+            - namespaceSelector:
+                matchLabels:
+                  policy-group.network.openshift.io/ingress: ""
+          ports:
+            - port: 4180
+              protocol: TCP
+  - |
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: {{ include "rhdh.fullname" . }}-allow-keycloak-egress
+      labels:
+        {{- include "rhdh.labels" . | nindent 8 }}
+    spec:
+      podSelector:
+        matchLabels:
+          {{- include "rhdh.selectorLabels" . | nindent 10 }}
+      policyTypes:
+        - Egress
+      egress:
+        - ports:
+            - port: 8080
+              protocol: TCP
