@@ -27,3 +27,9 @@
 {{ results_scenario('catalog_tab_n_loaded') }}
 {{ results_scenario('page_n_loaded') }}
 {{ results_scenario('duration') }}
+{{ results_scenario('home_page_loaded_warm') }}
+{{ results_scenario('catalog_page_loaded_warm') }}
+{{ results_scenario('component_page_loaded_warm') }}
+{{ results_scenario('catalog_tab_n_loaded_warm') }}
+{{ results_scenario('page_n_loaded_warm') }}
+{{ results_scenario('duration_warm') }}
