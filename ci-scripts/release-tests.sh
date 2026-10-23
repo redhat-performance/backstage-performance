@@ -690,6 +690,35 @@ function complex_rbac_replicas_scale_test() {
     _test "$name" "$nick" "$ticket"
 }
 
+function ui-browser-metrics_compare_test() {
+    name="UI baseline compare test"
+    nick="ui-baseline-compare"
+    ticket="$1"
+
+    export DURATION="10m"
+    export RHDH_LOG_LEVEL=debug
+    export SCALE_WORKERS=1
+    export RBAC_POLICY=all_groups_admin_inherited
+    export ENABLE_ORCHESTRATOR=true
+    export SCENARIO=ui-browser-metrics
+    export ALWAYS_CLEANUP=true
+
+    export SCALE_RBAC_POLICY_SIZE="1000"
+    export SCALE_REPLICAS="1:1"
+    export SCALE_DB_STORAGES="20Gi"
+    export SCALE_CPU_REQUESTS_LIMITS=":"
+    export SCALE_MEMORY_REQUESTS_LIMITS="${memory_limits:-:}"
+    export SCALE_COMBINED="1:1:1000:10000:1250:1250 1:1:1000:10000:1250:1250 1:1:1000:10000:1250:1250 1:1:1000:10000:1250:1250 1:1:1000:10000:1250:1250"
+
+    export PAGE_N_COUNT=100
+    export CATALOG_TAB_N_COUNT=100
+    export ENSURE_CATALOG_POPULATION_TIMEOUT=3600
+    export CATALOG_REFRESH_INTERVAL_MINUTES=120
+    export RHDH_STARTUP_TIMEOUT_SECONDS=3600
+
+    _test "$name" "$nick" "$ticket"
+}
+
 # !!! Configure here !!!
 VERSION_OLD="${VERSION_OLD:-1.10}"
 VERSION_NEW="${VERSION_NEW:-2.1}"
@@ -778,6 +807,10 @@ run_large_scale_xl_compare() {
     large_scale_xl_compare_test "RHIDP-13655"
 }
 
+run_ui-browser-metrics_compare() {
+    ui-browser-metrics_compare_test "RHIDP-XXXX"
+}
+
 # Optional override: set SCALE_MEMORY_LIMITS (e.g. "1Gi:2Gi" for requests:limits) to pass
 # custom memory to mvp/orchestrator/complex_rbac compare, memory_scale, and replicas_scale tests.
 IFS="," read -ra test_ids <<<"${1:-all}"
@@ -843,6 +876,9 @@ for test_id in "${test_ids[@]}"; do
     "complex_rbac_replicas_scale")
         run_complex_rbac_replicas_scale "${SCALE_MEMORY_LIMITS:-}"
         ;;
+    "ui-browser-metrics_compare")
+        run_ui-browser-metrics_compare
+        ;;
     \? | "all")
         run_mvp_compare
         run_mvp_memory_scale
@@ -864,6 +900,7 @@ for test_id in "${test_ids[@]}"; do
         # run_complex_rbac_compare
         # run_complex_rbac_memory_scale
         # run_complex_rbac_replicas_scale
+        # ui-browser-metrics_compare
         ;;
     *)
         echo "$(date -u +'%Y-%m-%dT%H:%M:%S,%N+00:00') ERROR Unsupported test option: '$test_id'"
