@@ -406,7 +406,7 @@ get_catalog_entity_count() {
     local entity_type=$1
     ACCESS_TOKEN=$(get_token "rhdh" "$rhdh_token_timeout")
     log_file="$TMP_DIR/get_$(echo "$entity_type" | tr '[:upper:]' '[:lower:]')_count.log"
-    curl -s -k "$(backstage_url)/api/catalog/entities/by-query?limit=0&filter=kind%3D${entity_type}" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$ACCESS_TOKEN" | tee -a "$log_file" | jq -r '.totalItems'
+    curl -s -k "$(backstage_url)/api/catalog/entities/by-query?limit=0&filter=kind%3D${entity_type}" --cookie "$COOKIE" --cookie-jar "$COOKIE" -H 'Content-Type: application/json' -H 'Authorization: Bearer '"$ACCESS_TOKEN" | tee -a "$log_file" | jq -r 'if has("items") then .totalItems else -1 end'
     echo "" >>"$log_file"
 }
 
@@ -868,7 +868,14 @@ install_rhdh_with_olm() {
     mark_resource_for_rhdh secret rhdh-backend-secret
     mark_resource_for_rhdh cm app-config-backend-secret
     set -x
-    OLM_CHANNEL="${RHDH_OLM_CHANNEL}" UPSTREAM_IIB="${RHDH_OLM_INDEX_IMAGE}" NAMESPACE_SUBSCRIPTION="${RHDH_OPERATOR_NAMESPACE}" WATCH_EXT_CONF="${RHDH_OLM_WATCH_EXT_CONF}" ENABLE_CACHE_LABEL_FILTER="${RHDH_OLM_ENABLE_CACHE_LABEL_FILTER}" ./install-rhdh-catalog-source.sh --install-operator "${RHDH_OLM_OPERATOR_PACKAGE:-rhdh}"
+
+    if [ -n "${RHDH_IMAGE_REGISTRY}${RHDH_IMAGE_REPO}${RHDH_IMAGE_TAG}" ]; then
+        rhdh_image="${RHDH_IMAGE_REGISTRY}/${RHDH_IMAGE_REPO}:${RHDH_IMAGE_TAG}"
+        echo "Using '$rhdh_image' image for RHDH"
+    else
+        rhdh_image=""
+    fi
+    OLM_CHANNEL="${RHDH_OLM_CHANNEL}" UPSTREAM_IIB="${RHDH_OLM_INDEX_IMAGE}" NAMESPACE_SUBSCRIPTION="${RHDH_OPERATOR_NAMESPACE}" WATCH_EXT_CONF="${RHDH_OLM_WATCH_EXT_CONF}" ENABLE_CACHE_LABEL_FILTER="${RHDH_OLM_ENABLE_CACHE_LABEL_FILTER}" RHDH_IMAGE="${rhdh_image}" ./install-rhdh-catalog-source.sh --install-operator "${RHDH_OLM_OPERATOR_PACKAGE:-rhdh}"
     set +x
     wait_for_crd backstages.rhdh.redhat.com
 
@@ -878,9 +885,10 @@ install_rhdh_with_olm() {
 
     backstage_yaml="$TMP_DIR/backstage.yaml"
     envsubst <template/backstage/olm/backstage.yaml >"$backstage_yaml"
-    if [ -n "${RHDH_IMAGE_REGISTRY}${RHDH_IMAGE_REPO}${RHDH_IMAGE_TAG}" ]; then
-        echo "Using '$RHDH_IMAGE_REGISTRY/$RHDH_IMAGE_REPO:$RHDH_IMAGE_TAG' image for RHDH"
-        yq -i '(.spec.application.image |= "'"${RHDH_IMAGE_REGISTRY}/${RHDH_IMAGE_REPO}:${RHDH_IMAGE_TAG}"'")' "$backstage_yaml"
+    if [ -n "${RHDH_CATALOG_INDEX_IMAGE_REGISTRY}${RHDH_CATALOG_INDEX_IMAGE_REPO}${RHDH_CATALOG_INDEX_IMAGE_TAG}" ]; then
+        log_info "Overriding catalog index image to $RHDH_CATALOG_INDEX_IMAGE_REGISTRY/$RHDH_CATALOG_INDEX_IMAGE_REPO:$RHDH_CATALOG_INDEX_IMAGE_TAG"
+        catalog_index_image="${RHDH_CATALOG_INDEX_IMAGE_REGISTRY}/${RHDH_CATALOG_INDEX_IMAGE_REPO}:${RHDH_CATALOG_INDEX_IMAGE_TAG}"
+        yq -i '(.spec.deployment.patch.spec.template.spec.initContainers[] | select(.name == "install-dynamic-plugins")).env += [{"name": "CATALOG_INDEX_IMAGE", "value": "'"$catalog_index_image"'"}]' "$backstage_yaml"
     fi
     if ${ENABLE_RBAC}; then
         # Patch backstage deployment to mount rbac-policy PVC if setup_rbac_policy_from_url was used
@@ -925,6 +933,8 @@ install_rhdh_with_olm() {
     yq -i '(.spec.deployment.patch.spec.template.spec.containers[] | select(.name == "backstage-backend") | .livenessProbe) = {"httpGet":{"path":"/healthcheck","port":7007,"scheme":"HTTP"},"initialDelaySeconds":60,"timeoutSeconds":5,"periodSeconds":60,"successThreshold":1,"failureThreshold":'"$failureThreshold"'}' "$backstage_yaml"
     yq -i '(.spec.deployment.patch.spec.progressDeadlineSeconds) = '"${RHDH_STARTUP_TIMEOUT_SECONDS}"'' "$backstage_yaml"
 
+    log_info "Installing network policies"
+    $clin apply -f template/backstage/olm/network-policies.yaml
     $clin apply -f "$backstage_yaml"
 
     wait_for_rhdh_db_to_start

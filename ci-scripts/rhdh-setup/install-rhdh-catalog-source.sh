@@ -39,6 +39,7 @@ RHDH_OLM_OPERATOR_RESOURCES_CPU_LIMITS=${RHDH_OLM_OPERATOR_RESOURCES_CPU_LIMITS:
 RHDH_OLM_OPERATOR_RESOURCES_MEMORY_REQUESTS=${RHDH_OLM_OPERATOR_RESOURCES_MEMORY_REQUESTS:-}
 RHDH_OLM_OPERATOR_RESOURCES_MEMORY_LIMITS=${RHDH_OLM_OPERATOR_RESOURCES_MEMORY_LIMITS:-}
 RHDH_OLM_OPERATOR_RESOURCES_EPHEMERAL_STORAGE_REQUESTS=${RHDH_OLM_OPERATOR_RESOURCES_EPHEMERAL_STORAGE_REQUESTS:-}
+RHDH_IMAGE="${RHDH_IMAGE:-}"
 
 errorf() {
     echo -e "${RED}$1${NC}"
@@ -289,7 +290,9 @@ if [ -n "${RHDH_OLM_OPERATOR_VERSION:-}" ]; then
     yq -i '.spec.startingCSV = "rhdh-operator.v'"${RHDH_OLM_OPERATOR_VERSION}"'"' "$subscription"
     yq -i '.spec.installPlanApproval = "Manual"' "$subscription"
 fi
-
+if [ -n "${RHDH_IMAGE}" ]; then
+    yq -i '.spec.config.env += [{"name": "RELATED_IMAGE_backstage", "value": "'"${RHDH_IMAGE}"'"}]' "$subscription"
+fi
 oc apply -f "$subscription"
 
 if [ -n "${RHDH_OLM_OPERATOR_VERSION:-}" ]; then
