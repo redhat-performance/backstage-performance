@@ -45,6 +45,8 @@ spec:
           value: "ou=groups,dc=test,dc=com"
         - name: LDAP_GROUP_FILTER
           value: "(&(objectClass=groupOfNames)(cn=*))"
+        - name: SEGMENT_TEST_MODE
+          value: "true"
       secrets:
         - key: CLIENT_ID
           name: keycloak-client-secret-backstage
