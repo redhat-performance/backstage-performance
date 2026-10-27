@@ -92,6 +92,8 @@ upstream:
         value: "${RHDH_LOG_LEVEL}"
       - name: NODE_TLS_REJECT_UNAUTHORIZED
         value: "0"
+      - name: SEGMENT_TEST_MODE
+        value: "${SEGMENT_TEST_MODE}"
     image:
       pullPolicy: Always
       registry: ${RHDH_IMAGE_REGISTRY}
