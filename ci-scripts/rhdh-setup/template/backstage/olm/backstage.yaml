@@ -45,6 +45,8 @@ spec:
           value: "ou=groups,dc=test,dc=com"
         - name: LDAP_GROUP_FILTER
           value: "(&(objectClass=groupOfNames)(cn=*))"
+        - name: SEGMENT_TEST_MODE
+          value: "true"
       secrets:
         - key: CLIENT_ID
           name: keycloak-client-secret-backstage
@@ -53,8 +55,6 @@ spec:
         - key: BACKEND_SECRET
           name: rhdh-backend-secret
         - name: rhdh-db-credentials
-    imagePullSecrets:
-      - rhdh-pull-secret
     route:
       enabled: true
   database:
@@ -65,6 +65,8 @@ spec:
         replicas: ${RHDH_DEPLOYMENT_REPLICAS}
         template:
           spec:
+            imagePullSecrets:
+              - name: rhdh-pull-secret
             containers:
               - name: backstage-backend
                 volumeMounts:
