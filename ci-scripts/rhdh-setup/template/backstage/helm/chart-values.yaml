@@ -93,7 +93,7 @@ upstream:
       - name: NODE_TLS_REJECT_UNAUTHORIZED
         value: "0"
       - name: SEGMENT_TEST_MODE
-        value: "${SEGMENT_TEST_MODE}"
+        value: "true"
     replicas: 1
   postgresql:
     enabled: false
