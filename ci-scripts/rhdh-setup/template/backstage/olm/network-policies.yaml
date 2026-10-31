@@ -1,0 +1,45 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backstage-netpol-developer-hub-allow-ldap-egress
+  labels:
+    app.kubernetes.io/instance: developer-hub
+    app.kubernetes.io/name: backstage
+    rhdh.redhat.com/app: backstage-developer-hub
+spec:
+  podSelector:
+    matchLabels:
+      rhdh.redhat.com/app: backstage-developer-hub
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 389
+          protocol: TCP
+        - port: 636
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backstage-netpol-developer-hub-allow-oauth2-proxy-ingress
+  labels:
+    app.kubernetes.io/instance: developer-hub
+    app.kubernetes.io/name: backstage
+    rhdh.redhat.com/app: backstage-developer-hub
+spec:
+  podSelector:
+    matchLabels:
+      rhdh.redhat.com/app: backstage-developer-hub
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: oauth2
+              app.kubernetes.io/instance: rhdh
+              app.kubernetes.io/name: developer-hub
+      ports:
+        - port: 7007
+          protocol: TCP
