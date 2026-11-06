@@ -23,25 +23,32 @@ GITHUB_REPO="$(cat /usr/local/ci-secrets/backstage-performance/github.repo)"
 QUAY_TOKEN="$(cat /usr/local/ci-secrets/backstage-performance/quay.token)"
 
 # testing env
-if [ "$RHDH_INSTALL_METHOD" == "olm" ]; then
-    if [ "$AUTH_PROVIDER" == "keycloak" ]; then
-        rhdh_route="rhdh"
+# With HTTP/2, leave BASE_HOST unset so make test resolves the Caddy route
+# after deploy-http2-proxy runs (Caddy does not exist yet at this point).
+ENABLE_HTTP2_PROXY=${ENABLE_HTTP2_PROXY:-false}
+if [ "$ENABLE_HTTP2_PROXY" != "true" ]; then
+    if [ "$RHDH_INSTALL_METHOD" == "olm" ]; then
+        if [ "$AUTH_PROVIDER" == "keycloak" ]; then
+            rhdh_route="rhdh"
+        else
+            rhdh_route="backstage-developer-hub"
+        fi
+    elif [ "$RHDH_INSTALL_METHOD" == "helm" ]; then
+        export RHDH_HELM_RELEASE_NAME RHDH_HELM_CHART
+
+        RHDH_HELM_RELEASE_NAME=${RHDH_HELM_RELEASE_NAME:-rhdh}
+        RHDH_HELM_CHART=${RHDH_HELM_CHART:-redhat-developer-hub}
+
+        rhdh_route="$(oc -n "${RHDH_NAMESPACE}" get routes -l app.kubernetes.io/instance="${RHDH_HELM_RELEASE_NAME}" -o jsonpath='{.items[0].metadata.name}')"
     else
-        rhdh_route="backstage-developer-hub"
+        echo "Invalid RHDH install method: $RHDH_INSTALL_METHOD"
+        exit 1
     fi
-elif [ "$RHDH_INSTALL_METHOD" == "helm" ]; then
-    export RHDH_HELM_RELEASE_NAME RHDH_HELM_CHART
-
-    RHDH_HELM_RELEASE_NAME=${RHDH_HELM_RELEASE_NAME:-rhdh}
-    RHDH_HELM_CHART=${RHDH_HELM_CHART:-redhat-developer-hub}
-
-    rhdh_route="$(oc -n "${RHDH_NAMESPACE}" get routes -l app.kubernetes.io/instance="${RHDH_HELM_RELEASE_NAME}" -o jsonpath='{.items[0].metadata.name}')"
+    export BASE_HOST
+    BASE_HOST="https://$(oc get routes "$rhdh_route" -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')"
 else
-    echo "Invalid RHDH install method: $RHDH_INSTALL_METHOD"
-    exit 1
+    unset BASE_HOST || true
 fi
-export BASE_HOST
-BASE_HOST="https://$(oc get routes "$rhdh_route" -n "${RHDH_NAMESPACE}" -o jsonpath='{.spec.host}')"
 # end-of testing env
 
 ARTIFACT_DIR=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "${ARTIFACT_DIR:-.artifacts}")

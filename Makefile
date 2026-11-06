@@ -377,8 +377,13 @@ deploy-http2-proxy:
 	cd ci-scripts/rhdh-setup; ./deploy.sh -H
 
 ## Run the load test in CI end to end
+## HTTP/2 proxy is installed after catalog ensure so token/catalog checks still use the RHDH route.
 .PHONY: ci-run
-ci-run: setup-venv deploy-locust ensure-catalog-population test
+ci-run: setup-venv deploy-locust ensure-catalog-population
+ifeq ($(ENABLE_HTTP2_PROXY),true)
+	@$(MAKE) deploy-http2-proxy
+endif
+	@$(MAKE) test
 
 ## Deploy and populate RHDH in CI end to end
 .PHONY: ci-deploy
@@ -387,9 +392,6 @@ ifeq ($(RHDH_INSTALL_METHOD),helm)
 ci-deploy: deploy-rhdh-helm
 else ifeq ($(RHDH_INSTALL_METHOD),olm)
 ci-deploy: deploy-rhdh-olm
-endif
-ifeq ($(ENABLE_HTTP2_PROXY),true)
-	@$(MAKE) deploy-http2-proxy
 endif
 
 
