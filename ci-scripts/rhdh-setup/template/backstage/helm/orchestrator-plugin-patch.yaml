@@ -1,5 +1,5 @@
 ---
-- package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/red-hat-developer-hub-backstage-plugin-orchestrator:bs_1.54.6__6.2.1
+- package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/red-hat-developer-hub-backstage-plugin-orchestrator:pr_4564__6.3.2
   enabled: true
   pluginConfig:
     dynamicPlugins:
@@ -37,20 +37,22 @@
                 if:
                   anyOf:
                     - hasAnnotation: orchestrator.io/workflows
-- package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/red-hat-developer-hub-backstage-plugin-orchestrator-backend:bs_1.54.6__8.13.1
+- package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/red-hat-developer-hub-backstage-plugin-orchestrator-backend:pr_4564__8.14.2
   enabled: true
   pluginConfig:
     orchestrator:
       dataIndexService:
         url: http://sonataflow-platform-data-index-service.${RHDH_NAMESPACE}
-- package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/red-hat-developer-hub-backstage-plugin-orchestrator-form-widgets:bs_1.54.6__2.2.0
+- package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/red-hat-developer-hub-backstage-plugin-orchestrator-backend-module-loki:pr_4564__1.6.2
+  enabled: false
+- package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/red-hat-developer-hub-backstage-plugin-orchestrator-form-widgets:pr_4564__2.4.1
   enabled: true
   pluginConfig:
     dynamicPlugins:
       frontend:
         red-hat-developer-hub.backstage-plugin-orchestrator-form-widgets:
           pluginModule: Legacy
-- package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/red-hat-developer-hub-backstage-plugin-scaffolder-backend-module-orchestrator:bs_1.54.6__1.8.1
+- package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/red-hat-developer-hub-backstage-plugin-scaffolder-backend-module-orchestrator:pr_4564__1.9.2
   enabled: true
   pluginConfig:
     orchestrator:
