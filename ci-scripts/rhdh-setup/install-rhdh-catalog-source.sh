@@ -138,7 +138,7 @@ TMPDIR=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "${TM
 
 # shellcheck disable=SC2086
 authfile=$TMPDIR/authfile
-base64 -d </usr/local/ci-secrets/backstage-performance/quay.token >"$authfile"
+base64 -d </usr/local/ci-secrets/backstage-performance/quay-token >"$authfile"
 # shellcheck disable=SC2064
 trap "rm -rvf $authfile" EXIT
 

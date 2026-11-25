@@ -16,12 +16,12 @@ The framework assumes the following credentials files under the `/usr/local/ci-s
 
 | Credential file | Mapped environment Variable | Description | Example |
 | :--- | ---- | ---- | ---- |
-| github.accounts   | Used to mitigate Github rate limits attemtps. | Comma separated list of colon separated tuples of Github username and token | `gh_user1:ghp_token1,gh_user2:ghp_token2`. |
-| github.org | GITHUB_ORG | Name of the Github organization. Used to clean the test repos branches created for RHDH Catalog locations.| `example-org` |
-| github.repo | GITHUB_REPO | URL of the Github Repo used for creating RHDH catalog locations. |`https://github.com/example-org/rhdh-perf-testing-repo.git` |
-| github.user | GITHUB_USER | Github username with permissions to the above github repo | `gh_user1` |
-| github.token | GITHUB_TOKEN | Personal access token (classic) of the above Github user with the `delete_repo, repo, workflow` permissions | `ghp_token1` |
-| quay.token | QUAY_TOKEN | A pull secret for getting RHDH (and other) images from Quay.io (and other registries). A base64 encoded docker.json config file | - |
+| github-accounts   | Used to mitigate Github rate limits attemtps. | Comma separated list of colon separated tuples of Github username and token | `gh_user1:ghp_token1,gh_user2:ghp_token2`. |
+| github-org | GITHUB_ORG | Name of the Github organization. Used to clean the test repos branches created for RHDH Catalog locations.| `example-org` |
+| github-repo | GITHUB_REPO | URL of the Github Repo used for creating RHDH catalog locations. |`https://github.com/example-org/rhdh-perf-testing-repo.git` |
+| github-user | GITHUB_USER | Github username with permissions to the above github repo | `gh_user1` |
+| github-token | GITHUB_TOKEN | Personal access token (classic) of the above Github user with the `delete_repo, repo, workflow` permissions | `ghp_token1` |
+| quay-token | QUAY_TOKEN | A pull secret for getting RHDH (and other) images from Quay.io (and other registries). A base64 encoded docker.json config file | - |
 
 Make sure to create the `/usr/local/ci-secrets/backstage-performance` directory in your system where you intend to run the RHDH performance framework and create and fill the above files with the respective credentials.
 
@@ -54,10 +54,10 @@ export GITHUB_USER
 export GITHUB_REPO
 export QUAY_TOKEN
 
-GITHUB_TOKEN="$(cat /usr/local/ci-secrets/backstage-performance/github.token)"
-GITHUB_USER="$(cat /usr/local/ci-secrets/backstage-performance/github.user)"
-GITHUB_REPO="$(cat /usr/local/ci-secrets/backstage-performance/github.repo)"
-QUAY_TOKEN="$(cat /usr/local/ci-secrets/backstage-performance/quay.token)"
+GITHUB_TOKEN="$(cat /usr/local/ci-secrets/backstage-performance/github-token)"
+GITHUB_USER="$(cat /usr/local/ci-secrets/backstage-performance/github-user)"
+GITHUB_REPO="$(cat /usr/local/ci-secrets/backstage-performance/github-repo)"
+QUAY_TOKEN="$(cat /usr/local/ci-secrets/backstage-performance/quay-token)"
 ```
 
 2. Uncomment and set at least the following variables in the `test.env`

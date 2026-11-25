@@ -12,10 +12,10 @@ source "$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$SC
 
 export GITHUB_TOKEN GITHUB_USER GITHUB_REPO QUAY_TOKEN KUBECONFIG PRE_LOAD_DB
 
-GITHUB_TOKEN=$(cat /usr/local/ci-secrets/backstage-performance/github.token)
-GITHUB_USER=$(cat /usr/local/ci-secrets/backstage-performance/github.user)
-GITHUB_REPO=$(cat /usr/local/ci-secrets/backstage-performance/github.repo)
-QUAY_TOKEN=$(cat /usr/local/ci-secrets/backstage-performance/quay.token)
+GITHUB_TOKEN=$(cat /usr/local/ci-secrets/backstage-performance/github-token)
+GITHUB_USER=$(cat /usr/local/ci-secrets/backstage-performance/github-user)
+GITHUB_REPO=$(cat /usr/local/ci-secrets/backstage-performance/github-repo)
+QUAY_TOKEN=$(cat /usr/local/ci-secrets/backstage-performance/quay-token)
 
 export RHDH_DEPLOYMENT_REPLICAS=${RHDH_DEPLOYMENT_REPLICAS:-1}
 export RHDH_DB_REPLICAS=${RHDH_DB_REPLICAS:-1}
@@ -33,7 +33,7 @@ mkdir -p "$ARTIFACT_DIR"
 rate_limits_csv="${ARTIFACT_DIR}/gh-rate-limits-remaining.setup.csv"
 
 echo "Starting a watch for GH rate limits remainig (setup)"
-IFS="," read -ra kvs <<<"$(cat /usr/local/ci-secrets/backstage-performance/github.accounts)"
+IFS="," read -ra kvs <<<"$(cat /usr/local/ci-secrets/backstage-performance/github-accounts)"
 echo -n "Time" >"$rate_limits_csv"
 for kv in "${kvs[@]}"; do
     IFS=":" read -ra name_token <<<"$kv"
