@@ -300,9 +300,9 @@ if [ "$UPLOAD_TO_OPENSEARCH" == "true" ]; then
     export OPENSEARCH_URL OPENSEARCH_USER OPENSEARCH_PASSWORD OPENSEARCH_INDEX
 
     OPENSEARCH_INDEX=${OPENSEARCH_INDEX:-rhdh-performance.default}
-    OPENSEARCH_URL=$(cat /usr/local/ci-secrets/backstage-performance/rhdh.es.url)
-    OPENSEARCH_USER=$(cat /usr/local/ci-secrets/backstage-performance/rhdh.es.user)
-    OPENSEARCH_PASSWORD=$(cat /usr/local/ci-secrets/backstage-performance/rhdh.es.password)
+    OPENSEARCH_URL=$(cat /usr/local/ci-secrets/backstage-performance/rhdh-es-url)
+    OPENSEARCH_USER=$(cat /usr/local/ci-secrets/backstage-performance/rhdh-es-user)
+    OPENSEARCH_PASSWORD=$(cat /usr/local/ci-secrets/backstage-performance/rhdh-es-password)
 
     python3 -m pip install --quiet -r ci-scripts/opensearch/requirements.txt
     if opensearch_config_present; then

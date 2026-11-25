@@ -15,10 +15,10 @@ export ALWAYS_CLEANUP=${ALWAYS_CLEANUP:-false}
 export WAIT_FOR_SEARCH_INDEX=${WAIT_FOR_SEARCH_INDEX:-true}
 
 export GITHUB_TOKEN GITHUB_USER GITHUB_REPO QUAY_TOKEN
-GITHUB_TOKEN="$(cat /usr/local/ci-secrets/backstage-performance/github.token)"
-GITHUB_USER="$(cat /usr/local/ci-secrets/backstage-performance/github.user)"
-GITHUB_REPO="$(cat /usr/local/ci-secrets/backstage-performance/github.repo)"
-QUAY_TOKEN="$(cat /usr/local/ci-secrets/backstage-performance/quay.token)"
+GITHUB_TOKEN="$(cat /usr/local/ci-secrets/backstage-performance/github-token)"
+GITHUB_USER="$(cat /usr/local/ci-secrets/backstage-performance/github-user)"
+GITHUB_REPO="$(cat /usr/local/ci-secrets/backstage-performance/github-repo)"
+QUAY_TOKEN="$(cat /usr/local/ci-secrets/backstage-performance/quay-token)"
 
 # shellcheck disable=SC1090,SC1091
 source "${PROJ_ROOT}"ci-scripts/rhdh-setup/create_resource.sh
